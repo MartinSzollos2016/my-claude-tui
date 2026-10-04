@@ -1644,6 +1644,27 @@ describe('footerLayout', () => {
   })
 })
 
+describe('footerLayout with the rows a view draws', () => {
+  test('the footer is the rule, the group rows the view draws and the status row', () => {
+    expect(footerLayout(100, 2).rows).toBe(4)
+    expect(footerLayout(100, 1).rows).toBe(3)
+    expect(footerLayout(60, 3).rows).toBe(5)
+    expect(footerLayout(36, 4)).toEqual({ rows: 6, columns: 'stacked', labels: false })
+  })
+})
+
+describe('contentRows of the turn list', () => {
+  test('a turn row with an id has its start, as an item row does', () => {
+    const rows = contentRows([
+      { kind: 'line' },
+      { kind: 'turn', id: 'turn:2' },
+      { kind: 'turn', id: 'turn:1', snippet: 'x' },
+    ])
+    expect(rows.starts).toEqual({ 'turn:2': 1, 'turn:1': 2 })
+    expect(rows.total).toBe(4)
+  })
+})
+
 describe('footerPads', () => {
   test('every key but the last takes the gap after it', () => {
     expect(footerPads([9, 9, 9], 2)).toEqual([2, 2, 0])
