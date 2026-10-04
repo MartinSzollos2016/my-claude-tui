@@ -31,6 +31,7 @@ import {
   type ItemStatus,
   itemSummary,
   pathOf,
+  pieceStarts,
   sanitizeText,
   shortMode,
   shortModel,
@@ -942,7 +943,10 @@ function renderFrame(
 }
 
 type LongSpec =
-  { kind: 'text'; isError: boolean } | { kind: 'code'; language: string } | { kind: 'diff' } | { kind: 'markdown' }
+  | { kind: 'text'; isError: boolean }
+  | { kind: 'code'; language?: string; path?: string; startLine?: number }
+  | { kind: 'diff' }
+  | { kind: 'markdown' }
 
 // A block of any length: previewed by lines and characters until the person
 // asks for all of it, cut into pieces under the per-element limit, and drawn
@@ -973,17 +977,23 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
           ? []
           : splitDiff(shown.text, Infinity, TEXT_CHUNK)
         : chunkText(shown.text, TEXT_CHUNK)
+  const starts = spec.kind === 'code' && spec.startLine !== undefined ? pieceStarts(shown.text, pieces) : []
   data.budget.left -= spec.kind === 'diff' ? pieces.reduce((sum, p) => sum + p.length, 0) : shown.text.length
 
   return (
     <Box flexDirection="column">
-      {pieces.map(piece =>
+      {pieces.map((piece, i) =>
         spec.kind === 'markdown' ? (
           <Markdown text={piece} />
         ) : spec.kind === 'diff' ? (
           <Code format="diff" source={piece} />
         ) : spec.kind === 'code' ? (
-          <Code language={spec.language} source={piece} />
+          <Code
+            {...(spec.language === undefined ? {} : { language: spec.language })}
+            {...(spec.path === undefined ? {} : { path: spec.path })}
+            {...(spec.startLine === undefined ? {} : { startLine: spec.startLine + (starts[i] ?? 0) })}
+            source={piece}
+          />
         ) : (
           <Text color={spec.isError ? C.error : C.muted}>{piece}</Text>
         ),
