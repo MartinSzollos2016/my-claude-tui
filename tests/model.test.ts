@@ -1,6 +1,7 @@
 import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
+import { parseCommand } from '../hooks/commands'
 import { GIT_STATUS_ARGV, parseGitStatus, statFor } from '../hooks/register'
 import {
   buildTurns,
@@ -258,5 +259,17 @@ describe('formatters', () => {
     ]
     expect(statFor(stats, turn)?.durationMs).toBe(2)
     expect(statFor(stats, undefined)).toBe(undefined)
+  })
+})
+
+describe('parseCommand', () => {
+  test('routes subcommands and their /tail shorthand alike', () => {
+    expect(parseCommand('tail', '')).toEqual({ sub: 'open', arg: '' })
+    expect(parseCommand('tail', 'width 70')).toEqual({ sub: 'width', arg: '70' })
+    expect(parseCommand('tail-width', ' 70 ')).toEqual({ sub: 'width', arg: '70' })
+    expect(parseCommand('tail', 'help')).toEqual({ sub: 'help', arg: '' })
+    expect(parseCommand('tail-theme', '')).toEqual({ sub: 'theme', arg: '' })
+    expect(parseCommand('tail', 'nonsense')).toEqual({ sub: 'open', arg: 'nonsense' })
+    expect(parseCommand('other', '')).toBe(undefined)
   })
 })
