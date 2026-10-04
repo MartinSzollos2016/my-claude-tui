@@ -274,6 +274,33 @@ describe('live data', () => {
     expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
   })
 
+  test('a dropped or failed prompt leaves the pane and the Workflow badge idle', async () => {
+    const { $ } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'Run review', toolUses: [] },
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: 'w1', tool: 'Workflow', input: { name: 'review' } }],
+        },
+      ],
+    })
+    await run('prompt.submit', $, { text: 'again' }, async () => ({ drop: 'blocked' }))
+    expect(text(await run('ui.render', $, BAR_EVENT))).not.toContain('workflow running')
+    await expect(
+      run('prompt.submit', $, { text: 'again' }, async () => {
+        throw new Error('hook failed')
+      }),
+    ).rejects.toThrow('hook failed')
+    expect(text(await run('ui.render', $, BAR_EVENT))).not.toContain('workflow running')
+    expect(text(await draw($))).not.toContain('running')
+
+    const quiet = fakeEngine({ messages: [{ role: 'user', text: 'Plan', toolUses: [] }] })
+    expect(text(await draw(quiet.$))).not.toContain('Working…')
+    await run('prompt.submit', quiet.$, { text: 'Plan' }, async () => ({ drop: 'blocked' }))
+    expect(text(await draw(quiet.$))).not.toContain('Working…')
+  })
+
   test('a stale entry from a submit without turn.start is discarded', async () => {
     const { $, world } = fakeEngine()
     await run('prompt.submit', $, { text: 'ok' }, async e => e)
