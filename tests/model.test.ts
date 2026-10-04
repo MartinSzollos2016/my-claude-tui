@@ -22,6 +22,7 @@ import {
   overflowRows,
   pageScroll,
   scrollToRow,
+  stepCursor,
   formatDuration,
   fitPath,
   formatTokens,
@@ -1756,5 +1757,34 @@ describe('scrollToRow', () => {
   test('a row with no known start, or no row, keeps the scroll', () => {
     expect(scrollToRow({ ...frame, scrollTop: 4 }, 'nope')).toBe(4)
     expect(scrollToRow({ ...frame, scrollTop: 4 }, null)).toBe(4)
+  })
+})
+
+describe('stepCursor', () => {
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f']
+  // a..f start on rows 1..6 of a window of four rows scrolled to row 3.
+  const frame = { scrollTop: 3, windowRows: 4, total: 30, starts: { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 } }
+
+  test('without a cursor, j enters at the first row inside the window and k at the last, so it does not move', () => {
+    expect(stepCursor(ids, null, 1, frame)).toBe('d')
+    expect(stepCursor(ids, null, -1, frame)).toBe('e')
+    expect(scrollToRow(frame, 'd')).toBe(3)
+    expect(scrollToRow(frame, 'e')).toBe(3)
+  })
+
+  test('at the top of the content it enters at the first row as before', () => {
+    expect(stepCursor(ids, null, 1, { ...frame, scrollTop: 0 })).toBe('a')
+  })
+
+  test('with no row inside the window, or a cursor not on the list, it falls back to the ends', () => {
+    expect(stepCursor(ids, null, 1, { ...frame, scrollTop: 20 })).toBe('a')
+    expect(stepCursor(ids, null, -1, { ...frame, scrollTop: 20 })).toBe('f')
+    expect(stepCursor(ids, 'gone', 1, { ...frame, scrollTop: 20 })).toBe('a')
+  })
+
+  test('a cursor on the list moves one row as moveCursor does', () => {
+    expect(stepCursor(ids, 'b', 1, frame)).toBe('c')
+    expect(stepCursor(ids, 'a', -1, frame)).toBe('a')
+    expect(stepCursor([], null, 1, frame)).toBe(null)
   })
 })

@@ -24,7 +24,7 @@ import {
   durationSuffix,
   engineDuration,
   cursorRows,
-  moveCursor,
+  stepCursor,
   rowText,
   scrollToRow,
   clampScroll,
@@ -478,8 +478,13 @@ async function copyBlock($: EngineInterface, text: string, surface?: RenderSurfa
 // own colors, which can be unreadable under the other theme.
 // The detail view's content scrolls so the row the cursor lands on stays in
 // the window (`at`: the window as drawn).
-async function stepCursor($: EngineInterface, ids: readonly string[], delta: number, at: ScrollFrame): Promise<void> {
-  const landed = await update($, cursor, cur => moveCursor(ids, cur, delta))
+async function moveRowCursor(
+  $: EngineInterface,
+  ids: readonly string[],
+  delta: number,
+  at: ScrollFrame,
+): Promise<void> {
+  const landed = await update($, cursor, cur => stepCursor(ids, cur, delta, at))
   await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
 }
 
@@ -873,8 +878,8 @@ export const register: Register = on => {
         submitSearch: value => openMatch($, value, turns).catch(ignore),
         focusSearch: () => focusSearch($).catch(ignore),
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
-        cursorDown: at => stepCursor($, rowIds, 1, at).catch(ignore),
-        cursorUp: at => stepCursor($, rowIds, -1, at).catch(ignore),
+        cursorDown: at => moveRowCursor($, rowIds, 1, at).catch(ignore),
+        cursorUp: at => moveRowCursor($, rowIds, -1, at).catch(ignore),
         scroll: top => update($, paneScroll, all => ({ ...all, [view]: top })).catch(ignore),
         measure: at => {
           drawnFrames[view] = at
