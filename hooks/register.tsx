@@ -285,6 +285,9 @@ async function clearStatus($: EngineInterface): Promise<void> {
 // Workflow calls seen pending, for the finish toasts.
 let agentStatuses: ReadonlyMap<string, AgentStatus> = new Map()
 let notifiedAgents: readonly string[] = []
+// Workflow calls already announced: a slower look that read an older
+// transcript may track one again after it finished.
+let notifiedWorkflows: readonly string[] = []
 let trackedWorkflows: ReadonlySet<string> = new Set()
 const MAX_TOAST_TEXT = 60
 
@@ -306,6 +309,8 @@ async function notifyFinished($: EngineInterface, list?: readonly AgentInfo[], g
   agentStatuses = new Map(snapshot.map(a => [a.id, a.status]))
   const workflows = finishedWorkflows(trackedWorkflows, latestTurn, working)
   trackedWorkflows = workflows.tracked
+  const doneWorkflows = workflows.finished.filter(id => !notifiedWorkflows.includes(id))
+  for (const id of doneWorkflows) notifiedWorkflows = noteNotified(notifiedWorkflows, id)
   if (!prefs.isNotifyOn) return
 
   for (const agent of finished) {
@@ -313,7 +318,7 @@ async function notifyFinished($: EngineInterface, list?: readonly AgentInfo[], g
     const text = truncate(sanitizeText(agent.description).trim(), MAX_TOAST_TEXT, prefs.icons.ellipsis)
     $.ui.toast(`Subagent finished: ${text}`)
   }
-  if (workflows.finished.length > 0) $.ui.toast('Workflow finished')
+  if (doneWorkflows.length > 0) $.ui.toast('Workflow finished')
 }
 
 // What each finished turn's "Baked for 3s" line gets appended, by its stat:
