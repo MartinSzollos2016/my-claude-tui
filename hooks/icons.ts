@@ -52,6 +52,8 @@ export type Icons = {
   treeGuide: string
   // Between the groups of the navigation buttons.
   groupSep: string
+  // The thin rule above the footer.
+  rule: string
 }
 
 const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -96,6 +98,7 @@ const nerd: Icons = {
   treeLast: '└─ ',
   treeGuide: '│  ',
   groupSep: '·',
+  rule: '─',
 }
 
 const unicode: Icons = {
@@ -159,6 +162,7 @@ const ascii: Icons = {
   treeLast: '`- ',
   treeGuide: '|  ',
   groupSep: '.',
+  rule: '-',
 }
 
 export const ICON_SETS: Record<IconSetName, Icons> = { nerd, unicode, ascii }

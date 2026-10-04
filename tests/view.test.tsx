@@ -1005,6 +1005,40 @@ describe('navigation groups', () => {
   })
 })
 
+describe('footer', () => {
+  const footerOf = (tree: unknown) => byKey(tree, 'footer')
+
+  test('the navigation and turn N/M sit in a footer under the items, the header holds only metrics', () => {
+    const tree = renderPane(el, { ...base, selected: 1, isLatest: true }, act)
+    const footer = footerOf(tree)
+    expect(footer).toBeDefined()
+    expect(byKey(footer, 'nav')).toBeDefined()
+    expect(text(byKey(footer, 'turn-position'))).toBe('turn 2/2 (live)')
+    expect(byKey(footer, 'turn-position')?.props['color']).toBe('inactive')
+    // The footer comes last, below the items; nothing of the navigation is above them.
+    expect(nodes(tree).filter(n => n.props['key'] === 'nav')).toHaveLength(1)
+    const columnChildren = (nodes(tree)[1]?.children as Node[]).filter(Boolean)
+    expect(columnChildren.at(-1)?.props['key']).toBe('footer')
+    const head = columnChildren[0]!
+    expect(byKey(head, 'nav')).toBeUndefined()
+    expect(text(head)).not.toContain('turn 2/2')
+  })
+
+  test('a thin rule across the pane separates it, a dash in the ascii set', () => {
+    const rule = (icons?: (typeof ICON_SETS)['nerd']) =>
+      byKey(renderPane(el, { ...base, columns: 40, ...(icons ? { icons } : {}) }, act), 'footer-rule')
+    expect(text(rule())).toBe('─'.repeat(40))
+    expect(rule()?.props['color']).toBe('inactive')
+    expect(text(rule(ICON_SETS.ascii))).toBe('-'.repeat(40))
+  })
+
+  test('the footer wraps to a narrow pane instead of overflowing', () => {
+    const tree = renderPane(el, { ...base, columns: 40, selected: 1 }, act)
+    expect(byKey(tree, 'nav')?.props['flexWrap']).toBe('wrap')
+    expect(footerOf(tree)?.props['width']).toBe(40)
+  })
+})
+
 describe('context meter', () => {
   test('the header of the latest turn and the info bar draw the meter in the context color', () => {
     const latest = renderPane(el, { ...base, selected: 1, isLatest: true }, act)

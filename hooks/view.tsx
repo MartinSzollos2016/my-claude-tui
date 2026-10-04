@@ -246,7 +246,6 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
           {trunc(turn.prompt, data.columns * 2)}
         </Text>
       )}
-      {renderNav(el, data, act)}
       <Box flexDirection="column" marginTop={1}>
         {renderThinking(el, turn, data, act)}
         {turn.items.length === 0 && (data.thinking?.text ?? '') === '' && (
@@ -256,6 +255,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
         )}
         {turn.items.map(item => renderItem(el, item, data, act))}
       </Box>
+      {renderFooter(el, data, act)}
     </Box>,
   )
 }
@@ -525,6 +525,25 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
   )
 }
 
+// Under the items: a thin rule, the navigation on the left and the position
+// of the turn on the right.
+function renderFooter(el: El, data: Ctx, act: PaneActions) {
+  const { Box, Text } = el
+  return (
+    <Box key="footer" flexDirection="column" marginTop={1} width={data.columns}>
+      <Text key="footer-rule" color={C.muted}>
+        {data.icons.rule.repeat(data.columns)}
+      </Text>
+      <Box flexDirection="row" justifyContent="space-between">
+        <Box flexShrink={1}>{renderNav(el, data, act)}</Box>
+        <Text key="turn-position" color={C.muted}>
+          {`turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}`}
+        </Text>
+      </Box>
+    </Box>
+  )
+}
+
 function renderNav(el: El, data: Ctx, act: PaneActions) {
   const { Box, Button, Text } = el
   const total = data.turns.length
@@ -572,7 +591,6 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
 
   return (
     <Box key="nav" flexDirection="row" flexWrap="wrap" columnGap={2}>
-      <Text color={C.muted}>{`turn ${data.selected + 1}/${total}${data.isLatest ? ' (live)' : ''}`}</Text>
       {groups.flatMap((group, i) => [
         ...(i > 0
           ? [
