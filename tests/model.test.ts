@@ -4,7 +4,6 @@ import { describe, expect, test } from 'claude-code/testing'
 import { parseCommand } from '../hooks/commands'
 import { ICON_SETS } from '../hooks/icons'
 import {
-  buildTurns,
   cachedSections,
   callInput,
   chunkText,
@@ -21,10 +20,7 @@ import {
   followCursor,
   footerLayout,
   footerPads,
-  groupLabel,
-  groupRuns,
   hoverCard,
-  itemStatus,
   languageFor,
   moveCursor,
   overflowRows,
@@ -45,42 +41,13 @@ import {
   statusText,
   stepCursor,
   toolSections,
-  traceItems,
   turnTable,
   unifiedDiff,
 } from '../hooks/model'
-import type { Item, ToolItem, Turn } from '../hooks/model/types'
+import { buildTurns } from '../hooks/model/turns'
+import type { ToolItem, Turn } from '../hooks/model/types'
 import { displayWidth } from '../hooks/model/width'
-import { tool, transcript } from './fixtures/model'
-
-describe('buildTurns', () => {
-  test('groups assistant rows under the prompt that opened them', () => {
-    const turns = buildTurns(transcript)
-    expect(turns.length).toBe(2)
-    expect(turns[0]!.prompt).toBe('Fix the bug')
-    expect(turns[0]!.items.map(i => i.id)).toEqual(['t0:o0', 'r1', 'a1', 't0:o1', 'b1'])
-    expect(turns[0]!.toolCount).toBe(3)
-    expect(turns[0]!.outputCount).toBe(2)
-    expect(turns[0]!.subagentCount).toBe(1)
-    expect(turns[1]!.items.length).toBe(1)
-  })
-
-  test('marks unanswered tool calls pending', () => {
-    const bash = buildTurns(transcript)[0]!.items.at(-1)!
-    expect(bash.kind === 'tool' && bash.isPending).toBe(true)
-  })
-
-  test('opens an anonymous turn when the transcript starts mid-turn', () => {
-    const turns = buildTurns([{ role: 'assistant', text: 'hi', toolUses: [] }])
-    expect(turns.length).toBe(1)
-    expect(turns[0]!.prompt).toBe('')
-  })
-
-  test('prefixes trace ids with the agent id', () => {
-    const items = traceItems(transcript, 'agent-1/')
-    expect(items[1]!.id).toBe('agent-1/r1')
-  })
-})
+import { tool } from './fixtures/model'
 
 describe('toolSections', () => {
   test('Bash separates the command from its output', () => {
@@ -280,67 +247,6 @@ describe('parseCommand', () => {
     expect(parseCommand('tail-notify', 'on')).toEqual({ sub: 'notify', arg: 'on' })
     expect(parseCommand('tail', 'notify off')).toEqual({ sub: 'notify', arg: 'off' })
     expect(parseCommand('other', '')).toBe(undefined)
-  })
-})
-
-describe('itemStatus from the structured interrupt flag', () => {
-  const built = (use: Record<string, unknown>) =>
-    buildTurns([
-      { role: 'user', text: 'go', toolUses: [] },
-      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'k', tool: 'Bash', input: {}, ...use }] },
-    ])[0]!.items[0] as ToolItem
-  const quiet = { isLatest: true, isWorking: false }
-
-  test('a Bash result with interrupted: true is interrupted, even when it was not an error', () => {
-    expect(itemStatus(built({ text: 'partial', result: { stdout: 'x', interrupted: true } }), quiet)).toBe(
-      'interrupted',
-    )
-    expect(itemStatus(built({ text: 'ok', result: { stdout: 'x', interrupted: false } }), quiet)).toBe('done')
-  })
-
-  test('the stored text only counts at its start, so output that mentions it stays an error', () => {
-    const quote = built({ text: 'script said: interrupted by user, retrying', isError: true })
-    expect(itemStatus(quote, quiet)).toBe('error')
-    const stored = built({ text: '[Request interrupted by user for tool use]', isError: true })
-    expect(itemStatus(stored, quiet)).toBe('interrupted')
-  })
-})
-
-describe('itemStatus', () => {
-  const tool = (over: Partial<ToolItem>): ToolItem => ({
-    kind: 'tool',
-    id: 'x',
-    tool: 'Bash',
-    input: {},
-    summary: '',
-    isError: false,
-    isPending: false,
-    ...over,
-  })
-  const live = { isLatest: true, isWorking: true }
-  const quiet = { isLatest: true, isWorking: false }
-
-  test('a finished call is done, a failed one error', () => {
-    expect(itemStatus(tool({ resultText: 'ok' }), quiet)).toBe('done')
-    expect(itemStatus(tool({ isError: true, resultText: 'boom' }), quiet)).toBe('error')
-  })
-
-  test('a pending call runs only on the latest turn while the session works (P6)', () => {
-    const pending = tool({ isPending: true })
-    expect(itemStatus(pending, live)).toBe('running')
-    expect(itemStatus(pending, quiet)).toBe('idle')
-    expect(itemStatus(pending, { isLatest: false, isWorking: true })).toBe('idle')
-  })
-
-  test('a running subagent runs whatever the turn', () => {
-    expect(itemStatus(tool({ isPending: false }), { isLatest: false, isWorking: false, isAgentRunning: true })).toBe(
-      'running',
-    )
-  })
-
-  test('a call ended by the user is interrupted, not an error', () => {
-    const stopped = tool({ isError: true, resultText: '[Request interrupted by user for tool use]' })
-    expect(itemStatus(stopped, quiet)).toBe('interrupted')
   })
 })
 
@@ -820,72 +726,6 @@ describe('finishedWorkflows', () => {
     const stopped = wf('w1', { isPending: false, isInterrupted: true })
     expect(finishedWorkflows(new Set(['w1']), turn(stopped), true)).toEqual({ tracked: new Set(), finished: [] })
     expect(finishedWorkflows(new Set(), undefined, true)).toEqual({ tracked: new Set(), finished: [] })
-  })
-})
-
-describe('groupRuns', () => {
-  const tool = (id: string, name: string, input: Record<string, unknown> = {}, isError = false): ToolItem => ({
-    kind: 'tool',
-    id,
-    tool: name,
-    input,
-    summary: name,
-    isError,
-    isPending: false,
-  })
-  const reads = (n: number, from = 0) =>
-    Array.from({ length: n }, (_, i) => tool(`r${from + i}`, 'Read', { file_path: `/a/f${(from + i) % 4}.ts` }))
-
-  test('fewer than three calls stay single rows', () => {
-    const items = reads(2)
-    expect(groupRuns(items)).toEqual(items)
-    expect(groupRuns([])).toEqual([])
-  })
-
-  test('three or more consecutive calls of one tool become a group with a stable id', () => {
-    const items = reads(7)
-    const out = groupRuns(items)
-    expect(out).toHaveLength(1)
-    expect(out[0]).toEqual({ kind: 'group', id: 'group:r0', tool: 'Read', items })
-    expect(groupRuns([...items, tool('r7', 'Read')])[0]).toMatchObject({ id: 'group:r0' })
-    expect(groupRuns(items.slice(0, 3))[0]).toMatchObject({ id: 'group:r0' })
-  })
-
-  test('an error, another tool or a message breaks the run', () => {
-    const items = [...reads(2), tool('e', 'Read', {}, true), ...reads(3, 10)]
-    const out = groupRuns(items)
-    expect(out.map(r => r.kind)).toEqual(['tool', 'tool', 'tool', 'group'])
-    expect(groupRuns([...reads(2), tool('g', 'Grep'), ...reads(2, 10)]).every(r => r.kind === 'tool')).toBe(true)
-    const output: Item = { kind: 'output', id: 'o', text: 'x' }
-    expect(groupRuns([...reads(2), output, ...reads(2, 10)]).every(r => r.kind !== 'group')).toBe(true)
-  })
-
-  test('only read, search and web tools group', () => {
-    for (const name of ['Grep', 'Glob', 'WebFetch', 'WebSearch'])
-      expect(groupRuns([1, 2, 3].map(n => tool(`${name}${n}`, name)))[0]?.kind).toBe('group')
-    for (const name of ['Edit', 'Bash', 'Agent', 'Write', 'Task'])
-      expect(groupRuns([1, 2, 3].map(n => tool(`${name}${n}`, name))).every(r => r.kind === 'tool')).toBe(true)
-  })
-
-  test('two runs of different tools group apart', () => {
-    const out = groupRuns([...reads(3), ...[3, 4, 5].map(n => tool(`g${n}`, 'Grep', { pattern: `p${n}` }))])
-    expect(out.map(r => (r.kind === 'group' ? r.tool : '-'))).toEqual(['Read', 'Grep'])
-  })
-
-  test('the label counts calls and distinct files, patterns or pages', () => {
-    const group = groupRuns(reads(7))[0] as Extract<ReturnType<typeof groupRuns>[number], { kind: 'group' }>
-    expect(groupLabel(group, ICON_SETS.nerd)).toBe('Read ×7 · 4 files')
-    expect(groupLabel(group, ICON_SETS.ascii)).toBe('Read x7 . 4 files')
-    const one = groupRuns([1, 2, 3].map(n => tool(`x${n}`, 'Read', { file_path: '/a.ts' })))[0] as typeof group
-    expect(groupLabel(one, ICON_SETS.nerd)).toBe('Read ×3 · 1 file')
-    const search = groupRuns([1, 2, 3].map(n => tool(`s${n}`, 'Grep', { pattern: `p${n}` })))[0] as typeof group
-    expect(groupLabel(search, ICON_SETS.nerd)).toBe('Grep ×3 · 3 patterns')
-    const web = groupRuns([1, 2, 3].map(n => tool(`w${n}`, 'WebSearch', { query: 'q' })))[0] as typeof group
-    expect(groupLabel(web, ICON_SETS.nerd)).toBe('WebSearch ×3 · 1 query')
-    const fetch = groupRuns([1, 2, 3].map(n => tool(`f${n}`, 'WebFetch', { url: `u${n}` })))[0] as typeof group
-    expect(groupLabel(fetch, ICON_SETS.nerd)).toBe('WebFetch ×3 · 3 pages')
-    const bare = groupRuns([1, 2, 3].map(n => tool(`b${n}`, 'Glob')))[0] as typeof group
-    expect(groupLabel(bare, ICON_SETS.nerd)).toBe('Glob ×3')
   })
 })
 

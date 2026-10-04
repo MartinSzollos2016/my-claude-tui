@@ -1,16 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
-import {
-  buildTurns,
-  clampText,
-  compactCall,
-  searchTurns,
-  splitMatch,
-  taskMark,
-  toolSections,
-  turnTail,
-} from '../hooks/model'
+import { clampText, compactCall, searchTurns, splitMatch, taskMark, toolSections, turnTail } from '../hooks/model'
 import { toolSummary } from '../hooks/model/summaries'
+import { buildTurns } from '../hooks/model/turns'
 import type { ToolItem } from '../hooks/model/types'
 import {
   displayWidth,

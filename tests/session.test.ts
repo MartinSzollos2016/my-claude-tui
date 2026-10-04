@@ -23,7 +23,7 @@ import {
   dropPending,
   discardStale,
 } from '../hooks/session'
-import { buildTurns } from '../hooks/model'
+import { buildTurns } from '../hooks/model/turns'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
 

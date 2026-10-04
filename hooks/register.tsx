@@ -42,7 +42,6 @@ import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
 import {
   alignFromEnd,
-  buildTurns,
   callInput,
   compactCall,
   cursorRows,
@@ -51,10 +50,6 @@ import {
   finishedSince,
   finishedWorkflows,
   gitDirFrom,
-  groupRuns,
-  isAgentFinished,
-  isAgentRunning,
-  isSubagent,
   paneColumns,
   parseGitHead,
   resultLine,
@@ -68,9 +63,7 @@ import {
   taskBoard,
   teamMembers,
   thinkingCounts,
-  traceItems,
   turnListText,
-  turnsKey,
   turnText,
   workflowState,
   type EngineScroll,
@@ -81,7 +74,9 @@ import {
   type TurnThinking,
 } from './model'
 import { engineDuration } from './model/format'
+import { groupRuns } from './model/groups'
 import { sanitizePrompt, sanitizeText } from './model/sanitize'
+import { buildTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
 import type { Item, Turn } from './model/types'
 import { shortPath, truncate } from './model/width'
 import { renderBar, renderPane, turnRowId, type El, type Trace } from './view'
