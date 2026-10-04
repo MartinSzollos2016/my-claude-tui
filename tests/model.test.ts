@@ -23,6 +23,7 @@ import {
   resultLine,
   searchTurns,
   toolSections,
+  treePrefix,
   type ToolItem,
   itemSummary,
   sanitizePrompt,
@@ -438,7 +439,7 @@ describe('itemStatus', () => {
   })
 })
 
-const MULTI = ['ellipsis', 'border', 'taskDone', 'taskActive', 'taskTodo']
+const MULTI = ['ellipsis', 'border', 'taskDone', 'taskActive', 'taskTodo', 'treeBranch', 'treeLast', 'treeGuide']
 
 describe('icon sets', () => {
   test('every set has the same keys', () => {
@@ -464,6 +465,8 @@ describe('icon sets', () => {
     for (const set of [ICON_SETS.unicode, ICON_SETS.ascii])
       for (const [key, value] of Object.entries(set).filter(([k]) => !MULTI.includes(k)))
         for (const glyph of [value].flat()) expect([...glyph].length, key).toBe(1)
+    for (const set of Object.values(ICON_SETS))
+      for (const key of ['treeBranch', 'treeLast', 'treeGuide'] as const) expect([...set[key]].length, key).toBe(3)
     expect(ICON_SETS.ascii.spinner).toEqual(['|', '/', '-', '\\'])
     expect(ICON_SETS.ascii.done).toBe('+')
     expect(ICON_SETS.ascii.error).toBe('x')
@@ -681,5 +684,27 @@ describe('contextMeter', () => {
     expect(contextMeter(30, undefined, nerd)).toHaveLength(10)
     expect(contextMeter(62, 10, ICON_SETS.unicode)).toBe('▰▰▰▰▰▰▱▱▱▱')
     expect(contextMeter(62, 10, ascii)).toBe('######----')
+  })
+})
+
+describe('treePrefix', () => {
+  const { nerd, ascii } = ICON_SETS
+  test('the last item closes the branch, the others continue it', () => {
+    expect(treePrefix([], false, nerd)).toBe('├─ ')
+    expect(treePrefix([], true, nerd)).toBe('└─ ')
+  })
+
+  test('deeper levels draw a guide where the parent continues and blanks where it ended', () => {
+    expect(treePrefix([true], false, nerd)).toBe('│  ├─ ')
+    expect(treePrefix([true], true, nerd)).toBe('│  └─ ')
+    expect(treePrefix([false], true, nerd)).toBe('   └─ ')
+    expect(treePrefix([true, false], false, nerd)).toBe('│     ├─ ')
+  })
+
+  test('the ascii set draws only ASCII', () => {
+    expect(treePrefix([], false, ascii)).toBe('|- ')
+    expect(treePrefix([], true, ascii)).toBe('`- ')
+    expect(treePrefix([true], true, ascii)).toBe('|  `- ')
+    expect(treePrefix([true, true], false, ascii)).toMatch(/^[\x20-\x7e]*$/)
   })
 })

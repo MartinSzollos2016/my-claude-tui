@@ -45,6 +45,11 @@ export type Icons = {
   // The context meter's full and empty cells.
   meterFull: string
   meterEmpty: string
+  // Tree guides of a subagent's trace, each three cells wide: an item that
+  // has siblings after it, the last item, and a level that continues.
+  treeBranch: string
+  treeLast: string
+  treeGuide: string
 }
 
 const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -85,6 +90,9 @@ const nerd: Icons = {
   border: 'round',
   meterFull: '▰',
   meterEmpty: '▱',
+  treeBranch: '├─ ',
+  treeLast: '└─ ',
+  treeGuide: '│  ',
 }
 
 const unicode: Icons = {
@@ -144,6 +152,9 @@ const ascii: Icons = {
   border: 'classic',
   meterFull: '#',
   meterEmpty: '-',
+  treeBranch: '|- ',
+  treeLast: '`- ',
+  treeGuide: '|  ',
 }
 
 export const ICON_SETS: Record<IconSetName, Icons> = { nerd, unicode, ascii }

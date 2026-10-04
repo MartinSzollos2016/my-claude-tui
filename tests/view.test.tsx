@@ -446,6 +446,7 @@ describe('renderPane', () => {
         if (n.props['borderStyle'] !== undefined) expect(n.props['borderStyle']).toBe('classic')
     }
     expect(text(trees[0])).toContain('...')
+    expect(text(trees[0])).toMatch(/[|`]- /)
     expect(text(trees[3])).toContain('Working...')
     for (const n of nodes(renderPane(el, base, act)))
       if (n.props['borderStyle'] !== undefined) expect(n.props['borderStyle']).toBe('round')
@@ -856,6 +857,116 @@ describe('renderPane', () => {
     expect(all).toContain('☑ #2 Ship')
     expect(nodes(team).some(n => n.props['color'] === 'success' && text(n) === 'running')).toBe(true)
     expect(text(renderPane(el, { ...base, view: 'team', turns: [] }, act))).toContain('No teammates in this session.')
+  })
+})
+
+describe('trace tree guides', () => {
+  const traceOf = () =>
+    buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            { tool_use_id: 'g', tool: 'Grep', input: { pattern: 'x' }, text: 'm' },
+            { tool_use_id: 'r', tool: 'Read', input: { file_path: '/a.go' }, text: 'm' },
+          ],
+        },
+      ],
+      'ag/',
+    )[0]!.items
+  const rows = (icons: (typeof ICON_SETS)['nerd']) =>
+    renderPane(el, { ...base, icons, expanded: new Set(['a1']), traces: new Map([['ag', { items: traceOf() }]]) }, act)
+
+  test('trace rows lead with ├─ and └─ in muted text, the last row closes the branch', () => {
+    const tree = rows(ICON_SETS.nerd)
+    const guides = nodes(tree).filter(n => n.type === 'Text' && /^[├└]─ $/.test(text(n)))
+    expect(guides.map(text)).toEqual(['├─ ', '└─ '])
+    for (const g of guides) expect(g.props['color']).toBe('inactive')
+    expect(byKey(tree, 'guide-ag/g')).toBeDefined()
+    expect(byKey(tree, 'guide-a1')).toBeUndefined()
+  })
+
+  test('the ascii set uses |- and `-, and a label gives up the room the indent and prefix take', () => {
+    const guides = nodes(rows(ICON_SETS.ascii)).filter(n => n.props['key']?.toString().startsWith('guide-'))
+    expect(guides.map(text)).toEqual(['|- ', '`- '])
+    const long = (id: string, prefix: string) =>
+      buildTurns(
+        [
+          {
+            role: 'assistant',
+            text: '',
+            toolUses: [
+              { tool_use_id: id, tool: 'Bash', input: { command: 'x', description: 'd'.repeat(300) }, text: 'm' },
+            ],
+          },
+        ],
+        prefix,
+      )[0]!.items
+    const top = renderPane(
+      el,
+      {
+        ...base,
+        columns: 50,
+        turns: buildTurns([
+          {
+            role: 'assistant',
+            text: '',
+            toolUses: [
+              { tool_use_id: 'L', tool: 'Bash', input: { command: 'x', description: 'd'.repeat(300) }, text: 'm' },
+            ],
+          },
+        ]),
+      },
+      act,
+    )
+    const inTrace = renderPane(
+      el,
+      { ...base, columns: 50, expanded: new Set(['a1']), traces: new Map([['ag', { items: long('L', 'ag/') }]]) },
+      act,
+    )
+    const topLen = String(byKey(top, 'L')?.props['label']).length
+    const traceLen = String(byKey(inTrace, 'ag/L')?.props['label']).length
+    expect(topLen - traceLen).toBe(4 + 3)
+  })
+
+  test('a subagent inside a trace continues the guide of its parent', () => {
+    const inner = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            { tool_use_id: 'n', tool: 'Agent', input: { subagent_type: 'Explore' }, agentId: 'in', text: 'r' },
+            { tool_use_id: 'z', tool: 'Read', input: { file_path: '/z' }, text: 'm' },
+          ],
+        },
+      ],
+      'ag/',
+    )[0]!.items
+    const leaf = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: 'q', tool: 'Grep', input: { pattern: 'x' }, text: 'm' }],
+        },
+      ],
+      'in/',
+    )[0]!.items
+    const tree = renderPane(
+      el,
+      {
+        ...base,
+        expanded: new Set(['a1', 'ag/n']),
+        traces: new Map([
+          ['ag', { items: inner }],
+          ['in', { items: leaf }],
+        ]),
+      },
+      act,
+    )
+    expect(text(byKey(tree, 'guide-in/q'))).toBe('│  └─ ')
   })
 })
 
