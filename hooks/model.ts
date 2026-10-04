@@ -1387,6 +1387,20 @@ export function compactCall(tool: string, rawInput: unknown, ellipsis = '…'): 
   return { name: itemName(item), summary: fitPath(named, itemSummary(named), 80, ellipsis) }
 }
 
+// -- Finished agents ----------------------------------------------------------
+
+export type AgentSnapshot = { id: string; status: AgentStatus; description: string }
+
+// The agents of `next` that finished since `prev` (their statuses at the last
+// look): not finished then, finished now. An agent the last look did not see
+// is not reported, so a list read for the first time announces nothing.
+export function finishedSince(prev: ReadonlyMap<string, AgentStatus>, next: readonly AgentSnapshot[]): AgentSnapshot[] {
+  return next.filter(a => {
+    const before = prev.get(a.id)
+    return before !== undefined && !isAgentFinished(before) && isAgentFinished(a.status)
+  })
+}
+
 // -- Status line --------------------------------------------------------------
 
 // A main-loop tool call that has started and not yet ended.

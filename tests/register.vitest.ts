@@ -88,6 +88,7 @@ describe('session start', () => {
       'tail-icons',
       'tail-bar',
       'tail-status',
+      'tail-notify',
       'tail-help',
     ])
     // Opened once, before any width was known: no columns asked for.
@@ -851,5 +852,129 @@ describe('status line', () => {
     expect(last(world)).toBeUndefined()
     gate.release()
     await running
+  })
+})
+
+describe('finish toasts', () => {
+  const info = (status: 'running' | 'completed', id = 'ag-1') => ({
+    id,
+    description: 'Find callers',
+    type: 'Explore',
+    status,
+  })
+  const tick = async (world: { timers: (() => void)[] }) => {
+    world.timers[0]!()
+    await settle()
+  }
+  const start = async ($: Parameters<typeof run>[1]) => {
+    await run('prompt.submit', $, { text: 'go' }, async e => e)
+  }
+
+  test('toasts are off until /tail-notify on, and the choice is kept', async () => {
+    const { $, world } = fakeEngine({ agents: [info('running')] as never })
+    expect(await say($, 'tail-notify')).toContain('off')
+    expect(await say($, 'tail-notify', 'bogus')).toContain('on|off')
+    expect(world.store.get('tail-view.notify')).toBeUndefined()
+    await start($)
+    await tick(world)
+    world.agents = [info('completed')] as never
+    await tick(world)
+    expect(world.toasts).toEqual([])
+    expect(await say($, 'tail', 'notify on')).toContain('on')
+    expect(world.store.get('tail-view.notify')).toBe(true)
+    expect(await say($, 'tail-notify', 'off')).toBe('Notifications: off.')
+    expect(world.store.get('tail-view.notify')).toBe(false)
+  })
+
+  test('a subagent that finishes toasts once, with its description', async () => {
+    const { $, world } = fakeEngine({ agents: [info('running')] as never })
+    await say($, 'tail-notify', 'on')
+    await start($)
+    await tick(world)
+    expect(world.toasts).toEqual([])
+    world.agents = [info('completed')] as never
+    await tick(world)
+    await tick(world)
+    expect(world.toasts).toEqual(['Subagent finished: Find callers'])
+    // Running again and finishing again is the same agent: no second toast.
+    world.agents = [info('running')] as never
+    await tick(world)
+    world.agents = [info('completed')] as never
+    await tick(world)
+    expect(world.toasts).toHaveLength(1)
+  })
+
+  test('agents already finished when seen first, or never listed running, do not toast', async () => {
+    const { $, world } = fakeEngine({ agents: [info('completed', 'old')] as never })
+    await say($, 'tail-notify', 'on')
+    await start($)
+    await tick(world)
+    expect(world.toasts).toEqual([])
+  })
+
+  test('the description is cleaned and cut, in ASCII under the ascii set', async () => {
+    const description = `Find \u001b[31mcallers\u202e ${'x'.repeat(100)}`
+    const { $, world } = fakeEngine({ agents: [{ ...info('running'), description }] as never })
+    await say($, 'tail-notify', 'on')
+    await say($, 'tail-icons', 'ascii')
+    await start($)
+    await tick(world)
+    world.agents = [{ ...info('completed'), description }] as never
+    await tick(world)
+    const toast = world.toasts[0]!
+    expect(toast).toMatch(/^[\x20-\x7e]+$/)
+    expect(toast.startsWith('Subagent finished: Find callers xxx')).toBe(true)
+    expect(toast.endsWith('...')).toBe(true)
+  })
+
+  const workflowRows: SessionMessage[] = [
+    { role: 'user', text: 'Run review', toolUses: [] },
+    { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'w1', tool: 'Workflow', input: { name: 'review' } }] },
+  ]
+
+  test('a Workflow that stops running toasts once', async () => {
+    const { $, world } = fakeEngine({ messages: workflowRows })
+    await say($, 'tail-notify', 'on')
+    await start($)
+    await tick(world)
+    expect(world.toasts).toEqual([])
+    world.messages = [
+      workflowRows[0]!,
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'w1', tool: 'Workflow', input: { name: 'review' }, text: 'done' }],
+      },
+    ]
+    await tick(world)
+    await tick(world)
+    expect(world.toasts).toEqual(['Workflow finished'])
+  })
+
+  const endTurn = ($: Parameters<typeof run>[1]) =>
+    run(
+      'turn.complete',
+      $,
+      { answer: '', isAborted: false, reason: 'answer', turnId: 't', durationMs: 1 },
+      async () => ({ text: '' }),
+    )
+
+  test('a Workflow ended by its turn finishing toasts from turn.complete', async () => {
+    const { $, world } = fakeEngine({ messages: workflowRows })
+    await say($, 'tail-notify', 'on')
+    await start($)
+    await tick(world)
+    await endTurn($)
+    await settle()
+    expect(world.toasts).toEqual(['Workflow finished'])
+  })
+
+  test('no Workflow toast while notifications are off', async () => {
+    const { $, world } = fakeEngine({ messages: workflowRows })
+    await start($)
+    await tick(world)
+    await endTurn($)
+    await settle()
+    expect(world.toasts).toEqual([])
   })
 })

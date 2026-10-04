@@ -12,6 +12,7 @@ import {
   recordToolStart,
   remember,
   statFor,
+  noteNotified,
   noteWorkflowAgent,
   takeTurnIndex,
   toggleId,
@@ -227,5 +228,17 @@ describe('noteWorkflowAgent', () => {
     seen = noteWorkflowAgent(seen, 'sub-1', known)
     seen = noteWorkflowAgent(seen, undefined, known)
     expect(seen).toEqual(['wf-1'])
+  })
+})
+
+describe('noteNotified', () => {
+  test('adds an id once and keeps the last 500', () => {
+    expect(noteNotified(['a'], 'a')).toEqual(['a'])
+    expect(noteNotified(['a'], 'b')).toEqual(['a', 'b'])
+    let ids: readonly string[] = []
+    for (let i = 0; i < 600; i++) ids = noteNotified(ids, `id-${i}`)
+    expect(ids).toHaveLength(500)
+    expect(ids[0]).toBe('id-100')
+    expect(ids.at(-1)).toBe('id-599')
   })
 })

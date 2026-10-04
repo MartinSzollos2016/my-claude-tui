@@ -19,6 +19,7 @@ import {
   callInput,
   buildTurns,
   compactCall,
+  finishedSince,
   gitDirFrom,
   isAgentFinished,
   isAgentRunning,
@@ -37,6 +38,7 @@ import {
   thinkingCounts,
   traceItems,
   turnListText,
+  truncate,
   turnsKey,
   turnText,
   workflowState,
@@ -55,6 +57,7 @@ import {
   isTextOnly,
   memo,
   nextSelectedTurn,
+  noteNotified,
   noteWorkflowAgent,
   recordToolEnd,
   recordToolStart,
@@ -236,6 +239,39 @@ function clearStatus($: EngineInterface): void {
   $.ui.status(undefined)
 }
 
+// Agents' statuses at the last look, the ids already announced and whether a
+// Workflow was running then, for the finish toasts.
+let agentStatuses: ReadonlyMap<string, AgentStatus> = new Map()
+let notifiedAgents: readonly string[] = []
+let wasWorkflowRunning = false
+const MAX_TOAST_TEXT = 60
+
+// Toasts a subagent or a Workflow that finished since the last look, when
+// /tail-notify is on. The look is kept either way, so turning it on later
+// announces only what finishes from then on.
+async function notifyFinished($: EngineInterface): Promise<void> {
+  const agents = await $.agent.list()
+  const latestTurn = (await currentTurns($)).value.at(-1)
+  const working = await read($, isWorking)
+  const isOn = (await $.store.get(NOTIFY_KEY)) === true
+  const icons = await currentIcons($)
+
+  // Nothing is awaited from here: concurrent looks cannot both see a change.
+  const snapshot = agents.map(a => ({ id: a.id, status: a.status, description: a.description }))
+  const finished = finishedSince(agentStatuses, snapshot).filter(a => !notifiedAgents.includes(a.id))
+  agentStatuses = new Map(snapshot.map(a => [a.id, a.status]))
+  const isRunning = workflowState(latestTurn, workflowAgents.length, working).isRunning
+  const isWorkflowDone = wasWorkflowRunning && !isRunning
+  wasWorkflowRunning = isRunning
+  if (!isOn) return
+
+  for (const agent of finished) {
+    notifiedAgents = noteNotified(notifiedAgents, agent.id)
+    $.ui.toast(`Subagent finished: ${truncate(sanitizeText(agent.description).trim(), MAX_TOAST_TEXT, icons.ellipsis)}`)
+  }
+  if (isWorkflowDone) $.ui.toast('Workflow finished')
+}
+
 // The index of the last main-loop turn that completed with a known index.
 let lastDoneIndex = -1
 
@@ -289,6 +325,7 @@ async function onTick($: EngineInterface): Promise<void> {
   const agents = await $.agent.list()
   if (!working && !agents.some(a => isAgentRunning(a.status))) stopTicker()
   await syncStatus($)
+  await notifyFinished($)
   await bump($)
 }
 
@@ -313,6 +350,14 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       return { text: await setWidth($, parsed.arg, e.presentation.columns) }
     case 'status':
       return { text: await setStatus($, parsed.arg) }
+    case 'notify':
+      return {
+        text: await setSwitch(
+          $,
+          { command: 'tail-notify', key: NOTIFY_KEY, label: 'Notifications', fallback: false },
+          parsed.arg,
+        ),
+      }
     case 'help':
       return { text: helpText() }
     case 'turns': {
@@ -377,6 +422,7 @@ const WIDTH_KEY = 'paneWidth'
 const COMPACT_KEY = 'isCompact'
 const ICONS_KEY = 'tail-view.icons'
 const STATUS_KEY = 'tail-view.status'
+const NOTIFY_KEY = 'tail-view.notify'
 const DEFAULT_ICONS: IconSetName = 'nerd'
 const DEFAULT_WIDTH = 80
 const MIN_WIDTH = 30
@@ -447,18 +493,30 @@ async function setIcons($: EngineInterface, rawArg: string): Promise<string> {
   return `Icon set: ${arg}.`
 }
 
-// /tail-status: names the setting, or stores on/off and shows or clears the
-// line at once.
-async function setStatus($: EngineInterface, rawArg: string): Promise<string> {
+// /tail-status and /tail-notify: names the setting, or stores on/off.
+// `fallback` is the state until one is stored.
+async function setSwitch(
+  $: EngineInterface,
+  setting: { command: string; key: string; label: string; fallback: boolean },
+  rawArg: string,
+): Promise<string> {
   const arg = rawArg.toLowerCase()
-  if (arg === '') {
-    const isOn = (await $.store.get(STATUS_KEY)) !== false
-    return `Status line: ${isOn ? 'on' : 'off'}. Change it with /tail-status on|off.`
-  }
-  if (arg !== 'on' && arg !== 'off') return 'Unknown value. Use /tail-status on|off.'
-  await $.store.set(STATUS_KEY, arg === 'on')
+  const stored = await $.store.get(setting.key)
+  const isOn = typeof stored === 'boolean' ? stored : setting.fallback
+  if (arg === '') return `${setting.label}: ${isOn ? 'on' : 'off'}. Change it with /${setting.command} on|off.`
+  if (arg !== 'on' && arg !== 'off') return `Unknown value. Use /${setting.command} on|off.`
+  await $.store.set(setting.key, arg === 'on')
+  return `${setting.label}: ${arg}.`
+}
+
+async function setStatus($: EngineInterface, arg: string): Promise<string> {
+  const text = await setSwitch(
+    $,
+    { command: 'tail-status', key: STATUS_KEY, label: 'Status line', fallback: true },
+    arg,
+  )
   await syncStatus($)
-  return `Status line: ${arg}.`
+  return text
 }
 
 async function toggleCompact($: EngineInterface): Promise<string> {
@@ -492,6 +550,7 @@ export const register: Register = on => {
   on('command.run', { command: 'tail-compact' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-icons' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-status' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-notify' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-bar' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-help' }, ($, e) => runCommand($, e))
 
@@ -571,6 +630,7 @@ export const register: Register = on => {
       syncStatus($).catch(ignore)
       refreshGit($).catch(ignore)
     }
+    notifyFinished($).catch(ignore)
     await bump($)
     return next(e)
   })

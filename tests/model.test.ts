@@ -1,4 +1,4 @@
-import type { SessionMessage } from 'claude-code'
+import type { AgentStatus, SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { parseCommand } from '../hooks/commands'
@@ -12,6 +12,7 @@ import {
   clampText,
   compactCall,
   contextMeter,
+  finishedSince,
   firstErrorLine,
   formatDuration,
   fitPath,
@@ -401,6 +402,8 @@ describe('parseCommand', () => {
     expect(parseCommand('tail', 'icons unicode')).toEqual({ sub: 'icons', arg: 'unicode' })
     expect(parseCommand('tail-status', ' off ')).toEqual({ sub: 'status', arg: 'off' })
     expect(parseCommand('tail', 'status on')).toEqual({ sub: 'status', arg: 'on' })
+    expect(parseCommand('tail-notify', 'on')).toEqual({ sub: 'notify', arg: 'on' })
+    expect(parseCommand('tail', 'notify off')).toEqual({ sub: 'notify', arg: 'off' })
     expect(parseCommand('other', '')).toBe(undefined)
   })
 })
@@ -995,5 +998,35 @@ describe('statusText', () => {
     expect(line).toMatch(/^[\x20-\x7e]+$/)
     expect(line).toContain('Bash echo hi')
     expect(line.endsWith(' . 3s')).toBe(true)
+  })
+})
+
+describe('finishedSince', () => {
+  const agent = (id: string, status: AgentStatus) => ({ id, status, description: `job ${id}` })
+
+  test('an agent that was not finished and now is, whichever way it ended', () => {
+    const prev = new Map<string, AgentStatus>([
+      ['a', 'running'],
+      ['b', 'waiting'],
+      ['c', 'pending'],
+      ['d', 'idle'],
+    ])
+    const next = [agent('a', 'completed'), agent('b', 'failed'), agent('c', 'killed'), agent('d', 'completed')]
+    expect(finishedSince(prev, next).map(a => a.id)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  test('still running, already finished and never seen agents are not reported', () => {
+    const prev = new Map<string, AgentStatus>([
+      ['run', 'running'],
+      ['old', 'completed'],
+    ])
+    const next = [agent('run', 'running'), agent('old', 'completed'), agent('new', 'completed')]
+    expect(finishedSince(prev, next)).toEqual([])
+    expect(finishedSince(new Map(), next)).toEqual([])
+  })
+
+  test('carries the description with the id', () => {
+    const found = finishedSince(new Map([['a', 'running' as const]]), [agent('a', 'completed')])
+    expect(found).toEqual([{ id: 'a', status: 'completed', description: 'job a' }])
   })
 })

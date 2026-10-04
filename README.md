@@ -42,6 +42,7 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 | `/tail-icons [set]`      | icon set: `nerd` (default), `unicode` or `ascii`                     |
 | `/tail-bar`              | show or hide the info bar                                            |
 | `/tail-status [on\|off]` | status line under the prompt while a tool runs (on by default, kept) |
+| `/tail-notify [on\|off]` | toast when a subagent or workflow finishes (off by default, kept)    |
 | `/tail-help`             | list commands and keys                                               |
 
 `/tail <sub>` works too, e.g. `/tail width 70`.

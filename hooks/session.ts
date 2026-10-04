@@ -159,3 +159,11 @@ export function noteWorkflowAgent(
   if (agentId === undefined || known.has(agentId) || seen.includes(agentId)) return seen
   return [...seen, agentId].slice(-MAX_WORKFLOW_AGENTS)
 }
+
+const MAX_NOTIFIED = 500
+
+// The ids already announced as finished with `id` added once, the last 500
+// kept: an agent is toasted once however often its status changes.
+export function noteNotified(ids: readonly string[], id: string): readonly string[] {
+  return ids.includes(id) ? ids : [...ids, id].slice(-MAX_NOTIFIED)
+}
