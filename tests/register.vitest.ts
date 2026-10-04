@@ -743,6 +743,78 @@ describe('detail pane', () => {
   })
 })
 
+describe('keyboard cursor', () => {
+  const markOf = (tree: unknown) => {
+    const found: string[] = []
+    const walk = (t: unknown) => {
+      if (Array.isArray(t)) t.forEach(walk)
+      else if (t !== null && typeof t === 'object' && 'props' in t) {
+        const n = t as { props: Record<string, unknown>; children: unknown }
+        if (String(n.props['key']).startsWith('cursor-') && text(n) !== ' ') found.push(String(n.props['key']).slice(7))
+        walk(n.children)
+      }
+    }
+    walk(tree)
+    return found
+  }
+
+  test('j and k move the cursor, mark the row and focus its button', async () => {
+    const { $, world } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
+    expect(markOf(await draw($))).toEqual([])
+    await press($, 'nav-down')
+    expect(world.focused).toEqual(['t0:o0'])
+    expect(markOf(await draw($))).toEqual(['t0:o0'])
+    await press($, 'nav-down')
+    await press($, 'nav-down')
+    expect(world.focused).toEqual(['t0:o0', 'r1', 'a1'])
+    await press($, 'nav-down')
+    expect(markOf(await draw($))).toEqual(['a1'])
+    await press($, 'nav-up')
+    expect(world.focused.at(-1)).toBe('r1')
+    expect(markOf(await draw($))).toEqual(['r1'])
+  })
+
+  test('an opened subagent adds its trace rows to the walk', async () => {
+    const { $, world } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
+    await press($, 'nav-up')
+    expect(world.focused.at(-1)).toBe('a1')
+    await press($, 'a1')
+    await press($, 'nav-down')
+    expect(world.focused.at(-1)).toBe('agent-1/g1')
+  })
+
+  test('y copies the whole text of the row under the cursor, with the surface of the press', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    await press($, 'nav-down')
+    await press($, 'nav-down')
+    await press($, 'nav-copy')
+    expect(world.copies).toHaveLength(1)
+    expect(world.copies[0]).toContain('/a/b/main.go')
+    expect(world.copies[0]).toContain('package main')
+    expect(world.toasts).toEqual(['Copied'])
+  })
+
+  test('the cursor is dropped when the turn changes, and y has nothing to copy without one', async () => {
+    const { $, world } = fakeEngine({ messages: three })
+    await press($, 'nav-down')
+    expect(markOf(await draw($))).toHaveLength(1)
+    await press($, 'nav-prev')
+    expect(markOf(await draw($))).toEqual([])
+    expect(byKey(await draw($), 'nav-copy')).toBeUndefined()
+    expect(world.copies).toEqual([])
+  })
+
+  test('a row that cannot open is moved onto without a failing focus', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    world.messages = [
+      ...main,
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'q1', tool: 'Bash', input: {} }] },
+    ]
+    await press($, 'nav-up')
+    expect(world.focused.at(-1)).toBeDefined()
+  })
+})
+
 describe('compact transcript', () => {
   const RESULT = {
     component: 'ToolResult',

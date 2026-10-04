@@ -150,6 +150,9 @@ const act = {
   search: (query: string) => calls.push(`search:${query}`),
   submitSearch: (query: string) => calls.push(`submit:${query}`),
   focusSearch: () => calls.push('focusSearch'),
+  cursorDown: () => calls.push('down'),
+  cursorUp: () => calls.push('up'),
+  copyCursor: (surface?: string) => calls.push(`copyCursor:${surface}`),
 }
 
 describe('renderPane', () => {
@@ -527,6 +530,8 @@ describe('renderPane', () => {
         act,
       ),
       renderPane(el, { ...folded, view: 'turns', stats: [{ ...foldedStats[0]!, prompt: 'fold' }], columns: 54 }, act),
+      renderPane(el, { ...folded, expanded: foldedOpen, cursor: 'fe' }, act),
+      renderPane(el, { ...ascii, cursor: 'b1', expanded: open }, act),
     )
     for (const tree of trees) {
       expect(text(tree)).toMatch(/^[\x20-\x7e\n]*$/)
@@ -737,6 +742,8 @@ describe('renderPane', () => {
       renderPane(el, { ...base, turns: foldedTurn, view: 'turns', stats: foldedStats, selected: 0 }, act),
       renderPane(el, { ...base, turns: foldedTurn, view: 'turns', stats: foldedStats, selected: 1, columns: 54 }, act),
       renderPane(el, { ...base, turns: foldedTurn, view: 'turns', stats: foldedStats, columns: 69 }, act),
+      renderPane(el, { ...base, cursor: 'e1', expanded: open }, act),
+      renderPane(el, { ...base, turns: foldedTurn, cursor: 'group:fr1', expanded: foldedOpen }, act),
     ]
     const allowed: unknown[] = [...Object.values(C), ...['fable', 'opus', 'sonnet', 'haiku'].map(m => modelColor(m))]
     let texts = 0
@@ -1141,14 +1148,14 @@ describe('navigation groups', () => {
       .map(n => String(n.props['key']).replace('nav-group-', ''))
   const seps = (tree: unknown) => nodes(tree).filter(n => String(n.props['key']).startsWith('nav-sep-'))
 
-  test('the row wraps and the buttons sit in three groups split by a muted dot', () => {
+  test('the row wraps and the buttons sit in four groups split by a muted dot', () => {
     const tree = renderPane(el, { ...base, selected: 1, members }, act)
     const row = nodes(tree).find(n => n.props['key'] === 'nav')
     expect(row?.props['flexWrap']).toBe('wrap')
     expect(row?.props['columnGap']).toBeGreaterThan(0)
-    expect(groups(tree)).toEqual(['move', 'views', 'expand'])
+    expect(groups(tree)).toEqual(['move', 'cursor', 'views', 'expand'])
     const dots = seps(tree)
-    expect(dots.map(text)).toEqual(['·', '·'])
+    expect(dots.map(text)).toEqual(['·', '·', '·'])
     for (const d of dots) expect(d.props['color']).toBe('inactive')
     const inside = (group: string) =>
       nodes(byKey(tree, `nav-group-${group}`))
@@ -1158,6 +1165,7 @@ describe('navigation groups', () => {
     expect(nodes(byKey(tree, 'nav-group-views')).some(n => n.props['key'] === 'nav-sep-views')).toBe(true)
     expect(nodes(byKey(tree, 'nav-group-move')).some(n => String(n.props['key']).startsWith('nav-sep-'))).toBe(false)
     expect(inside('move')).toEqual(['nav-prev', 'nav-latest'])
+    expect(inside('cursor')).toEqual(['nav-down', 'nav-up'])
     expect(inside('views')).toEqual(['nav-turns', 'nav-search', 'nav-team'])
     expect(inside('expand')).toEqual(['nav-expand', 'nav-collapse'])
   })
@@ -1166,7 +1174,7 @@ describe('navigation groups', () => {
     const tree = renderPane(el, { ...base, turns: one, isLatest: true }, act)
     expect(groups(tree)).toEqual(['views', 'expand'])
     expect(seps(tree)).toHaveLength(1)
-    expect(seps(renderPane(el, { ...base, icons: ICON_SETS.ascii }, act)).map(text)).toEqual(['.', '.'])
+    expect(seps(renderPane(el, { ...base, icons: ICON_SETS.ascii }, act)).map(text)).toEqual(['.', '.', '.'])
   })
 })
 
@@ -1868,5 +1876,72 @@ describe('group status', () => {
       act,
     )
     expect(text(nodes(tree).find(n => n.props['key'] === 'bar-a1'))).toBe('████████')
+  })
+})
+
+describe('keyboard cursor', () => {
+  const marks = (tree: unknown) => nodes(tree).filter(n => String(n.props['key']).startsWith('cursor-'))
+  const buttons = (tree: unknown, key: string) => byKey(tree, key)
+
+  test('no cursor draws no marker column, the marked row gets the accent block', () => {
+    expect(marks(renderPane(el, base, act))).toHaveLength(0)
+    expect(marks(renderPane(el, { ...base, cursor: null }, act))).toHaveLength(0)
+    const tree = renderPane(el, { ...base, cursor: 'e1' }, act)
+    const drawn = marks(tree)
+    expect(drawn.map(n => n.props['key'])).toEqual(['cursor-t0:o0', 'cursor-b1', 'cursor-e1', 'cursor-a1', 'cursor-p1'])
+    for (const mark of drawn) {
+      const isHere = mark.props['key'] === 'cursor-e1'
+      expect(text(mark)).toBe(isHere ? '\u258c' : ' ')
+      expect(mark.props['color']).toBe(isHere ? 'suggestion' : 'inactive')
+    }
+  })
+
+  test('the marker is a plain > in the ascii set, and the folded run is a row of its own', () => {
+    const ascii = renderPane(el, { ...base, cursor: 'b1', icons: ICON_SETS.ascii }, act)
+    expect(text(byKey(ascii, 'cursor-b1'))).toBe('>')
+    const run = renderPane(el, { ...base, turns: foldedTurn, cursor: 'group:fr1', timings: foldedTimings }, act)
+    expect(text(byKey(run, 'cursor-group:fr1'))).toBe('\u258c')
+    expect(text(byKey(run, 'cursor-fe'))).toBe(' ')
+  })
+
+  test('a cursor keeps the label inside the row: the marker takes one cell of the label room', () => {
+    const plain = String(byKey(renderPane(el, { ...base, turns: foldedTurn }, act), 'fe')?.props['label'])
+    const moved = String(byKey(renderPane(el, { ...base, turns: foldedTurn, cursor: 'fe' }, act), 'fe')?.props['label'])
+    expect(displayWidth(moved)).toBeLessThanOrEqual(displayWidth(plain))
+  })
+
+  test('j, k and y sit in the cursor group, plain and dim with their own hover scope', () => {
+    const tree = renderPane(el, { ...base, cursor: 'b1' }, act)
+    const keys = nodes(byKey(tree, 'nav-group-cursor'))
+      .filter(n => n.type === 'Button')
+      .map(n => [n.props['key'], n.props['hotkey'], n.props['label']])
+    expect(keys).toEqual([
+      ['nav-down', 'j', 'down'],
+      ['nav-up', 'k', 'up'],
+      ['nav-copy', 'y', 'copy'],
+    ])
+    for (const [key] of keys) {
+      const b = buttons(tree, String(key))!
+      expect(b.props['plain']).toBe(true)
+      expect(b.props['dimColor']).toBe(true)
+      expect((b.props['hover'] as { scope: string }).scope).toBe(`btn:${String(key)}`)
+    }
+  })
+
+  test('y shows only with a cursor, nothing shows for a turn without rows', () => {
+    const idle = renderPane(el, base, act)
+    expect(buttons(idle, 'nav-down')).toBeDefined()
+    expect(buttons(idle, 'nav-copy')).toBeUndefined()
+    const empty = renderPane(el, { ...base, turns: buildTurns([{ role: 'user', text: 'hi', toolUses: [] }]) }, act)
+    expect(byKey(empty, 'nav-group-cursor')).toBeUndefined()
+  })
+
+  test('the buttons call the actions, y passes the surface of the press', () => {
+    calls.length = 0
+    const tree = renderPane(el, { ...base, cursor: 'b1' }, act)
+    ;(buttons(tree, 'nav-down')!.props['onPress'] as () => void)()
+    ;(buttons(tree, 'nav-up')!.props['onPress'] as () => void)()
+    ;(buttons(tree, 'nav-copy')!.props['onPress'] as (e: { surface: string }) => void)({ surface: 'terminal' })
+    expect(calls).toEqual(['down', 'up', 'copyCursor:terminal'])
   })
 })

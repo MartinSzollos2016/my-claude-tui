@@ -187,6 +187,8 @@ type PaneData = {
   // The team board: teammates and the tasks of TaskCreate / TaskUpdate.
   members?: readonly TeamMember[]
   tasks?: readonly TaskEntry[]
+  // The row the keyboard cursor stands on; none when null or left out.
+  cursor?: string | null
 }
 
 // The engine refuses a tree with a text over 10000 characters or over 100000
@@ -228,6 +230,10 @@ type PaneActions = {
   search: (query: string) => void
   submitSearch: (query: string) => void
   focusSearch: () => void
+  cursorDown: () => void
+  cursorUp: () => void
+  // Copies the whole text of the row under the cursor.
+  copyCursor: (surface?: RenderSurface) => void
 }
 
 function itemDuration(item: Item, data: Pick<PaneData, 'agentStats' | 'timings' | 'now'>): number | undefined {
@@ -648,7 +654,9 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
   const { Box, Button, Text } = el
   const total = data.turns.length
   const hasTeam = (data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0
-  const button = (key: string, hotkey: string, label: string, onPress: () => void) => (
+  const hasRows = (data.turns[data.selected]?.items.length ?? 0) > 0
+  const hasCursor = data.cursor !== undefined && data.cursor !== null
+  const button = (key: string, hotkey: string, label: string, onPress: (e: { surface?: RenderSurface }) => void) => (
     <Button
       key={key}
       plain
@@ -660,7 +668,7 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
     />
   )
 
-  // Three groups; one that has nothing to show is left out whole.
+  // Four groups; one that has nothing to show is left out whole.
   const groups = [
     {
       id: 'move',
@@ -668,6 +676,14 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
         data.selected > 0 && button('nav-prev', 'p', 'prev', act.prev),
         data.selected < total - 1 && button('nav-next', 'n', 'next', act.next),
         !data.isLatest && button('nav-latest', 'l', 'latest', act.latest),
+      ],
+    },
+    {
+      id: 'cursor',
+      buttons: [
+        hasRows && button('nav-down', 'j', 'down', act.cursorDown),
+        hasRows && button('nav-up', 'k', 'up', act.cursorUp),
+        hasRows && hasCursor && button('nav-copy', 'y', 'copy', press => act.copyCursor(press.surface)),
       ],
     },
     {
@@ -797,13 +813,21 @@ function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined,
   // row toggles it; the label is cut to the room the fixed columns leave.
   const hasBar = data.columns >= BAR_MIN_COLUMNS
   const barRoom = hasBar ? BAR_CELLS + 1 : 0
-  const room = width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - 2 - 7 - barRoom
+  // Once a cursor exists every row keeps one cell for its marker.
+  const hasCursorColumn = data.cursor !== undefined && data.cursor !== null
+  const room =
+    width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - 2 - 7 - barRoom - (hasCursorColumn ? 1 : 0)
   const label = line.label(room)
   const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
 
   return (
     <Box key={`item-${id}`} flexDirection="column" marginLeft={indent}>
       <Box flexDirection="row" width={width}>
+        {hasCursorColumn && (
+          <Text key={`cursor-${id}`} color={data.cursor === id ? C.accent : C.muted}>
+            {data.cursor === id ? icons.cursor : ' '}
+          </Text>
+        )}
         {guide !== '' && (
           <Text key={`guide-${id}`} color={C.muted}>
             {guide}
