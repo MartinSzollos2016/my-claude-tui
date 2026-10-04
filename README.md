@@ -22,8 +22,9 @@ A Claude Code mod that brings [tail-claude](https://github.com/kylesnowschwartz/
 
 - **Layout**: the pane asks for **80 %** of the terminal (`/tail width 30–80`
   sets the share, kept across sessions; a width you drag the dock to wins),
-  and the transcript on the left stays a **conversation**: tool results are
-  one dim line (`⎿ 12 lines`, errors in red with their first line) and tool
+  and the transcript on the left stays a **conversation**: each tool call is
+  one line (`● Bash  Run tests`, colored while running, failed or
+  interrupted), tool results are one dim line (`⎿ 12 lines`, errors in red with their first line) and tool
   groups stay folded, since the detail is in the pane. `/tail compact`
   switches this off and on.
 - **Long output**: results, inputs and outputs are previewed (100 lines /
