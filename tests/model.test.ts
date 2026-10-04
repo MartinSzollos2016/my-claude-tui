@@ -51,6 +51,8 @@ import {
   cursorRows,
   rowText,
   hoverCard,
+  resetSectionCache,
+  sectionCacheSize,
   spinnerMessage,
   durationSuffix,
   engineDuration,
@@ -1508,6 +1510,36 @@ describe('hoverCard', () => {
 
   test('a call with no input has no card', () => {
     expect(hoverCard({ ...bash('x'), input: {} }, 40, ICON_SETS.nerd)).toBeUndefined()
+  })
+
+  const lines = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => `${prefix}${i}`).join('\n')
+  const edit = (input: Record<string, unknown>, tool = 'Edit'): ToolItem => ({ ...bash(''), id: 'e1', tool, input })
+
+  test('an Edit card is its first old and new lines, read from the input without building the diff', () => {
+    resetSectionCache()
+    const card = hoverCard(edit({ file_path: '/a.go', old_string: lines('o', 400), new_string: lines('n', 400) }), 40)
+    expect(card).toEqual(['-o0', '-o1', '-o2', '+n0', '+n1', '+n2'])
+    expect(sectionCacheSize()).toBe(0)
+    const short = hoverCard(edit({ file_path: '/a.go', old_string: 'x', new_string: lines('n', 9) }), 40)
+    expect(short).toEqual(['-x', '+n0', '+n1', '+n2', '+n3', '+n4'])
+  })
+
+  test('a MultiEdit card takes its edits in order; an Edit with nothing to show has no card', () => {
+    const multi = edit(
+      {
+        file_path: '/a.go',
+        edits: [
+          { old_string: 'a', new_string: 'b' },
+          { old_string: 'c', new_string: 'd' },
+          { old_string: 'e', new_string: 'f' },
+          { old_string: 'g', new_string: 'h' },
+        ],
+      },
+      'MultiEdit',
+    )
+    expect(hoverCard(multi, 40)).toEqual(['-a', '+b', '-c', '+d', '-e', '+f'])
+    expect(hoverCard(edit({ edits: 'bogus' }, 'MultiEdit'), 40)).toBeUndefined()
+    expect(hoverCard(edit({ file_path: '/a.go' }), 40)).toBeUndefined()
   })
 })
 

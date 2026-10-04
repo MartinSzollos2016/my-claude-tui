@@ -4,7 +4,7 @@
 import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
-import { buildTurns, displayWidth } from '../hooks/model'
+import { buildTurns, displayWidth, resetSectionCache, rowText, sectionCacheSize } from '../hooks/model'
 import { renderBar, renderPane, type El } from '../hooks/view'
 import { ICON_SETS } from '../hooks/icons'
 import { C, modelColor } from '../hooks/theme'
@@ -2038,6 +2038,42 @@ describe('hover preview card', () => {
     expect(text(tree).length).toBeLessThan(100_000)
     const open = renderPane(el, { ...base, turns: bashTurn('ls'), expanded: new Set(['c1']), columns: 700 }, act)
     expect(text(open)).toContain('OUTPUT')
+  })
+
+  const calls = (tool: string, input: (n: number) => Record<string, unknown>, text: string) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: Array.from({ length: 400 }, (_, n) => ({ tool_use_id: `${tool}${n}`, tool, input: input(n), text })),
+      },
+    ])
+  const body = (tag: string) => Array.from({ length: 400 }, (_, n) => `${tag} ${n}`).join('\n')
+
+  test('400 Edits draw their cards without building a diff, on every drawing', () => {
+    const edits = calls(
+      'Edit',
+      n => ({ file_path: `/f${n}.go`, old_string: body('old'), new_string: body('new') }),
+      'ok',
+    )
+    resetSectionCache()
+    const first = renderPane(el, { ...base, turns: edits }, act)
+    renderPane(el, { ...base, turns: edits }, act)
+    expect(cardOf(first, 'Edit0')).toBeDefined()
+    expect(sectionCacheSize()).toBe(0)
+  })
+
+  test('the text of a folded run of 400 Reads is built once, then read from the cache', () => {
+    const numbered = Array.from({ length: 400 }, (_, n) => `${String(n + 1).padStart(6)}\tline ${n}`).join('\n')
+    const reads = calls('Read', n => ({ file_path: `/f${n}.go` }), numbered)
+    const items = reads[0]!.items
+    resetSectionCache()
+    renderPane(el, { ...base, turns: reads, cursor: 'group:Read0' }, act)
+    const whole = rowText(items, 'group:Read0', () => undefined, ICON_SETS.nerd)
+    expect(sectionCacheSize()).toBe(400)
+    expect(rowText(items, 'group:Read0', () => undefined, ICON_SETS.nerd)).toBe(whole)
+    expect(sectionCacheSize()).toBe(400)
   })
 
   test('a card in a subagent trace is placed against its own row', () => {
