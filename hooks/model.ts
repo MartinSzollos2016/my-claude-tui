@@ -688,3 +688,20 @@ export function turnCounts(turn: Turn): string {
   if (turn.subagentCount > 0) parts.push(`${turn.subagentCount} agent${turn.subagentCount === 1 ? '' : 's'}`)
   return parts.length > 0 ? parts.join(' · ') : 'reply'
 }
+
+// The one line a tool call gets in the compact transcript: its name and the
+// shortest useful summary (a Bash call's description, else its first line).
+export function compactCall(tool: string, rawInput: unknown): { name: string; summary: string } {
+  const input = (rawInput !== null && typeof rawInput === 'object' ? sanitizeValue(rawInput) : {}) as Record<
+    string,
+    unknown
+  >
+  const name = sanitizeText(tool)
+  const item: ToolItem = { kind: 'tool', id: '', tool: name, input, summary: '', isError: false, isPending: false }
+  if (name === 'Bash') {
+    const line = str(input, 'description') || (str(input, 'command').split('\n')[0] ?? '')
+    return { name, summary: truncate(line, 80) }
+  }
+  const summary = itemSummary({ ...item, summary: toolSummary(name, input) })
+  return { name: itemName(item), summary: truncate(summary, 80) }
+}
