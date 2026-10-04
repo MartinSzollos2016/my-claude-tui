@@ -10,13 +10,45 @@ function colorsOf(node: unknown, found: string[] = []): string[] {
   if (Array.isArray(node)) {
     for (const child of node) colorsOf(child, found)
   } else if (node !== null && typeof node === 'object') {
-    const { props, children } = node as { props?: Record<string, unknown>; children?: unknown }
-    for (const key of ['color', 'backgroundColor', 'borderColor']) {
-      if (typeof props?.[key] === 'string') found.push(props[key] as string)
+    const { props, hover, children } = node as { props?: Record<string, unknown>; hover?: Record<string, unknown>; children?: unknown }
+    for (const source of [props, hover]) {
+      for (const key of ['color', 'backgroundColor', 'borderColor']) {
+        if (typeof source?.[key] === 'string') found.push(source[key] as string)
+      }
     }
     colorsOf(children, found)
   }
   return found
+}
+
+type Node = { type?: string; key?: string; props?: Record<string, unknown>; hover?: { scope?: string }; children?: unknown }
+
+// Every framed Box: its border color and the text drawn inside it.
+function framesOf(node: unknown, found: { color: string; text: string }[] = []): { color: string; text: string }[] {
+  if (Array.isArray(node)) {
+    for (const child of node) framesOf(child, found)
+  } else if (node !== null && typeof node === 'object') {
+    const { type, props, children } = node as Node
+    if (type === 'Box' && typeof props?.['borderStyle'] === 'string') {
+      found.push({ color: String(props['borderColor']), text: textsOf(children).join('\n') })
+    }
+    framesOf(children, found)
+  }
+  return found
+}
+
+function findKey(node: unknown, key: string): Node | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = findKey(child, key)
+      if (hit) return hit
+    }
+  } else if (node !== null && typeof node === 'object') {
+    const n = node as Node
+    if (n.key === key || n.props?.['key'] === key) return n
+    return findKey(n.children, key)
+  }
+  return undefined
 }
 
 // Every string a drawn tree carries: text children and text-like props.
@@ -173,6 +205,63 @@ describe('detail pane', () => {
     }
   })
 
+  test('the whole row is one button that expands and collapses', async ($, on) => {
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: main }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    const row = findKey(await ui.drawn(), 'r1')
+    expect(row?.type).toBe('Button')
+    expect(String(row?.props?.['label'])).toContain('Read')
+    expect(String(row?.props?.['label'])).toContain('b/main.go')
+    expect(row?.hover?.scope).toBe('row:r1')
+
+    await ui.press({ key: 'r1' })
+    expect(await ui.find({ text: /package main/ })).toBeDefined()
+    await ui.press({ key: 'r1' })
+    expect(await ui.find({ text: /package main/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('frames the command apart from its output, colored by outcome', async ($, on) => {
+    const bash: SessionMessage[] = [
+      { role: 'user', text: 'test it', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          { tool_use_id: 'ok1', tool: 'Bash', input: { command: 'go test ./...', description: 'Run tests' }, text: 'PASS' },
+          { tool_use_id: 'bad1', tool: 'Bash', input: { command: 'false' }, text: 'exit status 1', isError: true },
+        ],
+      },
+    ]
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: bash }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      await ui.press({ key: 'nav-expand' })
+      const frames = framesOf(await ui.drawn())
+      const command = frames.find(f => f.text.includes('go test ./...'))
+      const output = frames.find(f => f.text.includes('PASS'))
+      const error = frames.find(f => f.text.includes('exit status 1'))
+      expect(command?.color).toBe('permission')
+      expect(command?.text).toContain('$ command')
+      expect(command?.text).toContain('Run tests')
+      expect(output?.color).toBe('success')
+      expect(output?.text).toContain('ok · 1 line')
+      expect(error?.color).toBe('error')
+      expect(command?.text.includes('PASS')).toBe(false)
+      await ui.unmount()
+    }
+  })
+
   test('previews a long result and shows it in full on demand', async ($, on) => {
     const lines = Array.from({ length: 500 }, (_, i) => `line ${i}`).join('\n')
     const long: SessionMessage[] = [
@@ -189,12 +278,12 @@ describe('detail pane', () => {
     await ui.press({ key: 'b1' })
     expect(await ui.find({ text: /line 99\b/ })).toBeDefined()
     expect(await ui.find({ text: /line 499/ })).toBeUndefined()
-    expect(await ui.find({ key: 'full:b1:result' })).toBeDefined()
+    expect(await ui.find({ key: 'full:b1:output' })).toBeDefined()
 
-    await ui.press({ key: 'full:b1:result' })
+    await ui.press({ key: 'full:b1:output' })
     expect(await ui.find({ text: /line 499/ })).toBeDefined()
 
-    await ui.press({ key: 'full:b1:result' })
+    await ui.press({ key: 'full:b1:output' })
     expect(await ui.find({ text: /line 499/ })).toBeUndefined()
     await ui.unmount()
   })
@@ -220,7 +309,7 @@ describe('detail pane', () => {
     await ui.press({ key: 'nav-expand' })
     let pressed = 0
     for (const use of uses) {
-      const key = `full:${use.tool_use_id}:result`
+      const key = `full:${use.tool_use_id}:output`
       if (await ui.find({ key })) {
         await ui.press({ key })
         pressed += 1

@@ -1,6 +1,6 @@
 // Rendering: the detail view (pane) and the info bar (band). Takes plain
 // data plus callbacks and returns element trees; no engine calls here.
-import type { AgentStatus, BoxProps, RenderChildren, ElementConstructor, Elements, TextProps } from 'claude-code'
+import type { AgentStatus, BoxProps, RenderChildren, RenderElement, ElementConstructor, Elements, TextProps } from 'claude-code'
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
@@ -16,13 +16,15 @@ import {
   shortMode,
   shortModel,
   toolCategory,
+  toolSections,
+  type Section,
   traceStats,
   truncate,
   type Item,
   type ToolItem,
   type Turn,
 } from './model'
-import { C, contextColor, modeColor, modelColor, type ThemeKey } from './theme'
+import { C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 
 // Text narrowed to theme keys: tsc rejects a raw color (hex, rgb, ansi)
 // anywhere in the views, so everything follows the person's /theme.
@@ -259,26 +261,37 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
 
   const duration = itemDuration(item, data)
   const model = item.kind === 'tool' && item.agentId ? data.agentStats[item.agentId]?.model : undefined
+  const modelText = model === undefined ? '' : `${shortModel(model)}  `
   const durationText = duration === undefined ? '' : duration >= 1000 ? formatDuration(duration) : duration > 0 ? '<1s' : ''
+
+  // One button carries name and summary, so a click or Enter anywhere on the
+  // row toggles it; the label is cut to the room the fixed columns leave.
+  const room = width - 2 - 3 - spinner.length - modelText.length - 2 - 7
+  const label = truncate(summary ? `${name.padEnd(12)} - ${summary}` : name, Math.max(8, room))
+  const hover = { scope: `row:${item.id}`, backgroundColor: C.rowHover }
+  const toggle = () => canOpen && act.toggle(item.id)
 
   return (
     <Box key={`item-${item.id}`} flexDirection="column" marginLeft={depth * 4}>
       <Box flexDirection="row" width={width}>
-        <Button key={item.id} plain dimColor={!canOpen} label={chevron} onPress={() => canOpen && act.toggle(item.id)} />
-        <Text color={icon.color} dimColor={icon.color === undefined}>
-          {` ${icon.glyph} `}
+        <Text dimColor={!isOpen} hover={hover}>{`${chevron} `}</Text>
+        <Text color={icon.color} dimColor={icon.color === undefined} hover={hover}>
+          {`${icon.glyph} `}
         </Text>
-        <Text bold>{name.padEnd(12)}</Text>
-        <Text color={C.ongoing}>{spinner}</Text>
         <Box flexGrow={1} flexShrink={1}>
-          <Text dimColor wrap="truncate-end">
-            {summary ? `- ${summary}` : ''}
-          </Text>
+          {canOpen ? (
+            <Button key={item.id} plain label={label} hover={hover} onPress={toggle} />
+          ) : (
+            <Text dimColor wrap="truncate-end" hover={hover}>
+              {label}
+            </Text>
+          )}
         </Box>
+        <Text color={C.ongoing} hover={hover}>{spinner}</Text>
         <Box flexShrink={0}>
-          {model !== undefined && <Text color={modelColor(model)}>{`${shortModel(model)}  `}</Text>}
-          {durationText !== '' && <Text color={C.ongoing}>{`${G.dot} `}</Text>}
-          <Text dimColor>{durationText.padEnd(7)}</Text>
+          {modelText !== '' && model !== undefined && <Text color={modelColor(model)} hover={hover}>{modelText}</Text>}
+          <Text color={C.ongoing} hover={hover}>{durationText !== '' ? `${G.dot} ` : '  '}</Text>
+          <Text dimColor hover={hover}>{durationText.padEnd(7)}</Text>
         </Box>
       </Box>
       {isOpen && canOpen && renderExpanded(el, item, data, act, depth)}
@@ -291,8 +304,8 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: 
 
   if (item.kind === 'output') {
     return (
-      <Box marginLeft={4} marginBottom={1}>
-        {renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act)}
+      <Box flexDirection="column" marginLeft={4} marginBottom={1}>
+        {renderFrame(el, `frame-${item.id}`, 'message', undefined, C.accent, renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act))}
       </Box>
     )
   }
@@ -301,54 +314,44 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: 
     return renderTrace(el, item, data, act, depth)
   }
 
+  return renderSections(el, item, data, act)
+}
+
+// What went in and what came out, each in a frame colored by its kind.
+function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
+  const { Box } = el
   return (
     <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-      {renderToolInput(el, item, data, act)}
-      {item.resultText !== undefined && item.resultText !== '' && renderBlock(el, item, data, act)}
+      {toolSections(item).map(section =>
+        renderFrame(
+          el,
+          `frame-${item.id}:${section.kind}`,
+          section.title,
+          section.meta,
+          TONE[section.kind],
+          renderLong(el, `${item.id}:${section.kind}`, section.body, longSpec(section), data, act),
+        ),
+      )}
     </Box>
   )
 }
 
-function renderToolInput(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
-  const { Box, Text } = el
-  const input = item.input
-  const s = (k: string) => (typeof input[k] === 'string' ? (input[k] as string) : '')
-
-  if (item.tool === 'Bash' && s('command')) {
-    return (
-      <Box flexDirection="column">
-        <Text dimColor>Command</Text>
-        {renderLong(el, `${item.id}:input`, s('command'), { kind: 'code', language: 'bash' }, data, act)}
-      </Box>
-    )
-  }
-  if (item.tool === 'Edit' && (s('old_string') || s('new_string'))) {
-    const diff = [
-      ...s('old_string').split('\n').map(l => `-${l}`),
-      ...s('new_string').split('\n').map(l => `+${l}`),
-    ].join('\n')
-    return (
-      <Box flexDirection="column">
-        <Text dimColor>{truncate(s('file_path'), 300)}</Text>
-        {renderLong(el, `${item.id}:input`, diff, { kind: 'code', language: 'diff' }, data, act)}
-      </Box>
-    )
-  }
-  if (Object.keys(input).length === 0) return null
-  return (
-    <Box flexDirection="column">
-      <Text dimColor>Input</Text>
-      {renderLong(el, `${item.id}:input`, JSON.stringify(input, null, 2), { kind: 'code', language: 'json' }, data, act)}
-    </Box>
-  )
+function longSpec(section: Section): LongSpec {
+  if (section.format.kind === 'text') return { kind: 'text', isError: section.kind === 'error' }
+  return section.format
 }
 
-function renderBlock(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
+function renderFrame(el: El, key: string, title: string, meta: string | undefined, tone: ThemeKey, body: RenderElement) {
   const { Box, Text } = el
   return (
-    <Box flexDirection="column" marginTop={1}>
-      <Text dimColor>{item.isError ? 'Error' : 'Result'}</Text>
-      {renderLong(el, `${item.id}:result`, (item.resultText ?? '').trimEnd(), { kind: 'text', isError: item.isError }, data, act)}
+    <Box key={key} flexDirection="column" borderStyle="round" borderColor={tone} paddingX={1}>
+      <Box flexDirection="row">
+        <Text bold color={tone}>
+          {title}
+        </Text>
+        {meta !== undefined && meta !== '' && <Text dimColor wrap="truncate-end">{`  ${truncate(meta, 300)}`}</Text>}
+      </Box>
+      {body}
     </Box>
   )
 }
@@ -411,7 +414,7 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
         <Text dimColor>{`Trace unavailable: ${truncate(trace.denied, 300)}`}</Text>
-        {item.resultText !== undefined && renderBlock(el, item, data, act)}
+        {renderSections(el, item, data, act)}
       </Box>
     )
   }
