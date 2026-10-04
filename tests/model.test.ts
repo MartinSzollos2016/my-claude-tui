@@ -2,7 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { parseCommand } from '../hooks/commands'
-import { parseGitStatus, statFor } from '../hooks/register'
+import { statFor } from '../hooks/register'
 import {
   buildTurns,
   chunkMarkdown,
@@ -10,6 +10,8 @@ import {
   clampText,
   formatDuration,
   formatTokens,
+  gitDirFrom,
+  parseGitHead,
   itemName,
   languageFor,
   paneColumns,
@@ -299,10 +301,18 @@ describe('formatters', () => {
     expect(chunks.join('\n').replace(/\n```\n```ts/g, '')).toContain('a()')
   })
 
-  test('parseGitStatus', () => {
-    expect(parseGitStatus('## main...origin/main\n')).toEqual({ branch: 'main', isDirty: false })
-    expect(parseGitStatus('## feat\n M a.go\n')).toEqual({ branch: 'feat', isDirty: true })
-    expect(parseGitStatus('fatal')).toBe(null)
+  test('parseGitHead reads the branch, or a short hash when detached', () => {
+    expect(parseGitHead('ref: refs/heads/main\n')).toEqual({ branch: 'main' })
+    expect(parseGitHead('ref: refs/heads/feat/turn-list')).toEqual({ branch: 'feat/turn-list' })
+    expect(parseGitHead('3d3c42e5aac5ba805825da76410c181273ba90b1\n')).toEqual({ branch: '3d3c42e' })
+    expect(parseGitHead('garbage')).toBe(null)
+    expect(parseGitHead('ref: refs/heads/\u001b[31mx')).toEqual({ branch: 'x' })
+  })
+
+  test('gitDirFrom follows a worktree .git file to its git directory', () => {
+    expect(gitDirFrom('/r', 'gitdir: /r/.git/worktrees/wt\n')).toBe('/r/.git/worktrees/wt')
+    expect(gitDirFrom('/r/wt', 'gitdir: ../.git/worktrees/wt')).toBe('/r/wt/../.git/worktrees/wt')
+    expect(gitDirFrom('/r', 'nonsense')).toBe(null)
   })
 
   test('statFor picks the latest stat for the turn prompt', () => {

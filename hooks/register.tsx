@@ -5,10 +5,12 @@
 import { atom, read, update } from 'claude-code'
 import type { AgentStatus, CommandRunInput, CommandRunResult, EngineInterface, Register, Timer } from 'claude-code'
 
-import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
+import type { AgentStat, ToolTiming, TurnStat } from '../types'
 import {
   buildTurns,
   compactCall,
+  gitDirFrom,
+  parseGitHead,
   isSubagent,
   paneColumns,
   resultLine,
@@ -46,44 +48,18 @@ const isRunning = (status: AgentStatus) => status === 'running' || status === 'p
 
 const bump = ($: EngineInterface) => update($, tick, n => n + 1)
 
-// "## main...origin/main" + one line per changed path.
-export function parseGitStatus(stdout: string): GitInfo | null {
-  const [head, ...rest] = stdout.split('\n')
-  if (!head?.startsWith('## ')) return null
-  const branch = sanitizeText(head)
-    .slice(3)
-    .replace(/^No commits yet on /, '')
-    .split('...')[0]!
-    .trim()
-  return { branch, isDirty: rest.some(line => line.trim() !== '') }
-}
-
-// The only program the plugin runs: `git status` in the session's directory,
-// for the branch in the info bar. The repo's own config is untrusted:
-// `core.fsmonitor` names a program git runs on every status, which would
-// execute code from a cloned repo just by opening it here, so it is
-// overridden on the command line; no index lock, no credential prompts.
-// The command is written out in full so its whole text is reviewable.
+// The info bar's branch, read from the repository's .git/HEAD (through a
+// worktree's .git file when there is one). The plugin starts no programs.
 async function refreshGit($: EngineInterface): Promise<void> {
-  const ran = await $.process.run(
-    [
-      'git',
-      '--no-optional-locks',
-      '-c',
-      'core.fsmonitor=false',
-      '-c',
-      'core.untrackedCache=false',
-      'status',
-      '--porcelain=v1',
-      '--branch',
-    ],
-    {
-      cwd: await $.session.cwd(),
-      timeoutMs: 5000,
-      env: { GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' },
-    },
-  )
-  const info = ran.exitCode === 0 ? parseGitStatus(ran.stdout) : null
+  const repo = await $.session.repo()
+  if (!repo) {
+    await update($, git, () => null)
+    return
+  }
+  const dotGit = `${repo.root}/.git`
+  const stat = await $.fs.stat(dotGit)
+  const gitDir = stat.kind === 'dir' ? dotGit : gitDirFrom(repo.root, await $.fs.read(dotGit))
+  const info = gitDir === null ? null : parseGitHead(await $.fs.read(`${gitDir}/HEAD`))
   await update($, git, () => info)
 }
 

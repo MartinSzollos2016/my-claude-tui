@@ -558,7 +558,6 @@ export function renderBar(el: El, data: BarData) {
         {data.git && sep}
         {data.git && <Text color={C.branch}>{`${G.branch} `}</Text>}
         {data.git && <Text dimColor>{data.git.branch}</Text>}
-        {data.git?.isDirty && <Text color={C.dirty}>*</Text>}
         {mode !== '' && sep}
         {mode !== '' && (
           <Text color={modeKey} dimColor={modeKey === undefined} bold={modeKey !== undefined}>

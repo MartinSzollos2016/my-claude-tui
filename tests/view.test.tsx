@@ -234,7 +234,7 @@ describe('renderBar', () => {
   test('project, branch, mode, agents, context and cost', () => {
     const tree = renderBar(el, {
       project: 'tail',
-      git: { branch: 'main', isDirty: true },
+      git: { branch: 'main' },
       mode: 'plan',
       runningAgents: 2,
       contextTokens: 52_700,
@@ -243,7 +243,7 @@ describe('renderBar', () => {
       columns: 100,
     })
     const all = text(tree)
-    for (const part of ['tail', 'main', '*', 'plan', 'agents running · 2', '52.7k ctx', '85%', '$1.50']) {
+    for (const part of ['tail', 'main', 'plan', 'agents running · 2', '52.7k ctx', '85%', '$1.50']) {
       expect(all).toContain(part)
     }
     expect(nodes(tree).some(n => n.props['color'] === 'error' && text(n).includes('85%'))).toBe(true)
