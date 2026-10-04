@@ -174,6 +174,15 @@ describe('renderPane', () => {
     expect(byKey(tree, 'b1')?.props['label']).toContain('Run tests')
     expect(all).toContain('2.5s')
     expect(all).toContain('haiku4.5')
+    expect(byKey(tree, 'nav-prev')).toBeUndefined()
+    expect(byKey(tree, 'nav-latest')).toBeDefined()
+    const mid = renderPane(el, { ...base, selected: 1 }, act)
+    expect(byKey(mid, 'nav-prev')).toBeDefined()
+    expect(byKey(mid, 'nav-next')).toBeUndefined()
+    const last = renderPane(el, { ...base, selected: 1, isLatest: true }, act)
+    expect(byKey(last, 'nav-prev')).toBeDefined()
+    expect(byKey(last, 'nav-next')).toBeUndefined()
+    expect(byKey(last, 'nav-latest')).toBeUndefined()
   })
 
   test('every Text carries a theme color and every Button the theme grey with a full-contrast hover', () => {
@@ -223,14 +232,21 @@ describe('renderPane', () => {
       renderPane(el, { ...base, view: 'team', turns: [] }, act),
     ]
     let texts = 0
+    let buttons = 0
     for (const tree of trees)
       for (const n of nodes(tree)) {
         if (n.type === 'Text') {
           texts++
           expect(typeof n.props['color'], text(n)).toBe('string')
         }
+        if (n.type === 'Button') {
+          buttons++
+          expect(n.props['dimColor'], String(n.props['key'])).toBe(true)
+          expect((n.props['hover'] as { color?: string } | undefined)?.color, String(n.props['key'])).toBe('text')
+        }
       }
     expect(texts).toBeGreaterThan(50)
+    expect(buttons).toBeGreaterThan(20)
   })
 
   test('expanded rows draw input and output frames, errors in red', () => {
@@ -413,16 +429,8 @@ describe('renderPane', () => {
 
   test('row buttons call their actions', () => {
     const tree = renderPane(el, base, act)
-    for (const key of [
-      'b1',
-      'nav-prev',
-      'nav-next',
-      'nav-latest',
-      'nav-turns',
-      'nav-search',
-      'nav-expand',
-      'nav-collapse',
-    ]) {
+    ;(byKey(renderPane(el, { ...base, selected: 1 }, act), 'nav-prev')?.props['onPress'] as () => void)()
+    for (const key of ['b1', 'nav-next', 'nav-latest', 'nav-turns', 'nav-search', 'nav-expand', 'nav-collapse']) {
       ;(byKey(tree, key)?.props['onPress'] as () => void)()
     }
     expect(calls).toEqual(
