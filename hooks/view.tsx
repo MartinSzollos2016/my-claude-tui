@@ -803,7 +803,12 @@ function withFirstError(el: El, body: string, preview: RenderElement, data: Ctx)
   const trunc = cutter(data.icons)
   const { Box, Text } = el
   const line = trunc(firstErrorLine(body), Math.max(8, data.columns - 12))
-  if (line === '' || line.length > data.budget.left) return preview
+  // An output that opens with the line already shows it, in red.
+  const opening = body
+    .split('\n')
+    .find(l => l.trim() !== '')
+    ?.trim()
+  if (line === '' || opening === firstErrorLine(body) || line.length > data.budget.left) return preview
   data.budget.left -= line.length
   return (
     <Box flexDirection="column">

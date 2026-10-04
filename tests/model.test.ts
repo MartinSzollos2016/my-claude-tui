@@ -376,6 +376,29 @@ describe('untrusted input stays linear', () => {
   })
 })
 
+describe('itemStatus from the structured interrupt flag', () => {
+  const built = (use: Record<string, unknown>) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'k', tool: 'Bash', input: {}, ...use }] },
+    ])[0]!.items[0] as ToolItem
+  const quiet = { isLatest: true, isWorking: false }
+
+  test('a Bash result with interrupted: true is interrupted, even when it was not an error', () => {
+    expect(itemStatus(built({ text: 'partial', result: { stdout: 'x', interrupted: true } }), quiet)).toBe(
+      'interrupted',
+    )
+    expect(itemStatus(built({ text: 'ok', result: { stdout: 'x', interrupted: false } }), quiet)).toBe('done')
+  })
+
+  test('the stored text only counts at its start, so output that mentions it stays an error', () => {
+    const quote = built({ text: 'script said: interrupted by user, retrying', isError: true })
+    expect(itemStatus(quote, quiet)).toBe('error')
+    const stored = built({ text: '[Request interrupted by user for tool use]', isError: true })
+    expect(itemStatus(stored, quiet)).toBe('interrupted')
+  })
+})
+
 describe('itemStatus', () => {
   const tool = (over: Partial<ToolItem>): ToolItem => ({
     kind: 'tool',
@@ -632,5 +655,14 @@ describe('a custom ellipsis (the ascii set)', () => {
     const sections = toolSections(todo, glyphs)
     expect(sections[0]!.body).toBe('[x] a\n[ ] b')
     expect(sections[1]!.meta).toBe('ok . 1 line')
+  })
+})
+
+describe('compactCall paths', () => {
+  test('a long path is cut in the middle and keeps the file name', () => {
+    const { summary } = compactCall('Read', { file_path: `/home/dev/${`${'d'.repeat(20)}/`.repeat(6)}session.ts` })
+    expect([...summary].length).toBeLessThanOrEqual(80)
+    expect(summary).toContain('…')
+    expect(summary.endsWith('session.ts')).toBe(true)
   })
 })

@@ -440,6 +440,19 @@ describe('renderPane', () => {
       if (n.props['borderStyle'] !== undefined) expect(n.props['borderStyle']).toBe('round')
   })
 
+  test('the first error line is not drawn twice when the output starts with it', () => {
+    const failed = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'f2', tool: 'Bash', input: {}, text: 'Error: boom\nmore', isError: true }],
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: failed, expanded: new Set(['f2']) }, act)
+    expect(text(tree).split('Error: boom')).toHaveLength(2)
+  })
+
   test('the trace of a subagent carries status glyphs too', () => {
     const trace = buildTurns(
       [

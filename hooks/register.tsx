@@ -403,7 +403,8 @@ async function setWidth($: EngineInterface, arg: string, terminalColumns: number
 }
 
 // /tail-icons: names the current set, or stores another and redraws.
-async function setIcons($: EngineInterface, arg: string): Promise<string> {
+async function setIcons($: EngineInterface, rawArg: string): Promise<string> {
+  const arg = rawArg.toLowerCase()
   const options = ICON_SET_NAMES.join('|')
   if (arg === '') return `Icon set: ${await iconSetName($)}. Change it with /tail-icons ${options}.`
   if (!isIconSetName(arg)) return `Unknown icon set. Use /tail-icons ${options}.`
