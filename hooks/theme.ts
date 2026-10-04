@@ -1,3 +1,5 @@
+import type { AgentStatus } from 'claude-code'
+
 import type { SectionKind } from './model'
 
 // Colors as Claude Code theme keys. The engine resolves a key against the
@@ -100,6 +102,24 @@ export function modeColor(mode: string | null): ThemeKey | undefined {
       return C.modeAuto
     default:
       return undefined
+  }
+}
+
+// An agent's status on the team board: running green, failed red, finished
+// in the accent, idle muted.
+export function agentStatusColor(status: AgentStatus): ThemeKey {
+  switch (status) {
+    case 'running':
+    case 'pending':
+    case 'waiting':
+      return C.ongoing
+    case 'failed':
+    case 'killed':
+      return C.error
+    case 'completed':
+      return C.accent
+    default:
+      return C.muted
   }
 }
 

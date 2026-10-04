@@ -2,11 +2,31 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { buildTurns, sanitizeText, sanitizeValue } from '../hooks/model'
-import { C, contextColor, modeColor, modelColor, THEME_KEYS, tailThemeAdvice, TAIL_THEMES, TONE } from '../hooks/theme'
+import {
+  agentStatusColor,
+  C,
+  contextColor,
+  modeColor,
+  modelColor,
+  THEME_KEYS,
+  tailThemeAdvice,
+  TAIL_THEMES,
+  TONE,
+} from '../hooks/theme'
 
 const keys = new Set<string>(THEME_KEYS)
 
 describe('theme', () => {
+  test('agent status colors are theme keys', () => {
+    for (const status of ['pending', 'running', 'waiting', 'idle', 'completed', 'failed', 'killed'] as const) {
+      expect(keys.has(agentStatusColor(status))).toBe(true)
+    }
+    expect(agentStatusColor('running')).toBe('success')
+    expect(agentStatusColor('failed')).toBe('error')
+    expect(agentStatusColor('completed')).toBe('suggestion')
+    expect(agentStatusColor('idle')).toBe('inactive')
+  })
+
   test('every semantic role is a Claude Code theme key', () => {
     for (const value of Object.values(C)) expect(keys.has(value)).toBe(true)
   })

@@ -27,10 +27,13 @@ import {
   sanitizeText,
   shortMode,
   shortModel,
+  taskMark,
   toolCategory,
   toolSections,
   turnTail,
   type Section,
+  type TaskEntry,
+  type TeamMember,
   traceStats,
   truncate,
   type Item,
@@ -40,7 +43,7 @@ import {
   type TurnThinking,
   type WorkflowState,
 } from './model'
-import { C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
+import { agentStatusColor, C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 
 // Text narrowed to theme keys: tsc rejects a raw color (hex, rgb, ansi)
 // anywhere in the views, so everything follows the person's /theme.
@@ -124,11 +127,14 @@ type PaneData = {
   // Blocks shown whole instead of previewed, by block id.
   full: ReadonlySet<string>
   // What the pane shows, and the stat recorded for each turn (by index).
-  view: 'detail' | 'turns'
+  view: 'detail' | 'turns' | 'team'
   stats: readonly (TurnStat | undefined)[]
   // The turn search: what is typed, and the turns that match it.
   query?: string
   matches?: readonly TurnMatch[]
+  // The team board: teammates and the tasks of TaskCreate / TaskUpdate.
+  members?: readonly TeamMember[]
+  tasks?: readonly TaskEntry[]
 }
 
 // The engine refuses a tree with a text over 10000 characters or over 100000
@@ -157,6 +163,7 @@ type PaneActions = {
   toggleFull: (id: string) => void
   showTurns: () => void
   showDetail: () => void
+  showTeam: () => void
   pickTurn: (index: number) => void
   search: (query: string) => void
   submitSearch: (query: string) => void
@@ -184,6 +191,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const { Box, Text } = el
   const data: Ctx = { ...input, budget: { left: PANE_TEXT_BUDGET } }
   const turn = data.turns[data.selected]
+  if (data.view === 'team') return paneBody(el, data, renderTeam(el, data, act))
 
   if (!turn) {
     return paneBody(el, data, <Text dimColor>No turns yet. Send a prompt and the detail view fills in.</Text>)
@@ -296,6 +304,42 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
   )
 }
 
+// The team board: each teammate with its type and status, then the tasks
+// with their TodoWrite marks and owners.
+function renderTeam(el: El, data: Ctx, act: PaneActions) {
+  const { Box, Button, Text } = el
+  const members = data.members ?? []
+  const tasks = data.tasks ?? []
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" gap={2}>
+        <Text bold color={C.brand}>{`Team (${members.length})`}</Text>
+        <Button key="nav-detail" plain hotkey="d" label="back to detail" onPress={act.showDetail} />
+      </Box>
+      <Box flexDirection="column" marginTop={1}>
+        {members.length === 0 && <Text dimColor>No teammates in this session.</Text>}
+        {members.map(member => (
+          <Box key={`member-${member.name}`} flexDirection="row">
+            <Text color={agentStatusColor(member.status)}>{'● '}</Text>
+            <Text bold>{truncate(member.name, 24).padEnd(24)}</Text>
+            <Text dimColor>{` ${truncate(member.type, 20).padEnd(20)} `}</Text>
+            <Text color={agentStatusColor(member.status)}>{member.status}</Text>
+          </Box>
+        ))}
+      </Box>
+      <Box flexDirection="column" marginTop={1}>
+        <Text bold>{`Tasks (${tasks.length})`}</Text>
+        {tasks.length === 0 && <Text dimColor>No tasks yet.</Text>}
+        {tasks.map(task => (
+          <Text key={`task-${task.id}`} dimColor={task.status === 'completed'} wrap="truncate-end">
+            {`${taskMark(task.status)} #${task.id} ${task.subject}${task.owner ? `  → ${task.owner}` : ''}`}
+          </Text>
+        ))}
+      </Box>
+    </Box>
+  )
+}
+
 // The pane body, painted edge to edge in the theme's background.
 function paneBody(el: El, data: Ctx, children: RenderChildren) {
   const { Box } = el
@@ -358,6 +402,9 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
       <Button key="nav-latest" plain hotkey="l" dimColor={data.isLatest} label="latest" onPress={act.latest} />
       <Button key="nav-turns" plain hotkey="t" label="turns" onPress={act.showTurns} />
       <Button key="nav-search" plain hotkey="s" label="search" onPress={act.focusSearch} />
+      {(data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0 && (
+        <Button key="nav-team" plain hotkey="m" label="team" onPress={act.showTeam} />
+      )}
       <Button key="nav-expand" plain hotkey="e" label="expand all" onPress={act.expandAll} />
       <Button key="nav-collapse" plain hotkey="c" label="collapse" onPress={act.collapseAll} />
     </Box>
