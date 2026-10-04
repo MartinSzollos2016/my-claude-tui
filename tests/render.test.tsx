@@ -689,6 +689,7 @@ describe('commands', () => {
       'tail-compact',
       'tail-help',
       'tail-icons',
+      'tail-notify',
       'tail-status',
       'tail-turns',
       'tail-width',
@@ -760,6 +761,13 @@ describe('commands', () => {
     expect((await $.command.run(run('tail-status', 'off'))).text).toBe('Status line: off.')
     expect((await $.command.run(run('tail', 'status'))).text).toContain('off')
     expect((await $.command.run(run('tail-status', 'on'))).text).toBe('Status line: on.')
+  })
+
+  test('/tail-notify is stored and answers in the engine', async ($, on) => {
+    mock.store(on)
+    expect((await $.command.run(run('tail-notify'))).text).toContain('off')
+    expect((await $.command.run(run('tail-notify', 'on'))).text).toBe('Notifications: on.')
+    expect((await $.command.run(run('tail', 'notify'))).text).toContain('on')
   })
 
   test('/tail-width works like its /tail form', async ($, on) => {
