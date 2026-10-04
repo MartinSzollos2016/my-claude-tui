@@ -615,11 +615,14 @@ async function toggleCompact($: EngineInterface): Promise<string> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    // The commands only steer the pane, never the turn: they run at once,
+    // even while Claude is answering, instead of queueing like a prompt.
     for (const spec of COMMANDS) {
       await $.command.register({
         name: spec.name,
         description: spec.description,
         ...(spec.argumentHint ? { argumentHint: spec.argumentHint } : {}),
+        immediate: true,
       })
     }
     refreshGit($).catch(ignore)
