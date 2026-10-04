@@ -2194,18 +2194,23 @@ export function scrollToRow(frame: ScrollFrame, id: string | null): number {
 }
 
 // One row of the cursor (`delta` -1 or 1) over `ids`. Without a cursor on the
-// list, j enters at the first row inside the window as drawn and k at the
-// last, so the content does not jump; with none inside, at the ends.
+// list, or with one f/b scrolled out of view, j enters at the first row inside
+// the window as drawn and k at the last, so the content does not jump; with
+// none inside, at the ends.
 export function stepCursor(
   ids: readonly string[],
   current: string | null,
   delta: number,
   frame: ScrollFrame,
 ): string | null {
-  if (current !== null && ids.includes(current)) return moveCursor(ids, current, delta)
   const margin = frame.windowRows > SCROLL_SLACK ? 1 : 0
   const first = frame.scrollTop + margin
   const last = frame.scrollTop + frame.windowRows - 1 - margin
+  const at = current === null ? undefined : frame.starts[current]
+  // A cursor in view (or with no known row) steps on; one scrolled out of
+  // view enters the window again.
+  const isInView = at === undefined || (at >= first && at <= last)
+  if (current !== null && ids.includes(current) && isInView) return moveCursor(ids, current, delta)
   const inside = ids.filter(id => {
     const start = frame.starts[id]
     return start !== undefined && start >= first && start <= last

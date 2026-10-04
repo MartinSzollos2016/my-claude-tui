@@ -1815,9 +1815,14 @@ describe('stepCursor', () => {
     expect(stepCursor(ids, 'gone', 1, { ...frame, scrollTop: 20 })).toBe('a')
   })
 
+  test('a cursor scrolled out of the window enters inside it again instead of pulling the view back', () => {
+    expect(stepCursor(ids, 'a', 1, frame)).toBe('d')
+    expect(stepCursor(ids, 'a', -1, frame)).toBe('e')
+  })
+
   test('a cursor on the list moves one row as moveCursor does', () => {
-    expect(stepCursor(ids, 'b', 1, frame)).toBe('c')
-    expect(stepCursor(ids, 'a', -1, frame)).toBe('a')
+    expect(stepCursor(ids, 'd', 1, frame)).toBe('e')
+    expect(stepCursor(ids, 'a', -1, { ...frame, scrollTop: 0 })).toBe('a')
     expect(stepCursor([], null, 1, frame)).toBe(null)
   })
 })

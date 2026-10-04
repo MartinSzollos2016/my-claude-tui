@@ -1613,6 +1613,17 @@ describe('own scroll', () => {
     expect(measured[0]!.total).toBeGreaterThanOrEqual(1 + 2 + 3)
   })
 
+  test('a very short pane drops the header before the window, and a window of two rows its indicators', () => {
+    const short = pane({ rows: 5 })
+    expect(byKey(short, 'pane-header')).toBeUndefined()
+    expect(byKey(short, 'pane-window')?.props['height']).toBe(1)
+    expect(byKey(short, 'more-below')).toBeUndefined()
+    const two = pane({ rows: 8 })
+    expect(byKey(two, 'pane-window')?.props['height']).toBe(2)
+    expect(byKey(two, 'more-below')).toBeUndefined()
+    expect(byKey(pane({ rows: 9 }), 'more-below')).toBeDefined()
+  })
+
   test('each drawing reports where its window stands, for the scroll of the engine', () => {
     measured.length = 0
     pane({ rows: 10, scrollTop: 99 })
