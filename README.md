@@ -73,17 +73,24 @@ Claude Code paints the pane's frame grey and a plugin cannot change it.
 
 - **Reads** the current session through Claude Code's plugin API: the conversation and its tool
   calls and results, the session's agents, context usage and cost, and the permission mode from
-  the prompt hook. It keeps its own UI state (expanded rows, timings) in the session and three
-  preferences (pane width, compact transcript, icon set) in Claude Code's plugin store.
+  the prompt hook. It keeps its own UI state (expanded rows, timings) in the session and five
+  preferences (pane width, compact transcript, icon set, status line, notifications) in Claude
+  Code's plugin store.
 - **Runs no programs.** The branch in the info bar is read from the repository's `.git/HEAD`
   (through a worktree's `.git` file when there is one).
 - **Sends nothing out**: no network requests, no telemetry. Everything it reads is drawn in the
   pane, the info bar and the transcript of the same session.
 - **Hooks**: its own slash commands (`command.run`, registered per command, so it never sees
-  others); `tool.call` and `turn.complete` to time calls and turns, passing each call on
-  unchanged; `prompt.submit` and the `UserPromptSubmit` prompt hook to note the prompt and the
-  permission mode, passing both on unchanged; `ui.render` to draw the pane, the info bar and the
-  compact tool rows in the transcript. It makes no permission decisions and changes no settings.
+  others); `tool.call`, `turn.start` and `turn.complete` to time calls and turns and match each
+  turn to its prompt, passing each on unchanged; `prompt.submit` and the `UserPromptSubmit`
+  prompt hook to note the prompt and the permission mode, passing both on unchanged; `ui.render`
+  to draw the pane, the info bar and the compact tool rows in the transcript, to name the running
+  tool in the transcript's spinner and to add the tool and agent counts to a turn's "Baked for
+  3s" line (both left to Claude Code with `/tail-status off`).
+- **Shows** the running tool and its elapsed time in the status line under the prompt
+  (`$.ui.status`, off with `/tail-status off`), and a toast when a subagent or a Workflow
+  finishes (`$.ui.toast`, only after `/tail-notify on`), plus "Copied" after a copy. It makes no
+  permission decisions and changes no settings.
 
 ## Security
 
