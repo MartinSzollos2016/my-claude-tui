@@ -540,6 +540,7 @@ describe('detail pane', () => {
 describe('info bar', () => {
   test('shows project, context and running agents', async ($, on) => {
     on('session.root', () => ({ value: '/Users/me/Sites/claude/my-claude-tui' }))
+    on('session.messages', () => ({ value: [] }))
     on('agent.list', () => ({ value: [{ id: 'x', description: 'd', type: 'Explore', status: 'running' as const }] }))
     on('session.usage', () => ({
       value: {
@@ -855,6 +856,7 @@ describe('what the plugin runs and touches', () => {
       return { value: 'ref: refs/heads/feat/turns\n' }
     })
     on('session.root', () => ({ value: '/r' }))
+    on('session.messages', () => ({ value: [] }))
     on('agent.list', () => ({ value: [] }))
     on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
     on('command.register', (_$, e) => ({ value: { command: e.name } }))

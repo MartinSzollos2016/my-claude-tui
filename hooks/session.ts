@@ -131,3 +131,17 @@ export function remember<K, V>(map: Map<K, V>, key: K, value: V, max: number): v
 export function isTextOnly(surfaces: readonly RenderSurface[]): boolean {
   return surfaces.every(surface => surface === 'vscode')
 }
+
+const MAX_WORKFLOW_AGENTS = 500
+
+// A workflow's agents carry ids $.agent.list() never names: an id seen on a
+// tool call or a finished turn that the list does not know is counted as
+// one of the running workflow's (best effort).
+export function noteWorkflowAgent(
+  seen: readonly string[],
+  agentId: string | undefined,
+  known: ReadonlySet<string>,
+): readonly string[] {
+  if (agentId === undefined || known.has(agentId) || seen.includes(agentId)) return seen
+  return [...seen, agentId].slice(-MAX_WORKFLOW_AGENTS)
+}

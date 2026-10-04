@@ -9,7 +9,7 @@ A Claude Code plugin that brings the detail view and info bar of
   execution trace). Expanding a tool call shows its input and its output in separate frames.
 - **Compact transcript**: tool calls and results take one line each in the conversation; the
   detail is in the pane.
-- **Info bar** above the prompt: project, git branch, permission mode, running agents,
+- **Info bar** above the prompt: project, git branch, permission mode, running agents and a running Workflow,
   context usage and cost.
 
 Colors are Claude Code theme keys, so the plugin follows `/theme`.
