@@ -583,3 +583,48 @@ export function toolSections(item: ToolItem): Section[] {
   })
   return sections
 }
+
+// -- Layout and the compact transcript ----------------------------------------
+
+const MIN_PANE = 40
+const MIN_TRANSCRIPT = 40
+
+// The dock width to ask for: `percent` of the terminal, but never so wide the
+// transcript drops under MIN_TRANSCRIPT nor so narrow the pane drops under
+// MIN_PANE. Undefined when the terminal holds neither.
+export function paneColumns(total: number, percent: number): number | undefined {
+  if (total < MIN_PANE + MIN_TRANSCRIPT) return undefined
+  const wanted = Math.round((total * percent) / 100)
+  return Math.min(total - MIN_TRANSCRIPT, Math.max(MIN_PANE, wanted))
+}
+
+const lineWord = (n: number) => `${n} line${n === 1 ? '' : 's'}`
+
+// The text a tool's structured result carries, by the fields the built-in
+// tools use; undefined when none is text.
+function resultText(output: unknown): string | undefined {
+  if (typeof output === 'string') return output
+  if (output === null || typeof output !== 'object') return undefined
+  const o = output as Record<string, unknown>
+  for (const key of ['stdout', 'content', 'text', 'output', 'result']) {
+    if (typeof o[key] === 'string') return [o[key], typeof o['stderr'] === 'string' ? o['stderr'] : ''].filter(Boolean).join('\n')
+  }
+  if (o['file'] !== null && typeof o['file'] === 'object') return resultText(o['file'])
+  return undefined
+}
+
+// One line for a tool result in the compact transcript; the detail is in
+// the pane. Errors keep their first line so a failure still reads at a glance.
+export function resultLine(output: unknown, isErrored: boolean): string {
+  if (isErrored) {
+    const first = sanitizeText(resultText(output) ?? String(output ?? '')).trim().split('\n')[0] ?? ''
+    return truncate(`error: ${first}`, 80)
+  }
+  const text = resultText(output)
+  if (text !== undefined) return text.trim() === '' ? 'no output' : lineWord(text.trimEnd().split('\n').length)
+  if (output !== null && typeof output === 'object') {
+    const list = Object.values(output as Record<string, unknown>).find(Array.isArray)
+    if (list) return `${list.length} item${list.length === 1 ? '' : 's'}`
+  }
+  return 'done'
+}
