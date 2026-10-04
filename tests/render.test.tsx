@@ -539,7 +539,7 @@ describe('detail pane', () => {
 
 describe('info bar', () => {
   test('shows project, context and running agents', async ($, on) => {
-    on('session.root', () => ({ value: '/Users/me/Sites/claude/my-claude-tui' }))
+    on('session.root', () => ({ value: '/home/dev/my-claude-tui' }))
     on('session.messages', () => ({ value: [] }))
     on('agent.list', () => ({ value: [{ id: 'x', description: 'd', type: 'Explore', status: 'running' as const }] }))
     on('session.usage', () => ({
