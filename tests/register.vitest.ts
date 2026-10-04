@@ -201,6 +201,55 @@ describe('detail pane', () => {
     expect(text(await draw($))).not.toContain('package main')
   })
 
+  test('builds the turns once while the transcript stays the same', async () => {
+    let reads = 0
+    const middle: SessionMessage = {
+      role: 'assistant',
+      toolUses: [],
+      get text() {
+        reads += 1
+        return 'Counting.'
+      },
+    }
+    const { $ } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'Count me', toolUses: [] },
+        middle,
+        { role: 'user', text: 'Again', toolUses: [] },
+      ],
+    })
+    await draw($)
+    await draw($)
+    expect(reads).toBe(1)
+  })
+
+  test('reads a finished subagent trace once', async () => {
+    const { $, world } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'Map it', toolUses: [] },
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            {
+              tool_use_id: 'd1',
+              tool: 'Agent',
+              input: { subagent_type: 'Explore', description: 'Map callers' },
+              agentId: 'agent-done',
+              text: 'ok',
+            },
+          ],
+        },
+      ],
+      agentMessages: { 'agent-done': child },
+      agents: [{ id: 'agent-done', description: 'Map callers', type: 'Explore', status: 'completed' }],
+    })
+    await press($, 'd1')
+    await draw($)
+    await draw($)
+    expect(world.calls.filter(call => call === 'messages:agent-done').length).toBe(1)
+  })
+
   test('says why a trace is unavailable', async () => {
     const { $ } = fakeEngine({ messages: main })
     await press($, 'a1')

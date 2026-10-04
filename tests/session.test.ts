@@ -5,9 +5,11 @@ import type { ToolTiming } from '../types'
 import { buildTurns } from '../hooks/model'
 import {
   MAX_TIMINGS,
+  memo,
   nextSelectedTurn,
   recordToolEnd,
   recordToolStart,
+  remember,
   statFor,
   toggleId,
   turnStatFrom,
@@ -94,5 +96,30 @@ describe('statFor', () => {
     expect(statFor(stats, turn)?.durationMs).toBe(2)
     expect(statFor(stats, undefined)).toBe(undefined)
     expect(statFor([], turn)).toBe(undefined)
+  })
+})
+
+describe('memo', () => {
+  test('builds once per key', () => {
+    let builds = 0
+    const build = () => ++builds
+    const first = memo(undefined, 'a', build)
+    expect(memo(first, 'a', build)).toBe(first)
+    expect(memo(first, 'b', build).value).toBe(2)
+    expect(builds).toBe(2)
+  })
+})
+
+describe('remember', () => {
+  test('keeps the newest max entries and refreshes a key it sets again', () => {
+    const map = new Map<string, number>()
+    remember(map, 'a', 1, 2)
+    remember(map, 'b', 2, 2)
+    remember(map, 'a', 3, 2)
+    remember(map, 'c', 4, 2)
+    expect([...map.entries()]).toEqual([
+      ['a', 3],
+      ['c', 4],
+    ])
   })
 })

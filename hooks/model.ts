@@ -1,7 +1,7 @@
 // Pure transformations: engine session rows -> turns -> display items, plus
 // the formatters and per-tool one-line summaries ported from tail-claude /
 // agent-ouija (claude/tools/summary.go). No engine calls here.
-import type { SessionMessage } from 'claude-code'
+import type { AgentStatus, SessionMessage } from 'claude-code'
 
 type OutputItem = { kind: 'output'; id: string; text: string }
 
@@ -143,6 +143,26 @@ export function traceStats(items: readonly Item[]): { tools: number; messages: n
   return { tools, messages }
 }
 
+// A cheap fingerprint of a transcript, so buildTurns reruns only when it
+// changes: a message added (length, first and last), a tool answered (a new
+// result row, or the outcome filled in place once the 4096-message window
+// is full), the last message's text grown.
+export function turnsKey(messages: readonly SessionMessage[]): string {
+  const last = messages.at(-1)
+  if (!last) return '0'
+  const lastTool = last.toolResults?.at(-1)?.tool_use_id ?? last.toolUses.at(-1)?.tool_use_id ?? ''
+  const answered = last.toolUses.filter(use => use.text !== undefined).length
+  return [messages.length, messages[0]!.text.length, last.role, lastTool, last.text.length, answered].join('|')
+}
+
+// One classifier for an agent's status, shared by the pane and the ticker.
+export const isAgentRunning = (status: AgentStatus | undefined): boolean =>
+  status === 'running' || status === 'pending' || status === 'waiting'
+
+// A finished agent's transcript no longer changes, so its trace is final.
+export const isAgentFinished = (status: AgentStatus | undefined): boolean =>
+  status === 'completed' || status === 'failed' || status === 'killed'
+
 // The text between the first `open` at or after `from` and the next `close`,
 // trimmed. indexOf rather than a regex: prompts are untrusted, and the
 // regexes this replaced backtracked cubically on long runs of whitespace.
@@ -223,9 +243,9 @@ export function formatDuration(ms: number): string {
 
 export function formatClock(ms: number): string {
   const d = new Date(ms)
-  const h = d.getHours()
+  const hours = d.getHours()
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${h % 12 === 0 ? 12 : h % 12}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${h < 12 ? 'AM' : 'PM'}`
+  return `${hours % 12 === 0 ? 12 : hours % 12}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${hours < 12 ? 'AM' : 'PM'}`
 }
 
 export function shortMode(mode: string): string {

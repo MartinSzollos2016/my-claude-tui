@@ -10,18 +10,32 @@ import {
   buildTurns,
   compactCall,
   gitDirFrom,
-  parseGitHead,
+  isAgentFinished,
+  isAgentRunning,
   isSubagent,
+  parseGitHead,
   paneColumns,
   resultLine,
   sanitizePrompt,
   sanitizeText,
   shortPath,
   traceItems,
+  turnsKey,
   type Item,
+  type Turn,
 } from './model'
 import { COMMANDS, helpText, parseCommand } from './commands'
-import { nextSelectedTurn, recordToolEnd, recordToolStart, statFor, toggleId, turnStatFrom } from './session'
+import {
+  memo,
+  nextSelectedTurn,
+  recordToolEnd,
+  recordToolStart,
+  remember,
+  statFor,
+  toggleId,
+  turnStatFrom,
+  type Memo,
+} from './session'
 import { C, tailThemeAdvice } from './theme'
 import { renderBar, renderPane, type El, type Trace } from './view'
 
@@ -43,8 +57,6 @@ const mode = atom({ plugin: 'tail-view', key: 'mode' } as const, null)
 const isWorking = atom({ plugin: 'tail-view', key: 'isWorking' } as const, false)
 const isBarHidden = atom({ plugin: 'tail-view', key: 'isBarHidden' } as const, false)
 
-const isRunning = (status: AgentStatus) => status === 'running' || status === 'pending' || status === 'waiting'
-
 const bump = ($: EngineInterface) => update($, tick, n => n + 1)
 
 // The info bar's branch, read from the repository's .git/HEAD (through a
@@ -62,11 +74,39 @@ async function refreshGit($: EngineInterface): Promise<void> {
   await update($, git, () => info)
 }
 
+// Module-local caches: a reload starts them over, which costs one rebuild.
+let turnsCache: Memo<Turn[]> | undefined
+
+// The session's turns, rebuilt only when the transcript's fingerprint moved.
+async function currentTurns($: EngineInterface): Promise<Memo<Turn[]>> {
+  const messages = await $.session.messages()
+  turnsCache = memo(turnsCache, turnsKey(messages), () => buildTurns(messages))
+  return turnsCache
+}
+
+// Traces by agentId. A finished agent's trace is final and never read again;
+// a running one is read on each drawing but rebuilt only when it changed.
+type CachedTrace = { key: string; trace: { items: Item[] }; isFinal: boolean }
+const traceCache = new Map<string, CachedTrace>()
+const MAX_TRACES = 200
+
+async function loadTrace($: EngineInterface, agentId: string, status: AgentStatus | undefined): Promise<Trace> {
+  const cached = traceCache.get(agentId)
+  if (cached?.isFinal) return cached.trace
+  const found = await $.session.messages({ agentId })
+  if ('deny' in found) return { denied: sanitizeText(String(found.deny)) }
+  const key = turnsKey(found)
+  const trace = cached?.key === key ? cached.trace : { items: traceItems(found, `${agentId}/`) }
+  remember(traceCache, agentId, { key, trace, isFinal: isAgentFinished(status) }, MAX_TRACES)
+  return trace
+}
+
 // Loads the trace of every expanded subagent, nested ones included.
 async function loadTraces(
   $: EngineInterface,
   items: readonly Item[],
   open: ReadonlySet<string>,
+  agents: ReadonlyMap<string, AgentStatus>,
 ): Promise<Map<string, Trace>> {
   const traces = new Map<string, Trace>()
   let frontier = items.filter(item => isSubagent(item) && open.has(item.id))
@@ -75,14 +115,9 @@ async function loadTraces(
     const next: Item[] = []
     for (const item of frontier) {
       if (!isSubagent(item) || traces.has(item.agentId)) continue
-      const found = await $.session.messages({ agentId: item.agentId })
-      if ('deny' in found) {
-        traces.set(item.agentId, { denied: sanitizeText(String(found.deny)) })
-        continue
-      }
-      const children = traceItems(found, `${item.agentId}/`)
-      traces.set(item.agentId, { items: children })
-      next.push(...children.filter(child => isSubagent(child) && open.has(child.id)))
+      const trace = await loadTrace($, item.agentId, agents.get(item.agentId))
+      traces.set(item.agentId, trace)
+      if ('items' in trace) next.push(...trace.items.filter(child => isSubagent(child) && open.has(child.id)))
     }
     frontier = next
   }
@@ -120,7 +155,7 @@ async function onTick($: EngineInterface): Promise<void> {
   frame += 1
   const working = await read($, isWorking)
   const agents = await $.agent.list()
-  if (!working && !agents.some(a => isRunning(a.status))) stopTicker()
+  if (!working && !agents.some(a => isAgentRunning(a.status))) stopTicker()
   await bump($)
 }
 
@@ -301,14 +336,14 @@ export const register: Register = on => {
     const el = $.ui.resolve(e) as unknown as El
     await read($, tick)
 
-    const turns = buildTurns(await $.session.messages())
+    const turns = (await currentTurns($)).value
     const latest = turns.length - 1
     const chosen = await read($, selectedTurn)
     const selected = chosen === null || chosen > latest ? latest : chosen
     const turn = turns[selected]
     const open = new Set(await read($, expanded))
-    const traces = await loadTraces($, turn?.items ?? [], open)
     const agents = new Map((await $.agent.list()).map(a => [a.id, a.status] as const))
+    const traces = await loadTraces($, turn?.items ?? [], open, agents)
     const usage = await $.session.usage()
     const allStats = await read($, turnStats)
 
@@ -413,7 +448,7 @@ export const register: Register = on => {
       project: sanitizeText(shortPath(await $.session.root(), 1)),
       git: await read($, git),
       mode: await read($, mode),
-      runningAgents: agents.filter(a => isRunning(a.status)).length,
+      runningAgents: agents.filter(a => isAgentRunning(a.status)).length,
       contextTokens: usage.context.tokens,
       contextPercent: usage.context.percent,
       costUsd: usage.cost?.usd,
