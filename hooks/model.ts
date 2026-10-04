@@ -803,6 +803,8 @@ export function rowText(
 // -- Hover card ---------------------------------------------------------------
 
 const CARD_LINES = 6
+// A card is a glance, not a frame: never wider than this, however wide the pane.
+const CARD_WIDTH = 72
 // What one card may carry in all, whatever the width: a pane draws many.
 const CARD_CHARS = 600
 
@@ -815,10 +817,11 @@ export function hoverCard(item: ToolItem, width: number, glyphs: Glyphs = DEFAUL
   const source = cardSource(item, glyphs)
   if (source.length === 0) return undefined
   const lines: string[] = []
+  const room = Math.max(1, Math.min(width, CARD_WIDTH))
   let left = CARD_CHARS
   for (const raw of source.slice(0, CARD_LINES)) {
     if (left <= 0) break
-    const line = [...truncateDisplay(sanitizeText(raw), Math.max(1, width), glyphs.ellipsis)].slice(0, left).join('')
+    const line = [...truncateDisplay(sanitizeText(raw), room, glyphs.ellipsis)].slice(0, left).join('')
     lines.push(line)
     left -= line.length + 1
   }
@@ -829,7 +832,17 @@ export function hoverCard(item: ToolItem, width: number, glyphs: Glyphs = DEFAUL
 function cardSource(item: ToolItem, glyphs: Glyphs): string[] {
   if (item.tool === 'Edit' || item.tool === 'MultiEdit') return editCardLines(item)
   const body = inputSections(item, glyphs)[0]?.body ?? ''
-  return body.trim() === '' ? [] : body.split('\n', CARD_LINES)
+  if (body.trim() === '') return []
+  // A tool without its own input frame is drawn as JSON; a card reads it as
+  // one `key: value` line per field instead of braces, quotes and indents.
+  if (body.trimStart().startsWith('{')) return fieldLines(item.input)
+  return body.split('\n', CARD_LINES)
+}
+
+function fieldLines(input: Record<string, unknown>): string[] {
+  return Object.entries(input)
+    .slice(0, CARD_LINES)
+    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`.replace(/\s+/g, ' '))
 }
 
 // An edit's card: per edit its first old lines as - and its first new lines
