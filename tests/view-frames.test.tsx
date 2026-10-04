@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { buildTurns } from '../hooks/model/turns'
-import { renderPane } from '../hooks/view'
+import { renderPane } from '../hooks/view/pane'
 import { act, base, byKey, calls, el, nodes, text } from './fixtures/view'
 
 describe('diff blocks', () => {

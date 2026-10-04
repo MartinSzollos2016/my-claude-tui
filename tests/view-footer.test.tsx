@@ -4,8 +4,8 @@ import { C } from '../hooks/theme'
 import { footerLayout } from '../hooks/model/footer'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
-import { renderPane } from '../hooks/view'
 import { footerGroups, footerPlan } from '../hooks/view/footer'
+import { renderPane } from '../hooks/view/pane'
 import { act, acts, base, byKey, el, nodes, text, type Node } from './fixtures/view'
 
 describe('footerPlan', () => {
