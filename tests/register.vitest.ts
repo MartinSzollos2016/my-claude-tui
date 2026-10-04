@@ -132,7 +132,7 @@ describe('commands', () => {
     expect(await say($, 'tail-icons')).toContain('nerd')
     expect(await say($, 'tail-icons', 'bogus')).toContain('nerd|unicode|ascii')
     expect(world.store.get('tail-view.icons')).toBeUndefined()
-    expect(await say($, 'tail-icons', 'ascii')).toContain('ascii')
+    expect(await say($, 'tail-icons', ' ASCII ')).toContain('ascii')
     expect(world.store.get('tail-view.icons')).toBe('ascii')
     expect(await say($, 'tail', 'icons')).toContain('ascii')
     const drawn = text(await draw($))

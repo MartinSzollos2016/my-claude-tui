@@ -17,6 +17,8 @@ export type ToolItem = {
   resultText?: string
   isError: boolean
   isPending: boolean
+  // The tool's own record says an abort ended it (Bash: result.interrupted).
+  isInterrupted?: boolean
   agentId?: string
   durationMs?: number
 }
@@ -71,7 +73,11 @@ export const isSubagent = (item: Item): item is ToolItem & { agentId: string } =
 
 export type ItemStatus = 'done' | 'error' | 'running' | 'idle' | 'interrupted'
 
-const INTERRUPTED = /interrupted by user/i
+const INTERRUPTED = /^\[Request interrupted by user/i
+
+function isInterruptedResult(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && (result as { interrupted?: unknown }).interrupted === true
+}
 
 // Where a tool call stands. A pending call runs only on the latest turn while
 // the session works (rule P6), else it waits; a subagent whose agent runs
@@ -83,6 +89,7 @@ export function itemStatus(
 ): ItemStatus {
   if (ctx.isAgentRunning === true) return 'running'
   if (item.isPending) return ctx.isLatest && ctx.isWorking ? 'running' : 'idle'
+  if (item.isInterrupted === true) return 'interrupted'
   if (!item.isError) return 'done'
   return INTERRUPTED.test(item.resultText ?? '') ? 'interrupted' : 'error'
 }
@@ -137,6 +144,7 @@ export function buildTurns(messages: readonly SessionMessage[], idPrefix = ''): 
         resultText: use.text === undefined ? undefined : sanitizeText(use.text),
         isError: use.isError === true,
         isPending: use.text === undefined,
+        isInterrupted: isInterruptedResult(use.result),
         agentId: use.agentId,
         durationMs: use.durationMs,
       }
