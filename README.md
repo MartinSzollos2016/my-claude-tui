@@ -68,10 +68,8 @@ one in `/theme`; `/tail-theme` tells you which.
   calls and results, the session's agents, context usage and cost, and the permission mode from
   the prompt hook. It keeps its own UI state (expanded rows, timings) in the session and two
   preferences (pane width, compact transcript) in Claude Code's plugin store.
-- **Runs one program**: `git --no-optional-locks -c core.fsmonitor=false -c
-core.untrackedCache=false status --porcelain=v1 --branch` in the session's directory, at
-  session start and after each turn, for the branch and dirty mark in the info bar. It never
-  prompts for credentials (`GIT_TERMINAL_PROMPT=0`) and takes no index lock.
+- **Runs no programs.** The branch in the info bar is read from the repository's `.git/HEAD`
+  (through a worktree's `.git` file when there is one).
 - **Sends nothing out**: no network requests, no telemetry. Everything it reads is drawn in the
   pane, the info bar and the transcript of the same session.
 - **Hooks**: its own slash commands (`command.run`, registered per command, so it never sees
@@ -84,8 +82,8 @@ core.untrackedCache=false status --porcelain=v1 --branch` in the session's direc
 
 - Text from the transcript is untrusted: terminal escape sequences, control characters and
   bidi overrides are stripped before drawing, and parsing is linear in the input length.
-- `git status` runs with `core.fsmonitor` disabled, so a cloned repository's config cannot run
-  a program through the info bar.
+- No programs are started: the branch is read from `.git/HEAD`, so a cloned repository's
+  config cannot run anything through the info bar.
 
 ## Develop
 
