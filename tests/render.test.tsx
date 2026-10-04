@@ -704,3 +704,50 @@ describe('compact tool calls', () => {
     }
   })
 })
+
+describe('what the plugin runs and touches', () => {
+  test('git status runs with fsmonitor off, no locks and no prompts', async ($, on) => {
+    mock.store(on)
+    const runs: { argv: readonly string[]; env?: Record<string, string> }[] = []
+    on('process.run', (_$, e) => {
+      runs.push({ argv: e.argv, env: e.init?.env })
+      return {
+        value: { exitCode: 0, stdout: '## main\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
+      }
+    })
+    on('session.cwd', () => ({ value: '/tmp/repo' }))
+    on('command.register', (_$, e) => ({ value: { command: e.name } }))
+    on('ui.open', () => ({ value: { isPlaced: false as const, reason: 'test' } }))
+    on('session.start', (_$, e) => ({ cwd: e.cwd }))
+
+    await $.session.start({ cwd: '/tmp/repo', surface: 'terminal', isInteractive: true } as never)
+    // git status runs detached from session.start; wait for it.
+    const timers = globalThis as unknown as { setTimeout: (run: () => void, ms: number) => void }
+    for (let i = 0; i < 100 && runs.length === 0; i++) await new Promise<void>(resolve => timers.setTimeout(resolve, 5))
+
+    expect(runs[0]?.argv).toEqual([
+      'git',
+      '--no-optional-locks',
+      '-c',
+      'core.fsmonitor=false',
+      '-c',
+      'core.untrackedCache=false',
+      'status',
+      '--porcelain=v1',
+      '--branch',
+    ])
+    expect(runs[0]?.env).toEqual({ GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' })
+  })
+
+  test('commands that are not tail-view pass by untouched', async ($, on) => {
+    mock.store(on)
+    on('command.run', (_$, e) => ({ text: `engine ran /${e.command}` }))
+    const ran = await $.command.run({
+      command: 'compact',
+      args: 'tail',
+      origin: { kind: 'composer' },
+      presentation: { isFullscreen: true, columns: 200 },
+    } as CommandRunInput)
+    expect(ran.text).toBe('engine ran /compact')
+  })
+})
