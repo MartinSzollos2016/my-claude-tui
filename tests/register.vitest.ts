@@ -1099,6 +1099,17 @@ describe('transcript spinner and turn duration', () => {
     expect(await props($, at(4_000))).toMatchObject({ word: 'Baked', durationMs: 4_000 })
   })
 
+  test('/tail-status redraws the transcript once when the switch changes', async () => {
+    const { $, world } = fakeEngine()
+    await say($, 'tail-status', 'off')
+    expect(world.invalidations).toEqual(['ui.render'])
+    await say($, 'tail-status', 'off')
+    await say($, 'tail-status')
+    expect(world.invalidations).toEqual(['ui.render'])
+    await say($, 'tail-status', 'on')
+    expect(world.invalidations).toEqual(['ui.render', 'ui.render'])
+  })
+
   test('the ascii set gives an ASCII duration line', async () => {
     const { $, world } = fakeEngine()
     await turn($, world, main, 't1', 3_000)
