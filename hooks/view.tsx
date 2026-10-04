@@ -19,6 +19,7 @@ import {
   clampDiff,
   clampText,
   contextMeter,
+  displayWidth,
   formatClock,
   EMPTY_TURN_TEXT,
   formatDuration,
@@ -31,6 +32,7 @@ import {
   itemStatus,
   type ItemStatus,
   itemSummary,
+  padEndDisplay,
   pathOf,
   pieceStarts,
   sanitizeText,
@@ -46,7 +48,7 @@ import {
   type TaskEntry,
   type TeamMember,
   traceStats,
-  truncate,
+  truncateDisplay,
   truncateMiddle,
   type Item,
   type ToolItem,
@@ -89,7 +91,7 @@ function scopeOf(prefix: string, id: string): string {
 }
 // What a cut text ends in comes from the icon set, so the engine's own
 // ellipsis (a Unicode one) is only left to draw where the set allows it.
-const cutter = (icons: Icons) => (text: string, max: number) => truncate(text, max, icons.ellipsis)
+const cutter = (icons: Icons) => (text: string, max: number) => truncateDisplay(text, max, icons.ellipsis)
 const isUnicodeCut = (icons: Icons) => icons.ellipsis === ICON_SETS.nerd.ellipsis
 const endWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-end' : 'wrap')
 const middleWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-middle' : 'wrap')
@@ -300,13 +302,16 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
     .map(turn => {
       const index = turn.index
       const marker = index === data.selected ? data.icons.marker : ' '
-      const number = `#${index + 1}`.padEnd(5)
+      const number = padEndDisplay(`#${index + 1}`, 5)
       const tail = turnTail(turn, data.stats[index], data.icons.dot)
-      const prompt = trunc(turn.prompt || '(no prompt)', Math.max(10, width - number.length - tail.length - 6))
+      const prompt = trunc(
+        turn.prompt || '(no prompt)',
+        Math.max(10, width - displayWidth(number) - displayWidth(tail) - 6),
+      )
       return {
         index,
         snippet: snippets.get(index) ?? '',
-        label: `${marker} ${number}${prompt.padEnd(Math.max(0, width - number.length - tail.length - 5))}  ${tail}`,
+        label: `${marker} ${number}${padEndDisplay(prompt, Math.max(0, width - displayWidth(number) - displayWidth(tail) - 5))}  ${tail}`,
       }
     })
 
@@ -434,8 +439,8 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
   // Every row draws from the pane's text budget; what does not fit is counted.
   const memberRows: { member: TeamMember; name: string; type: string; cost: number }[] = []
   for (const member of members) {
-    const name = trunc(member.name, 24).padEnd(24)
-    const type = trunc(member.type, 20).padEnd(20)
+    const name = padEndDisplay(trunc(member.name, 24), 24)
+    const type = padEndDisplay(trunc(member.type, 20), 20)
     const cost = name.length + type.length + member.status.length + 4
     if (cost > data.budget.left) break
     data.budget.left -= cost
@@ -670,7 +675,7 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
   if (thinking === undefined || thinking.text === '') return undefined
   const id = `t${turn.index}:thinking`
   const isOpen = data.expanded.has(id)
-  const label = trunc(`${'Thinking'.padEnd(12)} - ${thinking.text}`, Math.max(8, data.columns - 8))
+  const label = trunc(`${padEndDisplay('Thinking', 12)} - ${thinking.text}`, Math.max(8, data.columns - 8))
   return (
     <Box key={`item-${id}`} flexDirection="column">
       <Box flexDirection="row">
@@ -759,11 +764,11 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
 
   // One button carries name and summary, so a click or Enter anywhere on the
   // row toggles it; the label is cut to the room the fixed columns leave.
-  const room = width - guide.length - 2 - 3 - 2 - modelText.length - 2 - 7
-  const prefix = `${name.padEnd(12)} - `
+  const room = width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - 2 - 7
+  const prefix = `${padEndDisplay(name, 12)} - `
   const label =
     summary && item.kind === 'tool' && pathOf(item) !== ''
-      ? prefix + fitPath(item, summary, Math.max(8, room - prefix.length), icons.ellipsis)
+      ? prefix + fitPath(item, summary, Math.max(8, room - displayWidth(prefix)), icons.ellipsis)
       : trunc(summary ? prefix + summary : name, Math.max(8, room))
   const hover = { scope: scopeOf('row:', item.id), backgroundColor: C.rowHover }
   const toggle = () => canOpen && act.toggle(item.id)
@@ -802,7 +807,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
             {durationText !== '' ? `${icons.dot} ` : '  '}
           </Text>
           <Text color={C.muted} hover={hover}>
-            {durationText.padEnd(7)}
+            {padEndDisplay(durationText, 7)}
           </Text>
         </Box>
       </Box>

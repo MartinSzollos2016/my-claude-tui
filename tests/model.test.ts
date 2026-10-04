@@ -47,6 +47,9 @@ import {
   turnTail,
   truncate,
   truncateMiddle,
+  displayWidth,
+  padEndDisplay,
+  truncateDisplay,
 } from '../hooks/model'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
@@ -552,10 +555,10 @@ describe('truncateMiddle', () => {
     expect(truncateMiddle('a\nb\ncdefgh', 6)).toBe('a…efgh')
   })
 
-  test('counts code points and never splits a surrogate pair', () => {
-    const out = truncateMiddle('😀'.repeat(10) + 'end', 7)
-    expect([...out]).toHaveLength(7)
-    expect(out).toBe('😀😀…😀end')
+  test('counts cells and never splits a surrogate pair', () => {
+    const out = truncateMiddle('😀'.repeat(10) + 'end', 11)
+    expect(displayWidth(out)).toBeLessThanOrEqual(11)
+    expect(out).toBe('😀…😀😀end')
     expect(out).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/)
   })
 })
@@ -675,7 +678,7 @@ describe('a custom ellipsis (the ascii set)', () => {
     expect(truncate('abcdefghij', 2, '...')).toBe('ab')
     expect(truncateMiddle('abcdefghij', 7, '...')).toBe('a...hij')
     expect(truncateMiddle('abcdefghij', 2, '...')).toBe('..')
-    expect([...truncateMiddle('😀'.repeat(20), 9, '...')]).toHaveLength(9)
+    expect(displayWidth(truncateMiddle('😀'.repeat(20), 9, '...'))).toBeLessThanOrEqual(9)
   })
 
   test('clampText, searchTurns and splitMatch use it', () => {
@@ -1127,5 +1130,46 @@ describe('finishedWorkflows', () => {
     const stopped = wf('w1', { isPending: false, isInterrupted: true })
     expect(finishedWorkflows(new Set(['w1']), turn(stopped), true)).toEqual({ tracked: new Set(), finished: [] })
     expect(finishedWorkflows(new Set(), undefined, true)).toEqual({ tracked: new Set(), finished: [] })
+  })
+})
+
+describe('display width', () => {
+  test('displayWidth counts cells per grapheme', () => {
+    expect(displayWidth('')).toBe(0)
+    expect(displayWidth('abc')).toBe(3)
+    expect(displayWidth('日本語')).toBe(6)
+    expect(displayWidth('한글')).toBe(4)
+    expect(displayWidth('ＡＢ')).toBe(4)
+    expect(displayWidth('😀')).toBe(2)
+    expect(displayWidth('👨\u200d👩\u200d👧')).toBe(2)
+    expect(displayWidth('e\u0301')).toBe(1)
+    expect(displayWidth('a\ufe0e')).toBe(1)
+    expect(displayWidth('\u2764\ufe0f')).toBe(2)
+    expect(displayWidth('\u{F0BE0}')).toBe(1)
+    expect(displayWidth('\ue0b0')).toBe(1)
+  })
+
+  test('padEndDisplay pads to cells, never cuts', () => {
+    expect(padEndDisplay('ab', 5)).toBe('ab   ')
+    expect(padEndDisplay('日本', 6)).toBe('日本  ')
+    expect(padEndDisplay('日本語', 4)).toBe('日本語')
+  })
+
+  test('truncateDisplay cuts to cells and keeps graphemes whole', () => {
+    expect(truncateDisplay('hello', 10)).toBe('hello')
+    expect(truncateDisplay('hello world', 8)).toBe('hello w…')
+    expect(truncateDisplay('hello world', 8, '...')).toBe('hello...')
+    expect(truncateDisplay('日本語日本語', 7)).toBe('日本語…')
+    expect(displayWidth(truncateDisplay('日本語日本語', 6))).toBeLessThanOrEqual(6)
+    expect(truncateDisplay('a\nb', 5)).toBe('a b')
+    expect(truncateDisplay('abcdef', 1, '...')).toBe('a')
+    expect(truncateDisplay('abc', 0)).toBe('')
+    const family = '👨\u200d👩\u200d👧'
+    expect(truncateDisplay(`${family}${family}${family}`, 5)).toBe(`${family}${family}…`)
+    expect(truncateDisplay('e\u0301e\u0301e\u0301e\u0301', 3)).toBe('e\u0301e\u0301…')
+  })
+
+  test('truncateMiddle counts cells too', () => {
+    expect(displayWidth(truncateMiddle('日本語日本語日本語日本語', 9))).toBeLessThanOrEqual(9)
   })
 })

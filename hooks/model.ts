@@ -317,6 +317,79 @@ export function treePrefix(
   return depthPath.map(goes => (goes ? icons.treeGuide : blank)).join('') + (isLast ? icons.treeLast : icons.treeBranch)
 }
 
+// -- Display width -------------------------------------------------------------
+//
+// Columns line up by terminal cells, not by code points: CJK, Hangul and
+// fullwidth forms and emoji take two cells, combining marks and variation
+// selectors none, and a ZWJ sequence draws as one two-cell emoji. Nerd Font
+// glyphs of the Private Use Area count as one cell. Own table, no dependency.
+
+const SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+
+// Wide and fullwidth ranges [from, to], and the emoji blocks.
+const WIDE_RANGES: readonly (readonly [number, number])[] = [
+  [0x1100, 0x115f],
+  [0x2e80, 0x303e],
+  [0x3041, 0x33ff],
+  [0x3400, 0x4dbf],
+  [0x4e00, 0x9fff],
+  [0xa000, 0xa4cf],
+  [0xa960, 0xa97f],
+  [0xac00, 0xd7a3],
+  [0xf900, 0xfaff],
+  [0xfe30, 0xfe4f],
+  [0xff00, 0xff60],
+  [0xffe0, 0xffe6],
+  [0x1f300, 0x1faff],
+  [0x20000, 0x3fffd],
+]
+const ZERO_WIDTH = /^[\p{M}\p{Cf}\u200b-\u200d\ufe00-\ufe0f]+$/u
+const EMOJI_PRESENTATION = '\ufe0f'
+
+function graphemeWidth(grapheme: string): number {
+  const first = grapheme.codePointAt(0)!
+  if (ZERO_WIDTH.test(grapheme)) return 0
+  if (WIDE_RANGES.some(([from, to]) => first >= from && first <= to)) return 2
+  if (first > 0x7f && grapheme.includes(EMOJI_PRESENTATION)) return 2
+  return 1
+}
+
+const graphemesOf = (text: string): string[] => Array.from(SEGMENTER.segment(text), part => part.segment)
+
+export function displayWidth(text: string): number {
+  let width = 0
+  for (const grapheme of graphemesOf(text)) width += graphemeWidth(grapheme)
+  return width
+}
+
+// Pads with spaces to `width` cells; text that is wider is left whole.
+export function padEndDisplay(text: string, width: number): string {
+  return text + ' '.repeat(Math.max(0, width - displayWidth(text)))
+}
+
+// The longest run of whole graphemes from the start that fits `cells`.
+function takeDisplay(graphemes: readonly string[], cells: number): { text: string; width: number } {
+  let width = 0
+  let text = ''
+  for (const grapheme of graphemes) {
+    const w = graphemeWidth(grapheme)
+    if (width + w > cells) break
+    width += w
+    text += grapheme
+  }
+  return { text, width }
+}
+
+// Cuts to `max` cells, the ellipsis included, at the end; never splits a
+// grapheme. Line breaks become spaces.
+export function truncateDisplay(s: string, max: number, ellipsis = '…'): string {
+  const one = s.replaceAll('\n', ' ')
+  if (displayWidth(one) <= max) return one
+  const room = max - displayWidth(ellipsis)
+  if (room < 0) return takeDisplay(graphemesOf(one), max).text
+  return takeDisplay(graphemesOf(one), room).text + ellipsis
+}
+
 // Cuts to `max` code points, the ellipsis included, at the end.
 export function truncate(s: string, max: number, ellipsis = '…'): string {
   const one = s.replaceAll('\n', ' ')
@@ -326,17 +399,19 @@ export function truncate(s: string, max: number, ellipsis = '…'): string {
   return max < width ? chars.slice(0, max).join('') : chars.slice(0, max - width).join('') + ellipsis
 }
 
-// Cuts to `max` code points from the middle, keeping more of the end (a path's
-// file name) than of the start; "…" marks the cut. Never splits a surrogate pair.
+// Cuts to `max` cells from the middle, keeping more of the end (a path's
+// file name) than of the start; the ellipsis marks the cut. Never splits a
+// grapheme.
 export function truncateMiddle(s: string, max: number, ellipsis = '…'): string {
   const one = s.replaceAll('\n', ' ')
-  const chars = [...one]
-  if (chars.length <= max) return one
-  const width = [...ellipsis].length
-  if (max <= width) return [...ellipsis].slice(0, Math.max(0, max)).join('')
+  if (displayWidth(one) <= max) return one
+  const width = displayWidth(ellipsis)
+  if (max <= width) return takeDisplay(graphemesOf(ellipsis), Math.max(0, max)).text
   const keep = max - width
-  const head = Math.floor(keep / 3)
-  return `${chars.slice(0, head).join('')}${ellipsis}${chars.slice(chars.length - (keep - head)).join('')}`
+  const graphemes = graphemesOf(one)
+  const head = takeDisplay(graphemes, Math.floor(keep / 3))
+  const tail = takeDisplay(graphemes.toReversed(), keep - head.width)
+  return `${head.text}${ellipsis}${graphemesOf(tail.text).toReversed().join('')}`
 }
 
 export function shortPath(path: string, n: number): string {
@@ -374,12 +449,12 @@ const PATH_SEGMENTS = 6
 export function fitPath(item: ToolItem, summary: string, max: number, ellipsis = '…'): string {
   const path = pathOf(item)
   const known = [shortPath(path, 2), shortPath(path, 1)].find(k => k !== '' && summary.includes(k))
-  if (path === '' || known === undefined) return truncate(summary, max, ellipsis)
+  if (path === '' || known === undefined) return truncateDisplay(summary, max, ellipsis)
   const at = summary.lastIndexOf(known)
   const prefix = summary.slice(0, at)
   const suffix = summary.slice(at + known.length)
-  const room = max - [...prefix].length - [...suffix].length
-  if (room < 4) return truncate(summary, max, ellipsis)
+  const room = max - displayWidth(prefix) - displayWidth(suffix)
+  if (room < 4) return truncateDisplay(summary, max, ellipsis)
   return prefix + truncateMiddle(shortPath(path, PATH_SEGMENTS), room, ellipsis) + suffix
 }
 
@@ -1249,7 +1324,7 @@ export function turnText(turn: Turn | undefined, stat: TurnStat | undefined): st
   for (const item of turn.items) {
     const state = item.kind !== 'tool' ? '' : item.isError ? ' (error)' : item.isPending ? ' (no result yet)' : ''
     const duration = item.kind === 'tool' && item.durationMs !== undefined ? `  ${formatDuration(item.durationMs)}` : ''
-    lines.push(`  ${itemName(item).padEnd(12)} ${itemSummary(item)}${state}${duration}`)
+    lines.push(`  ${padEndDisplay(itemName(item), 12)} ${itemSummary(item)}${state}${duration}`)
   }
   return clampReport(lines.join('\n'))
 }
@@ -1257,7 +1332,8 @@ export function turnText(turn: Turn | undefined, stat: TurnStat | undefined): st
 export function turnListText(turns: readonly Turn[], stats: readonly (TurnStat | undefined)[]): string {
   if (turns.length === 0) return 'No turns yet.'
   const lines = turns.map(
-    (turn, i) => `${`#${i + 1}`.padEnd(5)}${truncate(turn.prompt || '(no prompt)', 60)}  ${turnTail(turn, stats[i])}`,
+    (turn, i) =>
+      `${padEndDisplay(`#${i + 1}`, 5)}${truncateDisplay(turn.prompt || '(no prompt)', 60)}  ${turnTail(turn, stats[i])}`,
   )
   return clampReport([`Turns (${turns.length}), newest last:`, ...lines].join('\n'))
 }
