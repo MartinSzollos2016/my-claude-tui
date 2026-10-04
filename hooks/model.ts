@@ -324,7 +324,9 @@ export function treePrefix(
 // selectors none, and a ZWJ sequence draws as one two-cell emoji. Nerd Font
 // glyphs of the Private Use Area count as one cell. Own table, no dependency.
 
-const SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+// Without Intl.Segmenter the text falls apart by code points.
+const SEGMENTER =
+  typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : undefined
 
 // Wide and fullwidth ranges [from, to], and the emoji blocks.
 const WIDE_RANGES: readonly (readonly [number, number])[] = [
@@ -340,7 +342,38 @@ const WIDE_RANGES: readonly (readonly [number, number])[] = [
   [0xfe30, 0xfe4f],
   [0xff00, 0xff60],
   [0xffe0, 0xffe6],
+  [0x1f000, 0x1f2ff],
   [0x1f300, 0x1faff],
+  // Default emoji presentation in the BMP.
+  [0x231a, 0x231b],
+  [0x23e9, 0x23ec],
+  [0x2614, 0x2615],
+  [0x2648, 0x2653],
+  [0x267f, 0x267f],
+  [0x2693, 0x2693],
+  [0x26a1, 0x26a1],
+  [0x26aa, 0x26ab],
+  [0x26bd, 0x26be],
+  [0x26c4, 0x26c5],
+  [0x26ce, 0x26ce],
+  [0x26d4, 0x26d4],
+  [0x26ea, 0x26ea],
+  [0x26f2, 0x26f5],
+  [0x26fa, 0x26fa],
+  [0x26fd, 0x26fd],
+  [0x2705, 0x2705],
+  [0x270a, 0x270b],
+  [0x2728, 0x2728],
+  [0x274c, 0x274c],
+  [0x274e, 0x274e],
+  [0x2753, 0x2755],
+  [0x2757, 0x2757],
+  [0x2795, 0x2797],
+  [0x27b0, 0x27b0],
+  [0x27bf, 0x27bf],
+  [0x2b1b, 0x2b1c],
+  [0x2b50, 0x2b50],
+  [0x2b55, 0x2b55],
   [0x20000, 0x3fffd],
 ]
 const ZERO_WIDTH = /^[\p{M}\p{Cf}\u200b-\u200d\ufe00-\ufe0f]+$/u
@@ -350,13 +383,19 @@ function graphemeWidth(grapheme: string): number {
   const first = grapheme.codePointAt(0)!
   if (ZERO_WIDTH.test(grapheme)) return 0
   if (WIDE_RANGES.some(([from, to]) => first >= from && first <= to)) return 2
-  if (first > 0x7f && grapheme.includes(EMOJI_PRESENTATION)) return 2
+  if (grapheme.includes(EMOJI_PRESENTATION)) return 2
+  // A flag: two regional indicators.
+  if (first >= 0x1f1e6 && first <= 0x1f1ff) return 2
   return 1
 }
 
-const graphemesOf = (text: string): string[] => Array.from(SEGMENTER.segment(text), part => part.segment)
+const graphemesOf = (text: string): string[] =>
+  SEGMENTER === undefined ? Array.from(text) : Array.from(SEGMENTER.segment(text), part => part.segment)
+
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/
 
 export function displayWidth(text: string): number {
+  if (PRINTABLE_ASCII.test(text)) return text.length
   let width = 0
   for (const grapheme of graphemesOf(text)) width += graphemeWidth(grapheme)
   return width
@@ -1398,7 +1437,7 @@ export function turnTable(
   const hasWide = width >= TABLE_WIDE
   const numberWidth = Math.max(3, ...turns.map(turn => `#${turn.index + 1}`.length))
   const fixed = [numberWidth, 7, ...(hasTools ? [5] : []), ...(hasWide ? [7, TABLE_BAR_CELLS] : [])]
-  const promptWidth = Math.max(10, inner - fixed.reduce((sum, w) => sum + w, 0) - TABLE_GAP * fixed.length)
+  const promptWidth = Math.max(0, inner - fixed.reduce((sum, w) => sum + w, 0) - TABLE_GAP * fixed.length)
   const longest = Math.max(0, ...turns.map(turn => stats[turn.index]?.durationMs ?? 0))
 
   const line = (c: TurnCells, pad: (text: string, width: number) => string): string =>
@@ -1410,6 +1449,8 @@ export function turnTable(
       ...(hasWide ? [pad(c.tokens, 7), padEndDisplay(c.bar, TABLE_BAR_CELLS)] : []),
     ].join(' '.repeat(TABLE_GAP))
 
+  // A pane too narrow for even the number and time columns cuts the row.
+  const fit = (row: string) => padEndDisplay(truncateDisplay(row, inner, ''), inner)
   const rows = turns.map(turn => {
     const stat = stats[turn.index]
     const cells: TurnCells = {
@@ -1421,10 +1462,10 @@ export function turnTable(
         hasWide && stat?.outputTokens !== undefined ? formatTokens((stat.inputTokens ?? 0) + stat.outputTokens) : '',
       bar: hasWide && stat ? durationBar(stat.durationMs, longest, TABLE_BAR_CELLS, icons) : '',
     }
-    return { index: turn.index, cells, label: line(cells, padStartDisplay) }
+    return { index: turn.index, cells, label: fit(line(cells, padStartDisplay)) }
   })
   const head = { number: '#', prompt: 'prompt', tools: 'tools', time: 'time', tokens: 'tokens', bar: '' }
-  return { header: line(head, padStartDisplay).trimEnd(), rows }
+  return { header: fit(line(head, padStartDisplay)).trimEnd(), rows }
 }
 
 export const EMPTY_TURN_TEXT = 'No tool calls or output in this turn.'
