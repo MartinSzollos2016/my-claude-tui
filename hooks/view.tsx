@@ -5,6 +5,7 @@ import type {
   BoxProps,
   RenderChildren,
   RenderElement,
+  RenderSurface,
   ElementConstructor,
   Elements,
   TextProps,
@@ -133,6 +134,7 @@ const PREVIEW = {
 type Ctx = PaneData & { budget: { left: number } }
 
 type PaneActions = {
+  copy: (text: string, surface?: RenderSurface) => void
   toggle: (id: string) => void
   prev: () => void
   next: () => void
@@ -379,11 +381,13 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: 
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
         {renderFrame(
           el,
-          `frame-${item.id}`,
+          item.id,
           'message',
           undefined,
           C.accent,
           renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act),
+          item.text,
+          act,
         )}
       </Box>
     )
@@ -404,11 +408,13 @@ function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
       {toolSections(item).map(section =>
         renderFrame(
           el,
-          `frame-${item.id}:${section.kind}`,
+          `${item.id}:${section.kind}`,
           section.title,
           section.meta,
           TONE[section.kind],
           renderLong(el, `${item.id}:${section.kind}`, section.body, longSpec(section), data, act),
+          section.body,
+          act,
         ),
       )}
     </Box>
@@ -420,22 +426,35 @@ function longSpec(section: Section): LongSpec {
   return section.format
 }
 
+// A section in a frame colored by its kind; the header carries a copy
+// button that copies the whole block, not the preview drawn below it.
 function renderFrame(
   el: El,
-  key: string,
+  blockId: string,
   title: string,
   meta: string | undefined,
   tone: ThemeKey,
   body: RenderElement,
+  copyText: string,
+  act: PaneActions,
 ) {
-  const { Box, Text } = el
+  const { Box, Button, Text } = el
   return (
-    <Box key={key} flexDirection="column" borderStyle="round" borderColor={tone} paddingX={1}>
-      <Box flexDirection="row">
-        <Text bold color={tone}>
-          {title}
-        </Text>
-        {meta !== undefined && meta !== '' && <Text dimColor wrap="truncate-end">{`  ${truncate(meta, 300)}`}</Text>}
+    <Box key={`frame-${blockId}`} flexDirection="column" borderStyle="round" borderColor={tone} paddingX={1}>
+      <Box flexDirection="row" justifyContent="space-between">
+        <Box flexDirection="row" flexShrink={1}>
+          <Text bold color={tone}>
+            {title}
+          </Text>
+          {meta !== undefined && meta !== '' && <Text dimColor wrap="truncate-end">{`  ${truncate(meta, 300)}`}</Text>}
+        </Box>
+        <Button
+          key={`copy:${blockId}`}
+          plain
+          dimColor
+          label="copy"
+          onPress={press => act.copy(copyText, press.surface)}
+        />
       </Box>
       {body}
     </Box>

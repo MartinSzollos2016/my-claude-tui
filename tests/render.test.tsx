@@ -120,6 +120,42 @@ const PANE = {
 } as const
 
 describe('detail pane', () => {
+  test('copies a whole block and says so', async ($, on) => {
+    const lines = Array.from({ length: 500 }, (_, i) => `line ${i}`).join('\n')
+    const long: SessionMessage[] = [
+      { role: 'user', text: 'run it', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: { command: 'seq 500' }, text: lines }],
+      },
+    ]
+    const copies: string[] = []
+    const toasts: string[] = []
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: long }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+    on('ui.copy', (_$, e) => {
+      copies.push(e.text)
+      return { value: { isCopied: true as const } }
+    })
+    on('ui.toast', (_$, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    await ui.press({ key: 'b1' })
+    await ui.press({ key: 'copy:b1:output' })
+    expect(copies).toEqual([lines])
+    expect(toasts).toEqual(['Copied'])
+    await ui.press({ key: 'copy:b1:command' })
+    expect(copies.at(-1)).toBe('seq 500')
+    await ui.unmount()
+  })
+
   test('reads a finished subagent trace once', async ($, on) => {
     const done: SessionMessage[] = [
       { role: 'user', text: 'Map it', toolUses: [] },
