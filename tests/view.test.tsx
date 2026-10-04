@@ -1248,7 +1248,7 @@ describe('pinned footer', () => {
     if (Array.isArray(t)) return t.map(line).join('')
     if (t === null || typeof t !== 'object' || !('type' in t)) return ''
     const { type, props, children } = t as Node
-    if (type === 'Button') return `${props['hotkey']} ${props['label']}`
+    if (type === 'Button') return `${props['hotkey']}: ${props['label']}`
     const parts = (Array.isArray(children) ? children : [children]).filter(Boolean).map(line)
     const joined = parts.join(' '.repeat(Number(props['gap'] ?? 0)))
     return typeof props['width'] === 'number' ? joined.padEnd(props['width']) : joined
@@ -1301,12 +1301,12 @@ describe('pinned footer', () => {
     ])
     expect(text(kids(footer)[0])).toBe('─'.repeat(100))
     expect(kids(footer)[0]?.props['color']).toBe(C.muted)
-    expect(line(rowsOf(footer)[0])).toBe('p ‹ prev  n › next  l latest  │  j ↓  k ↑  o open  y copy')
-    expect(line(rowsOf(footer)[1])).toBe('t turns  s search  m team     │  e expand  c collapse')
+    expect(line(rowsOf(footer)[0])).toBe('p: ‹ prev  n: next ›  l: latest  │  j: ↓  k: ↑  o: open  y: copy')
+    expect(line(rowsOf(footer)[1])).toBe('t: turns  s: search  m: team     │  e: expand  c: collapse')
     expect(
       footerOf({ view: 'turns' }) &&
         line(rowsOf(footerOf({ view: 'turns', members: [{ name: 'a', type: 't', status: 'running' }] }))[1]),
-    ).toContain('d detail')
+    ).toContain('d: detail')
   })
 
   test('puts the column separator in one display column on both rows', () => {
@@ -1323,10 +1323,10 @@ describe('pinned footer', () => {
   test('an unavailable key is a muted text with the same label and no hotkey', () => {
     const first = renderPane(el, { ...base, selected: 0, isLatest: false, cursor: null }, act)
     for (const [key, label] of [
-      ['nav-prev', 'p ‹ prev'],
-      ['nav-open', 'o open'],
-      ['nav-copy', 'y copy'],
-      ['nav-team', 'm team'],
+      ['nav-prev', 'p: ‹ prev'],
+      ['nav-open', 'o: open'],
+      ['nav-copy', 'y: copy'],
+      ['nav-team', 'm: team'],
     ] as const) {
       expect(byKey(first, key)).toBeUndefined()
       const off = byKey(first, `${key}-off`)
@@ -1346,6 +1346,7 @@ describe('pinned footer', () => {
   test('a button keeps the label and hotkey and is plain and dim', () => {
     const button = byKey(footerOf(), 'nav-prev')!
     expect(button.props).toMatchObject({ plain: true, dimColor: true, hotkey: 'p', label: '‹ prev' })
+    expect(byKey(footerOf({ selected: 0, isLatest: false }), 'nav-next')?.props['label']).toBe('next ›')
     expect((button.props['hover'] as { color?: string }).color).toBe('text')
   })
 
@@ -1361,24 +1362,42 @@ describe('pinned footer', () => {
       'footer-row-expand',
       'footer-status',
     ])
-    expect(line(rowsOf(footer)[0])).toBe('p ‹ prev  n › next  l latest')
+    expect(line(rowsOf(footer)[0])).toBe('p: ‹ prev  n: next ›  l: latest')
     expect(text(footer)).not.toContain('│')
   })
 
   test('shows only keys and glyphs under 40 columns', () => {
     const footer = footerOf({ columns: 36, isLatest: false })
-    expect(line(rowsOf(footer)[0])).toBe('p ‹  n ›  l ')
-    expect(line(rowsOf(footer)[1])).toBe('j ↓  k ↑  o   y ')
+    expect(line(rowsOf(footer)[0])).toBe('p: ‹  n: ›  l: ')
+    expect(line(rowsOf(footer)[1])).toBe('j: ↓  k: ↑  o:   y: ')
     expect(byKey(footer, 'nav-prev')?.props['label']).toBe('‹')
     expect(byKey(footer, 'nav-latest')?.props['label']).toBe('')
     expect(byKey(footer, 'nav-open')?.props['label']).toBe('')
-    expect(text(byKey(footerOf({ columns: 36, cursor: null }), 'nav-open-off'))).toBe('o')
+    expect(text(byKey(footerOf({ columns: 36, cursor: null }), 'nav-open-off'))).toBe('o: ')
   })
 
   test('uses the ASCII glyphs of the ascii set and stays ASCII only', () => {
     const footer = footerOf({ icons: ICON_SETS.ascii })
-    expect(line(rowsOf(footer)[0])).toBe('p < prev  n > next  l latest  |  j v  k ^  o open  y copy')
+    expect(line(rowsOf(footer)[0])).toBe('p: < prev  n: next >  l: latest  |  j: v  k: ^  o: open  y: copy')
     expect(line(footer)).toMatch(/^[\x20-\x7e]*$/)
+  })
+
+  test('a disabled key reads exactly as the engine draws the button: key, colon, label', () => {
+    const on = footerOf({ selected: 0, isLatest: false, cursor: 'b1' })
+    const off = footerOf({ selected: 0, isLatest: false, cursor: null })
+    expect(line(rowsOf(on)[0])).toBe('p: ‹ prev  n: next ›  l: latest  │  j: ↓  k: ↑  o: open  y: copy')
+    expect(line(rowsOf(off)[0])).toBe(line(rowsOf(on)[0]))
+  })
+
+  test('the status row is right-aligned inside the frame and cut with an ellipsis at 76 columns', () => {
+    const fits = byKey(footerOf({ columns: 76, isFocused: true }), 'footer-status')!
+    expect(fits.props['width']).toBe(74)
+    expect(text(fits)).toBe('turn 2/2 (live) · keys on')
+    const cut = byKey(footerOf({ columns: 20, isFocused: false }), 'footer-status')!
+    expect(displayWidth(text(cut))).toBeLessThanOrEqual(18)
+    expect(text(cut)).toContain('…')
+    const ascii = byKey(footerOf({ columns: 20, isFocused: false, icons: ICON_SETS.ascii }), 'footer-status')!
+    expect(text(ascii)).toContain('...')
   })
 
   test('charges its text to the pane budget', () => {

@@ -649,6 +649,8 @@ type FooterKey = {
   key: string
   hotkey: string
   glyph?: string
+  // The glyph comes after the label, not before it.
+  isGlyphAfter?: boolean
   label: string
   isOn: boolean
   onPress: (e: { surface?: RenderSurface }) => void
@@ -660,10 +662,11 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout)
   const { Box, Text } = el
   const { icons } = data
   const groups = footerGroups(data, act)
-  const textOf = (k: FooterKey) =>
-    [k.hotkey, k.glyph, layout.labels ? k.label : undefined].filter(part => part !== undefined && part !== '').join(' ')
+  // As the engine draws a button: `<key>: <label>`.
+  const textOf = (k: FooterKey) => `${k.hotkey}: ${footerLabel(k, layout.labels)}`
   const groupText = (group: readonly FooterKey[]) => group.map(textOf).join('  ')
-  const keys = (group: readonly FooterKey[]) => group.map(k => renderFooterKey(el, k, textOf(k), layout.labels))
+  const keys = (group: readonly FooterKey[]) =>
+    group.map(k => renderFooterKey(el, k, textOf(k), footerLabel(k, layout.labels)))
   const rows =
     layout.columns === 'stacked'
       ? groups.map(group => (
@@ -690,8 +693,7 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout)
             </Box>
           )
         })
-  const position =
-    data.turns.length > 0 ? `turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}` : ''
+  const status = footerStatus(data)
   return (
     <Box
       key="footer"
@@ -706,26 +708,49 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout)
         {icons.rule.repeat(data.columns)}
       </Text>
       {rows}
-      <Box key="footer-status" flexDirection="row" justifyContent="flex-end" width={data.columns}>
-        {position !== '' && (
-          <Text key="turn-position" color={C.muted}>
-            {position}
+      <Box key="footer-status" flexDirection="row" justifyContent="flex-end" width={status.width}>
+        {status.parts.map(part => (
+          <Text key={part.key} color={part.color}>
+            {part.text}
           </Text>
-        )}
-        {position !== '' && data.isFocused !== undefined && (
-          <Text key="footer-dot" color={C.muted}>{` ${icons.dot} `}</Text>
-        )}
-        {data.isFocused !== undefined && (
-          <Text key="focus-note" color={data.isFocused ? C.accent : C.muted}>
-            {data.isFocused ? 'keys on' : 'ctrl+x tab for keys'}
-          </Text>
-        )}
+        ))}
       </Box>
     </Box>
   )
 }
 
-function renderFooterKey(el: El, k: FooterKey, text: string, hasLabels: boolean) {
+// The status row: the position of the turn and the focus note, right-aligned
+// inside the pane's frame and padding (STATUS_INSET cells) and cut with the
+// set's ellipsis when it does not fit.
+const STATUS_INSET = 2
+
+function footerStatus(data: Ctx) {
+  const { icons } = data
+  const width = Math.max(1, data.columns - STATUS_INSET)
+  const position =
+    data.turns.length > 0 ? `turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}` : ''
+  const hasNote = data.isFocused !== undefined
+  const dot = position !== '' && hasNote ? ` ${icons.dot} ` : ''
+  const note = hasNote ? (data.isFocused ? 'keys on' : 'ctrl+x tab for keys') : ''
+  const cut = cutter(icons)(position + dot + note, width)
+  const noteColor = data.isFocused ? C.accent : C.muted
+  const pieces = [
+    { key: 'turn-position', text: cut.slice(0, position.length), color: C.muted },
+    { key: 'footer-dot', text: cut.slice(position.length, position.length + dot.length), color: C.muted },
+    { key: 'focus-note', text: cut.slice(position.length + dot.length), color: noteColor },
+  ]
+  return { width, parts: pieces.filter(piece => piece.text !== '') }
+}
+
+// The label of a key: glyph and words in the order they read; the glyph alone
+// when the pane is too narrow for words.
+function footerLabel(k: FooterKey, hasLabels: boolean): string {
+  if (!hasLabels) return k.glyph ?? ''
+  const parts = k.isGlyphAfter === true ? [k.label, k.glyph] : [k.glyph, k.label]
+  return parts.filter(part => part !== undefined && part !== '').join(' ')
+}
+
+function renderFooterKey(el: El, k: FooterKey, text: string, label: string) {
   const { Button, Text } = el
   if (!k.isOn)
     return (
@@ -733,9 +758,6 @@ function renderFooterKey(el: El, k: FooterKey, text: string, hasLabels: boolean)
         {text}
       </Text>
     )
-  const label = hasLabels
-    ? [k.glyph, k.label].filter(part => part !== undefined && part !== '').join(' ')
-    : (k.glyph ?? '')
   return (
     <Button
       key={k.key}
@@ -764,13 +786,22 @@ function footerGroups(data: Ctx, act: PaneActions): { id: string; keys: FooterKe
     isOn: boolean,
     onPress: FooterKey['onPress'],
     glyph?: string,
-  ): FooterKey => ({ key: `nav-${name}`, hotkey, label, isOn, onPress, ...(glyph === undefined ? {} : { glyph }) })
+    isGlyphAfter?: boolean,
+  ): FooterKey => ({
+    key: `nav-${name}`,
+    hotkey,
+    label,
+    isOn,
+    onPress,
+    ...(glyph === undefined ? {} : { glyph }),
+    ...(isGlyphAfter === true ? { isGlyphAfter } : {}),
+  })
   return [
     {
       id: 'move',
       keys: [
         key('prev', 'p', 'prev', data.selected > 0, act.prev, icons.navPrev),
-        key('next', 'n', 'next', data.selected < total - 1, act.next, icons.navNext),
+        key('next', 'n', 'next', data.selected < total - 1, act.next, icons.navNext, true),
         key('latest', 'l', 'latest', !data.isLatest, act.latest),
       ],
     },
