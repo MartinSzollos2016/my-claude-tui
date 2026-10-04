@@ -1117,14 +1117,41 @@ describe('empty states', () => {
   })
 })
 
+describe('header spacing', () => {
+  const header = (columns: number, extra = {}) => {
+    const tree = renderPane(el, { ...base, selected: 1, isLatest: true, isWorking: true, columns, ...extra }, act)
+    return nodes(tree)[2]!
+  }
+  const texts = (tree: unknown) => nodes(tree).filter(n => n.type === 'Text')
+
+  test('counters are separated by Box gaps, not by padding inside the text', () => {
+    for (const columns of [40, 70, 100]) {
+      const tree = header(columns, { thinking: { count: 2, text: 'x' } })
+      for (const t of texts(tree)) {
+        const s = text(t)
+        expect(s, `${columns}`).toBe(s.trim())
+      }
+      for (const row of nodes(tree).filter(n => n.type === 'Box' && n.props['flexShrink'] !== undefined))
+        expect(row.props['gap'] ?? row.props['columnGap'], `${columns}`).toBeGreaterThan(0)
+    }
+  })
+
+  test('below 80 columns the header shows only the context percent', () => {
+    expect(text(header(79))).toContain('62%')
+    expect(text(header(79))).not.toContain('▰')
+    expect(text(header(80))).toContain('▰▰▰▰▰▰▱▱▱▱ 62%')
+    expect(text(header(100))).not.toContain('ctx')
+  })
+})
+
 describe('context meter', () => {
   test('the header of the latest turn and the info bar draw the meter in the context color', () => {
     const latest = renderPane(el, { ...base, selected: 1, isLatest: true }, act)
-    expect(text(latest)).toContain('ctx ▰▰▰▰▰▰▱▱▱▱ 62%')
+    expect(text(latest)).toContain('▰▰▰▰▰▰▱▱▱▱ 62%')
     expect(nodes(latest).some(n => n.props['color'] === 'warning' && text(n).includes('▰▰▰▰▰▰▱▱▱▱ 62%'))).toBe(true)
     expect(text(renderPane(el, base, act))).not.toContain('▰')
     expect(text(renderPane(el, { ...base, selected: 1, isLatest: true, icons: ICON_SETS.ascii }, act))).toContain(
-      'ctx ######---- 62%',
+      '######---- 62%',
     )
 
     const bar = (columns: number, icons = ICON_SETS.nerd) =>
