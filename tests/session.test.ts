@@ -95,14 +95,15 @@ describe('toggleId', () => {
 
 describe('statFor', () => {
   test('picks the latest stat for the turn prompt', () => {
-    const turn = buildTurns([prompt('Fix the bug'), prompt('Thanks')])[1]!
+    const all = buildTurns([prompt('Fix the bug'), prompt('Thanks')])
+    const turn = all[1]!
     const stats = [
       { prompt: 'Thanks', durationMs: 1, endedAt: 0 },
       { prompt: 'Thanks', durationMs: 2, endedAt: 0 },
     ]
-    expect(statFor(stats, turn)?.durationMs).toBe(2)
-    expect(statFor(stats, undefined)).toBe(undefined)
-    expect(statFor([], turn)).toBe(undefined)
+    expect(statFor(stats, turn, all)?.durationMs).toBe(2)
+    expect(statFor(stats, undefined, all)).toBe(undefined)
+    expect(statFor([], turn, all)).toBe(undefined)
   })
 })
 
@@ -139,14 +140,28 @@ describe('turn index', () => {
       { prompt: 'ok', turnIndex: 0, durationMs: 1_000, endedAt: 0 },
       { prompt: 'ok', turnIndex: 1, durationMs: 9_000, endedAt: 0 },
     ]
-    expect(statFor(stats, turns[0])?.durationMs).toBe(1_000)
-    expect(statFor(stats, turns[1])?.durationMs).toBe(9_000)
-    expect(statFor(stats, turns[2])).toBe(undefined)
+    expect(statFor(stats, turns[0], turns)?.durationMs).toBe(1_000)
+    expect(statFor(stats, turns[1], turns)?.durationMs).toBe(9_000)
+    expect(statFor(stats, turns[2], turns)).toBe(undefined)
   })
 
   test('a stat without an index still matches by prompt', () => {
-    expect(statFor([{ prompt: 'Thanks', durationMs: 5, endedAt: 0 }], turns[2])?.durationMs).toBe(5)
-    expect(statFor([{ prompt: 'ok', turnIndex: 1, durationMs: 5, endedAt: 0 }], turns[0])).toBe(undefined)
+    expect(statFor([{ prompt: 'Thanks', durationMs: 5, endedAt: 0 }], turns[2], turns)?.durationMs).toBe(5)
+    expect(statFor([{ prompt: 'ok', turnIndex: 1, durationMs: 5, endedAt: 0 }], turns[0], turns)).toBe(undefined)
+  })
+
+  test('the running turn does not take the stat of an earlier identical prompt', () => {
+    expect(statFor([{ prompt: 'ok', turnIndex: 0, durationMs: 1_000, endedAt: 0 }], turns[1], turns)).toBe(undefined)
+  })
+
+  test('an index that now points at another prompt falls back to the prompt (a shifted window)', () => {
+    const shifted = buildTurns([prompt('Beta'), prompt('Gamma')])
+    const stats = [
+      { prompt: 'Alpha', turnIndex: 0, durationMs: 1_000, endedAt: 0 },
+      { prompt: 'Beta', turnIndex: 1, durationMs: 9_000, endedAt: 0 },
+    ]
+    expect(statFor(stats, shifted[0], shifted)?.durationMs).toBe(9_000)
+    expect(statFor(stats, shifted[1], shifted)).toBe(undefined)
   })
 
   test('the starting turn is the last one when the transcript holds it, else the next', () => {
