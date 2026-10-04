@@ -72,9 +72,11 @@ import {
   recordToolStart,
   remember,
   statFor,
+  statOfDuration,
   takeTurnIndex,
   toggleId,
   turnIndexAtStart,
+  turnOfStat,
   turnStatFrom,
   type Memo,
 } from './session'
@@ -312,6 +314,24 @@ async function notifyFinished($: EngineInterface, list?: readonly AgentInfo[], g
     $.ui.toast(`Subagent finished: ${text}`)
   }
   if (workflows.finished.length > 0) $.ui.toast('Workflow finished')
+}
+
+// What each finished turn's "Baked for 3s" line gets appended, by its stat:
+// a finished turn's counts do not change, so the transcript is read once per
+// turn rather than once per line drawn.
+const durationTails = new Map<string, string>()
+
+async function durationTail($: EngineInterface, durationMs: number, dot: string): Promise<string> {
+  const stat = statOfDuration(await read($, turnStats), durationMs)
+  if (stat === undefined) return ''
+  const key = `${stat.endedAt}|${stat.turnIndex}|${durationMs}|${dot}`
+  const cached = durationTails.get(key)
+  if (cached !== undefined) return cached
+  const turn = turnOfStat(stat, (await currentTurns($)).value)
+  if (turn === undefined) return ''
+  const tail = durationSuffix(turn, dot)
+  remember(durationTails, key, tail, MAX_STATS)
+  return tail
 }
 
 // The index of the last main-loop turn that completed with a known index.
@@ -852,12 +872,13 @@ export const register: Register = on => {
     return next({ ...e, props: { ...e.props, message, suffix: '' } })
   })
 
-  // The engine's "Baked for 3s" line plus the last turn's counts. The line
-  // has no text prop to append to, so it is drawn whole in its place.
+  // The engine's "Baked for 3s" line plus the counts of the turn it closes,
+  // found by its duration. The line has no text prop to append to, so it is
+  // drawn whole in its place; a line whose turn is not known stays the engine's.
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
     if (!(await isStatusOn($))) return next(e)
     const icons = await currentIcons($)
-    const tail = durationSuffix((await currentTurns($)).value.at(-1), icons.dot)
+    const tail = await durationTail($, e.props.durationMs, icons.dot)
     if (tail === '') return next(e)
     const { Text } = $.ui.resolve(e) as unknown as El
     return (
