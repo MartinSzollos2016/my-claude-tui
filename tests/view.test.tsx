@@ -211,14 +211,17 @@ describe('renderPane', () => {
     expect(all).toContain('2.5s')
     expect(all).toContain('haiku4.5')
     expect(byKey(tree, 'nav-prev')).toBeUndefined()
-    expect(byKey(tree, 'nav-latest')).toBeDefined()
+    expect(byKey(tree, 'nav-prev-off')?.type).toBe('Text')
+    expect(byKey(tree, 'nav-latest')?.type).toBe('Button')
     const mid = renderPane(el, { ...base, selected: 1 }, act)
-    expect(byKey(mid, 'nav-prev')).toBeDefined()
+    expect(byKey(mid, 'nav-prev')?.type).toBe('Button')
     expect(byKey(mid, 'nav-next')).toBeUndefined()
+    expect(byKey(mid, 'nav-next-off')?.type).toBe('Text')
     const last = renderPane(el, { ...base, selected: 1, isLatest: true }, act)
-    expect(byKey(last, 'nav-prev')).toBeDefined()
+    expect(byKey(last, 'nav-prev')?.type).toBe('Button')
     expect(byKey(last, 'nav-next')).toBeUndefined()
     expect(byKey(last, 'nav-latest')).toBeUndefined()
+    expect(byKey(last, 'nav-latest-off')?.type).toBe('Text')
   })
 
   test('every tool row starts with a status glyph, outputs and thinking keep the column blank', () => {
@@ -1149,62 +1152,35 @@ describe('trace tree guides', () => {
   })
 })
 
-describe('navigation groups', () => {
-  const one = buildTurns([{ role: 'user', text: 'hi', toolUses: [] }])
-  const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
-  const groups = (tree: unknown) =>
-    nodes(tree)
-      .filter(n => String(n.props['key']).startsWith('nav-group-'))
-      .map(n => String(n.props['key']).replace('nav-group-', ''))
-  const seps = (tree: unknown) => nodes(tree).filter(n => String(n.props['key']).startsWith('nav-sep-'))
-
-  test('the row wraps and the buttons sit in four groups split by a muted dot', () => {
-    const tree = renderPane(el, { ...base, selected: 1, members }, act)
-    const row = nodes(tree).find(n => n.props['key'] === 'nav')
-    expect(row?.props['flexWrap']).toBe('wrap')
-    expect(row?.props['columnGap']).toBeGreaterThan(0)
-    expect(groups(tree)).toEqual(['move', 'cursor', 'views', 'expand'])
-    const dots = seps(tree)
-    expect(dots.map(text)).toEqual(['·', '·', '·'])
-    for (const d of dots) expect(d.props['color']).toBe('inactive')
-    const inside = (group: string) =>
-      nodes(byKey(tree, `nav-group-${group}`))
-        .filter(n => n.type === 'Button')
-        .map(n => n.props['key'])
-    // A separator lives in the box of the group it leads, so a wrap never strands it.
-    expect(nodes(byKey(tree, 'nav-group-views')).some(n => n.props['key'] === 'nav-sep-views')).toBe(true)
-    expect(nodes(byKey(tree, 'nav-group-move')).some(n => String(n.props['key']).startsWith('nav-sep-'))).toBe(false)
-    expect(inside('move')).toEqual(['nav-prev', 'nav-latest'])
-    expect(inside('cursor')).toEqual(['nav-down', 'nav-up'])
-    expect(inside('views')).toEqual(['nav-turns', 'nav-search', 'nav-team'])
-    expect(inside('expand')).toEqual(['nav-expand', 'nav-collapse'])
-  })
-
-  test('a group with nothing to show is left out together with its separator', () => {
-    const tree = renderPane(el, { ...base, turns: one, isLatest: true }, act)
-    expect(groups(tree)).toEqual(['views', 'expand'])
-    expect(seps(tree)).toHaveLength(1)
-    expect(seps(renderPane(el, { ...base, icons: ICON_SETS.ascii }, act)).map(text)).toEqual(['.', '.', '.'])
-  })
-})
-
 describe('footer', () => {
   const footerOf = (tree: unknown) => byKey(tree, 'footer')
 
-  test('the navigation and turn N/M sit in a footer under the items, the header holds only metrics', () => {
+  test('the navigation and turn N/M sit in the footer, the header holds only metrics', () => {
     const tree = renderPane(el, { ...base, selected: 1, isLatest: true }, act)
     const footer = footerOf(tree)
     expect(footer).toBeDefined()
-    expect(byKey(footer, 'nav')).toBeDefined()
     expect(text(byKey(footer, 'turn-position'))).toBe('turn 2/2 (live)')
     expect(byKey(footer, 'turn-position')?.props['color']).toBe('inactive')
-    // The footer comes last, below the items; nothing of the navigation is above them.
-    expect(nodes(tree).filter(n => n.props['key'] === 'nav')).toHaveLength(1)
-    const columnChildren = (nodes(tree)[1]?.children as Node[]).filter(Boolean)
-    expect(columnChildren.at(-1)?.props['key']).toBe('footer')
-    const head = columnChildren[0]!
-    expect(byKey(head, 'nav')).toBeUndefined()
+    // Nothing of the navigation is above the items.
+    const body = nodes(tree)[0]!
+    const head = (nodes(tree)[1]?.children as Node[]).filter(Boolean)[0]!
+    expect(byKey(head, 'nav-prev')).toBeUndefined()
     expect(text(head)).not.toContain('turn 2/2')
+    expect(nodes(body).filter(n => n.props['key'] === 'nav-prev')).toHaveLength(1)
+  })
+
+  test('the separators between the columns are muted, the old dot groups are gone', () => {
+    const tree = renderPane(el, { ...base, selected: 1 }, act)
+    const seps = nodes(tree).filter(n => String(n.props['key']).startsWith('footer-sep-'))
+    expect(seps.map(text)).toEqual(['│', '│'])
+    for (const sep of seps) expect(sep.props['color']).toBe('inactive')
+    expect(nodes(tree).some(n => String(n.props['key']).startsWith('nav-group-'))).toBe(false)
+    const ascii = renderPane(el, { ...base, icons: ICON_SETS.ascii }, act)
+    expect(
+      nodes(ascii)
+        .filter(n => String(n.props['key']).startsWith('footer-sep-'))
+        .map(text),
+    ).toEqual(['|', '|'])
   })
 
   test('a thin rule across the pane separates it, a dash in the ascii set', () => {
@@ -1213,12 +1189,13 @@ describe('footer', () => {
     expect(text(rule())).toBe('─'.repeat(40))
     expect(rule()?.props['color']).toBe('inactive')
     expect(text(rule(ICON_SETS.ascii))).toBe('-'.repeat(40))
+    expect(nodes(renderPane(el, base, act)).filter(n => String(n.props['key']).endsWith('rule'))).toHaveLength(1)
   })
 
-  test('the footer wraps to a narrow pane instead of overflowing', () => {
+  test('a narrow pane stacks the groups instead of overflowing', () => {
     const tree = renderPane(el, { ...base, columns: 40, selected: 1 }, act)
-    expect(byKey(tree, 'nav')?.props['flexWrap']).toBe('wrap')
     expect(footerOf(tree)?.props['width']).toBe(40)
+    expect(nodes(footerOf(tree)).some(n => n.props['flexWrap'] === 'wrap')).toBe(false)
   })
 })
 
@@ -1226,12 +1203,12 @@ describe('pane focus', () => {
   const mark = (tree: unknown) => byKey(tree, 'brand-mark')
   const last = (tree: unknown) => byKey(tree, 'focus-note')
 
-  test('a focused pane has a bold brand mark and says keys are active', () => {
+  test('a focused pane has a bold brand mark and says keys are on', () => {
     const tree = renderPane(el, { ...base, isFocused: true }, act)
     expect(mark(tree)?.props['color']).toBe('claude')
     expect(mark(tree)?.props['bold']).toBe(true)
     expect(text(mark(tree))).toContain(ICON_SETS.nerd.robot)
-    expect(text(last(tree))).toBe('keys active')
+    expect(text(last(tree))).toBe('keys on')
     expect(last(tree)?.props['color']).toBe('suggestion')
   })
 
@@ -1239,7 +1216,7 @@ describe('pane focus', () => {
     const tree = renderPane(el, { ...base, isFocused: false }, act)
     expect(mark(tree)?.props['color']).toBe('inactive')
     expect(mark(tree)?.props['bold']).not.toBe(true)
-    expect(text(last(tree))).toBe('ctrl+x tab to use keys')
+    expect(text(last(tree))).toBe('ctrl+x tab for keys')
     expect(last(tree)?.props['color']).toBe('inactive')
   })
 
@@ -1247,13 +1224,171 @@ describe('pane focus', () => {
     const tree = renderPane(el, base, act)
     expect(mark(tree)?.props['color']).toBe('inactive')
     expect(last(tree)).toBeUndefined()
-    expect(text(tree)).not.toContain('keys')
+    expect(text(tree)).not.toContain('keys on')
+    expect(text(tree)).not.toContain('for keys')
   })
 
-  test('the note ends the footer', () => {
-    const footer = byKey(renderPane(el, { ...base, isFocused: true }, act), 'footer')
-    const parts = (footer?.children as Node[]).filter(Boolean)
+  test('the note ends the status row, right after the position of the turn', () => {
+    const status = byKey(renderPane(el, { ...base, isFocused: true }, act), 'footer-status')
+    expect(status?.props['justifyContent']).toBe('flex-end')
+    expect(text(status)).toBe('turn 1/2 · keys on')
+    const parts = (status?.children as Node[]).filter(Boolean)
     expect(parts.at(-1)?.props['key']).toBe('focus-note')
+  })
+})
+
+describe('pinned footer', () => {
+  const footerOf = (extra: Record<string, unknown> = {}) =>
+    byKey(renderPane(el, { ...base, selected: 1, isLatest: true, cursor: 'b1', ...extra }, act), 'footer')!
+  const kids = (n: Node | undefined) => (n?.children as Node[]).filter(Boolean)
+  // The row as drawn: a button has its hotkey before its label, a box
+  // spaces its children by `gap` and pads to its `width`.
+  const line = (t: unknown): string => {
+    if (typeof t === 'string') return t
+    if (Array.isArray(t)) return t.map(line).join('')
+    if (t === null || typeof t !== 'object' || !('type' in t)) return ''
+    const { type, props, children } = t as Node
+    if (type === 'Button') return `${props['hotkey']} ${props['label']}`
+    const parts = (Array.isArray(children) ? children : [children]).filter(Boolean).map(line)
+    const joined = parts.join(' '.repeat(Number(props['gap'] ?? 0)))
+    return typeof props['width'] === 'number' ? joined.padEnd(props['width']) : joined
+  }
+  const rowsOf = (footer: Node) => kids(footer).filter(n => String(n.props['key']).startsWith('footer-row'))
+
+  test('is an absolute box on the last rows of the window, over a pane background', () => {
+    const footer = footerOf({ rows: 30, offset: 14 })
+    expect(footer.props['position']).toBe('absolute')
+    expect(footer.props['left']).toBe(0)
+    expect(footer.props['width']).toBe(100)
+    expect(footer.props['top']).toBe(14 + 30 - 4)
+    expect(footer.props['backgroundColor']).toBe(C.paneBackground)
+    expect(footerOf({ rows: 30 }).props['top']).toBe(26)
+    expect(footerOf({ rows: 2, offset: 0 }).props['top']).toBe(0)
+  })
+
+  test('ends the pane body, which leaves room for it with bottom padding', () => {
+    const tree = renderPane(el, { ...base, rows: 30, offset: 3 }, act) as Node
+    expect(tree.props['paddingBottom']).toBe(4)
+    expect(kids(tree).at(-1)?.props['key']).toBe('footer')
+    const narrow = renderPane(el, { ...base, columns: 50 }, act) as Node
+    expect(narrow.props['paddingBottom']).toBe(6)
+  })
+
+  test('is in the detail, turns and team views and with no turns', () => {
+    const views = [
+      {},
+      { view: 'turns' as const },
+      { view: 'team' as const },
+      { turns: [] },
+      { turns: [], view: 'team' as const },
+    ]
+    for (const extra of views) {
+      const tree = renderPane(el, { ...base, ...extra }, act) as Node
+      expect(kids(tree).at(-1)?.props['key']).toBe('footer')
+      expect(tree.props['paddingBottom']).toBe(4)
+    }
+    expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'nav-detail')?.props['hotkey']).toBe('d')
+    expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'nav-turns')).toBeUndefined()
+  })
+
+  test('has one rule, two group rows and the status row at 100 columns', () => {
+    const footer = footerOf()
+    expect(kids(footer).map(n => n.props['key'])).toEqual([
+      'footer-rule',
+      'footer-row-1',
+      'footer-row-2',
+      'footer-status',
+    ])
+    expect(text(kids(footer)[0])).toBe('─'.repeat(100))
+    expect(kids(footer)[0]?.props['color']).toBe(C.muted)
+    expect(line(rowsOf(footer)[0])).toBe('p ‹ prev  n › next  l latest  │  j ↓  k ↑  o open  y copy')
+    expect(line(rowsOf(footer)[1])).toBe('t turns  s search  m team     │  e expand  c collapse')
+    expect(
+      footerOf({ view: 'turns' }) &&
+        line(rowsOf(footerOf({ view: 'turns', members: [{ name: 'a', type: 't', status: 'running' }] }))[1]),
+    ).toContain('d detail')
+  })
+
+  test('puts the column separator in one display column on both rows', () => {
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    for (const extra of [{}, { members }, { icons: ICON_SETS.ascii }, { selected: 0, isLatest: false, cursor: null }]) {
+      const rows = rowsOf(footerOf(extra)).map(line)
+      const sep = extra.icons ? '|' : '│'
+      const at = rows.map(r => displayWidth(r.slice(0, r.indexOf(sep))))
+      expect(at[0]).toBe(at[1])
+      expect(at[0]).toBeGreaterThan(20)
+    }
+  })
+
+  test('an unavailable key is a muted text with the same label and no hotkey', () => {
+    const first = renderPane(el, { ...base, selected: 0, isLatest: false, cursor: null }, act)
+    for (const [key, label] of [
+      ['nav-prev', 'p ‹ prev'],
+      ['nav-open', 'o open'],
+      ['nav-copy', 'y copy'],
+      ['nav-team', 'm team'],
+    ] as const) {
+      expect(byKey(first, key)).toBeUndefined()
+      const off = byKey(first, `${key}-off`)
+      expect(off?.type).toBe('Text')
+      expect(off?.props['color']).toBe(C.muted)
+      expect(off?.props['hotkey']).toBeUndefined()
+      expect(text(off)).toBe(label)
+    }
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    expect(byKey(renderPane(el, { ...base, members }, act), 'nav-team')?.type).toBe('Button')
+    const bare = renderPane(el, { ...base, turns: buildTurns([{ role: 'user', text: 'hi', toolUses: [] }]) }, act)
+    expect(byKey(bare, 'nav-expand-off')?.type).toBe('Text')
+    expect(byKey(bare, 'nav-collapse-off')?.type).toBe('Text')
+    expect(byKey(bare, 'nav-down-off')?.type).toBe('Text')
+  })
+
+  test('a button keeps the label and hotkey and is plain and dim', () => {
+    const button = byKey(footerOf(), 'nav-prev')!
+    expect(button.props).toMatchObject({ plain: true, dimColor: true, hotkey: 'p', label: '‹ prev' })
+    expect((button.props['hover'] as { color?: string }).color).toBe('text')
+  })
+
+  test('stacks every group on its own row under 64 columns and drops the separator', () => {
+    const footer = footerOf({ columns: 60 })
+    expect(footer.props['width']).toBe(60)
+    expect(footer.props['top']).toBe(30 - 6)
+    expect(kids(footer).map(n => n.props['key'])).toEqual([
+      'footer-rule',
+      'footer-row-move',
+      'footer-row-cursor',
+      'footer-row-views',
+      'footer-row-expand',
+      'footer-status',
+    ])
+    expect(line(rowsOf(footer)[0])).toBe('p ‹ prev  n › next  l latest')
+    expect(text(footer)).not.toContain('│')
+  })
+
+  test('shows only keys and glyphs under 40 columns', () => {
+    const footer = footerOf({ columns: 36, isLatest: false })
+    expect(line(rowsOf(footer)[0])).toBe('p ‹  n ›  l ')
+    expect(line(rowsOf(footer)[1])).toBe('j ↓  k ↑  o   y ')
+    expect(byKey(footer, 'nav-prev')?.props['label']).toBe('‹')
+    expect(byKey(footer, 'nav-latest')?.props['label']).toBe('')
+    expect(byKey(footer, 'nav-open')?.props['label']).toBe('')
+    expect(text(byKey(footerOf({ columns: 36, cursor: null }), 'nav-open-off'))).toBe('o')
+  })
+
+  test('uses the ASCII glyphs of the ascii set and stays ASCII only', () => {
+    const footer = footerOf({ icons: ICON_SETS.ascii })
+    expect(line(rowsOf(footer)[0])).toBe('p < prev  n > next  l latest  |  j v  k ^  o open  y copy')
+    expect(line(footer)).toMatch(/^[\x20-\x7e]*$/)
+  })
+
+  test('charges its text to the pane budget', () => {
+    const big = buildTurns([
+      { role: 'user', text: 'x', toolUses: [] },
+      { role: 'assistant', text: 'y'.repeat(200_000), toolUses: [] },
+    ])
+    const tree = renderPane(el, { ...base, turns: big, stats: [undefined], isLatest: true, selected: 0 }, act)
+    const total = nodes(tree).reduce((n, node) => n + text(node.children).length, 0)
+    expect(total).toBeLessThanOrEqual(100_000)
   })
 })
 
@@ -1922,12 +2057,12 @@ describe('keyboard cursor', () => {
 
   test('j, k and y sit in the cursor group, plain and dim with their own hover scope', () => {
     const tree = renderPane(el, { ...base, cursor: 'b1' }, act)
-    const keys = nodes(byKey(tree, 'nav-group-cursor'))
-      .filter(n => n.type === 'Button')
+    const keys = nodes(byKey(tree, 'footer-row-1'))
+      .filter(n => n.type === 'Button' && ['j', 'k', 'o', 'y'].includes(String(n.props['hotkey'])))
       .map(n => [n.props['key'], n.props['hotkey'], n.props['label']])
     expect(keys).toEqual([
-      ['nav-down', 'j', 'down'],
-      ['nav-up', 'k', 'up'],
+      ['nav-down', 'j', '↓'],
+      ['nav-up', 'k', '↑'],
       ['nav-open', 'o', 'open'],
       ['nav-copy', 'y', 'copy'],
     ])
@@ -1944,8 +2079,10 @@ describe('keyboard cursor', () => {
     expect(buttons(idle, 'nav-down')).toBeDefined()
     expect(buttons(idle, 'nav-copy')).toBeUndefined()
     expect(buttons(idle, 'nav-open')).toBeUndefined()
+    expect(byKey(idle, 'nav-copy-off')?.type).toBe('Text')
     const empty = renderPane(el, { ...base, turns: buildTurns([{ role: 'user', text: 'hi', toolUses: [] }]) }, act)
-    expect(byKey(empty, 'nav-group-cursor')).toBeUndefined()
+    expect(buttons(empty, 'nav-down')).toBeUndefined()
+    expect(byKey(empty, 'nav-down-off')?.type).toBe('Text')
   })
 
   test('the buttons call the actions, y passes the surface of the press', () => {
