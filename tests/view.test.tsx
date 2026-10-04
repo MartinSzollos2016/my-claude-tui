@@ -378,6 +378,46 @@ describe('renderPane', () => {
       { id: '3', subject: 'Later', status: 'pending' },
     ]
     const open = new Set(['x1', 'x2', 'x3', 'x4', 'x5', 'x7', 't0:o0', 't0:thinking'])
+    const numbered = Array.from({ length: 90 }, (_, n) => `${n + 1}→const v${n} = ${n}`).join('\n')
+    const rich = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          {
+            tool_use_id: 'r1',
+            tool: 'Read',
+            input: { file_path: '/src/a.ts' },
+            text: numbered,
+          },
+          {
+            tool_use_id: 'r2',
+            tool: 'Edit',
+            input: {
+              file_path: '/src/a.ts',
+              old_string: 'a\nb',
+              new_string: Array.from({ length: 150 }, (_, n) => `n${n}`).join('\n'),
+            },
+            text: 'ok',
+          },
+          {
+            tool_use_id: 'r3',
+            tool: 'MultiEdit',
+            input: {
+              file_path: '/src/a.ts',
+              edits: [
+                { old_string: 'x', new_string: 'y' },
+                { old_string: 'p', new_string: 'q' },
+              ],
+            },
+            text: 'ok',
+          },
+        ],
+      },
+    ])
+    const richOpen = new Set(['r1', 'r2', 'r3'])
+
     const ascii = { ...base, turns: many, icons: ICON_SETS.ascii, columns: 70, agents: new Map() }
     const trees = [
       renderPane(
@@ -443,6 +483,10 @@ describe('renderPane', () => {
         workflow: { isRunning: true, agents: 2 },
       }),
     ]
+    trees.push(
+      renderPane(el, { ...ascii, turns: rich, expanded: richOpen }, act),
+      renderPane(el, { ...ascii, turns: rich, expanded: richOpen, full: new Set(['r2:diff', 'r1:output']) }, act),
+    )
     for (const tree of trees) {
       expect(text(tree)).toMatch(/^[\x20-\x7e\n]*$/)
       for (const n of nodes(tree))
@@ -574,7 +618,48 @@ describe('renderPane', () => {
       },
     ])
     const open = new Set(['b1', 'e1', 'a1', 't0:o0', 't0:thinking'])
+    const numbered = Array.from({ length: 90 }, (_, n) => `${n + 1}→const v${n} = ${n}`).join('\n')
+    const rich = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          {
+            tool_use_id: 'r1',
+            tool: 'Read',
+            input: { file_path: '/src/a.ts' },
+            text: numbered,
+          },
+          {
+            tool_use_id: 'r2',
+            tool: 'Edit',
+            input: {
+              file_path: '/src/a.ts',
+              old_string: 'a\nb',
+              new_string: Array.from({ length: 150 }, (_, n) => `n${n}`).join('\n'),
+            },
+            text: 'ok',
+          },
+          {
+            tool_use_id: 'r3',
+            tool: 'MultiEdit',
+            input: {
+              file_path: '/src/a.ts',
+              edits: [
+                { old_string: 'x', new_string: 'y' },
+                { old_string: 'p', new_string: 'q' },
+              ],
+            },
+            text: 'ok',
+          },
+        ],
+      },
+    ])
+    const richOpen = new Set(['r1', 'r2', 'r3'])
     const trees = [
+      renderPane(el, { ...base, turns: rich, expanded: richOpen }, act),
+      renderPane(el, { ...base, turns: rich, expanded: richOpen, full: new Set(['r2:diff']) }, act),
       renderPane(
         el,
         { ...base, thinking, expanded: open, traces: new Map([['ag', { items: trace[0]!.items }]]), members, tasks },
