@@ -2,17 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { buildTurns, sanitizeText, sanitizeValue } from '../hooks/model'
-import {
-  agentStatusColor,
-  C,
-  contextColor,
-  modeColor,
-  modelColor,
-  THEME_KEYS,
-  tailThemeAdvice,
-  TAIL_THEMES,
-  TONE,
-} from '../hooks/theme'
+import { agentStatusColor, C, contextColor, modeColor, modelColor, THEME_KEYS, TONE } from '../hooks/theme'
 
 const keys = new Set<string>(THEME_KEYS)
 
@@ -53,39 +43,6 @@ describe('theme', () => {
     }
     expect(modeColor('default')).toBe(undefined)
     expect(modeColor(null)).toBe(undefined)
-  })
-})
-
-describe('tailThemeAdvice', () => {
-  test('names the tail-view variant of the current built-in theme', () => {
-    expect(tailThemeAdvice('dark-daltonized')).toContain('"Tail Dark (colorblind-friendly)"')
-    expect(tailThemeAdvice('light')).toContain('"Tail Light"')
-    for (const base of Object.keys(TAIL_THEMES)) expect(tailThemeAdvice(base)).toContain('/theme')
-  })
-
-  test('recognizes a tail-view theme already in use', () => {
-    expect(tailThemeAdvice('custom:tail-view:dark-ansi')).toContain('Already using "Tail Dark (ANSI colors only)"')
-  })
-
-  test('says when the tail-view variants are not loaded', () => {
-    expect(tailThemeAdvice('dark', ['dark', 'light', 'auto'])).toBe(
-      'Tail themes are not loaded in this session; run /reload-plugins or reinstall tail-view.',
-    )
-    expect(tailThemeAdvice('dark', ['dark', 'custom:tail-view:dark'])).toContain('"Tail Dark"')
-    expect(tailThemeAdvice('dark')).toContain('"Tail Dark"')
-    expect(tailThemeAdvice('custom:tail-view:light', ['light'])).toBe(
-      'Tail themes are not loaded in this session; run /reload-plugins or reinstall tail-view.',
-    )
-    expect(tailThemeAdvice('custom:tail-view:light', ['light', 'custom:tail-view:light'])).toContain(
-      'Already using "Tail Light"',
-    )
-  })
-
-  test('lists the variants for auto and other custom themes', () => {
-    for (const current of ['auto', 'custom:mine']) {
-      const advice = tailThemeAdvice(current)
-      for (const name of Object.values(TAIL_THEMES)) expect(advice).toContain(name)
-    }
   })
 })
 

@@ -321,7 +321,6 @@ describe('parseCommand', () => {
     expect(parseCommand('tail', 'width 70')).toEqual({ sub: 'width', arg: '70' })
     expect(parseCommand('tail-width', ' 70 ')).toEqual({ sub: 'width', arg: '70' })
     expect(parseCommand('tail', 'help')).toEqual({ sub: 'help', arg: '' })
-    expect(parseCommand('tail-theme', '')).toEqual({ sub: 'theme', arg: '' })
     expect(parseCommand('tail', 'nonsense')).toEqual({ sub: 'open', arg: 'nonsense' })
     expect(parseCommand('tail-turns', '')).toEqual({ sub: 'turns', arg: '' })
     expect(parseCommand('tail', 'turns')).toEqual({ sub: 'turns', arg: '' })
