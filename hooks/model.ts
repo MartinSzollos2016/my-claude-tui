@@ -454,3 +454,132 @@ export function chunkMarkdown(text: string, size: number): string[] {
   }
   return chunks
 }
+
+// -- Expanded view sections ---------------------------------------------------
+//
+// An expanded tool call reads as framed sections: what went in (the command,
+// file, diff or query) apart from what came out. Each section names its kind,
+// which the view maps to a frame color, and how its body is drawn.
+
+export type SectionKind = 'command' | 'input' | 'file' | 'diff' | 'query' | 'output' | 'error'
+
+export type SectionFormat = { kind: 'text' } | { kind: 'code'; language: string } | { kind: 'markdown' }
+
+export type Section = {
+  kind: SectionKind
+  title: string
+  meta?: string
+  body: string
+  format: SectionFormat
+}
+
+const LANGUAGES: Record<string, string> = {
+  go: 'go',
+  ts: 'typescript',
+  tsx: 'tsx',
+  js: 'javascript',
+  jsx: 'jsx',
+  mjs: 'javascript',
+  py: 'python',
+  rs: 'rust',
+  rb: 'ruby',
+  java: 'java',
+  kt: 'kotlin',
+  swift: 'swift',
+  c: 'c',
+  h: 'c',
+  cpp: 'cpp',
+  cs: 'csharp',
+  php: 'php',
+  sh: 'bash',
+  bash: 'bash',
+  zsh: 'bash',
+  json: 'json',
+  yaml: 'yaml',
+  yml: 'yaml',
+  toml: 'toml',
+  md: 'markdown',
+  html: 'html',
+  css: 'css',
+  sql: 'sql',
+  xml: 'xml',
+}
+
+export function languageFor(path: string): string | undefined {
+  const name = basename(path)
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? LANGUAGES[name.slice(dot + 1).toLowerCase()] : undefined
+}
+
+const codeOrText = (path: string): SectionFormat => {
+  const language = languageFor(path)
+  return language ? { kind: 'code', language } : { kind: 'text' }
+}
+
+const TODO_MARKS: Record<string, string> = { completed: '☑', in_progress: '◐' }
+
+function inputSections(item: ToolItem): Section[] {
+  const f = item.input
+  switch (item.tool) {
+    case 'Bash': {
+      const desc = str(f, 'description')
+      return [{ kind: 'command', title: '$ command', ...(desc ? { meta: desc } : {}), body: str(f, 'command'), format: { kind: 'code', language: 'bash' } }]
+    }
+    case 'Read': {
+      const limit = num(f, 'limit')
+      const offset = num(f, 'offset') || 1
+      const meta = limit > 0 ? `lines ${offset}-${offset + limit - 1}` : undefined
+      return [{ kind: 'file', title: 'read', ...(meta ? { meta } : {}), body: str(f, 'file_path'), format: { kind: 'text' } }]
+    }
+    case 'Edit': {
+      const diff = [...str(f, 'old_string').split('\n').map(l => `-${l}`), ...str(f, 'new_string').split('\n').map(l => `+${l}`)].join('\n')
+      return [{ kind: 'diff', title: 'diff', meta: str(f, 'file_path'), body: diff, format: { kind: 'code', language: 'diff' } }]
+    }
+    case 'Write':
+      return [{ kind: 'file', title: 'write', meta: str(f, 'file_path'), body: str(f, 'content'), format: codeOrText(str(f, 'file_path')) }]
+    case 'Grep':
+    case 'Glob': {
+      const where = str(f, 'glob') || str(f, 'path')
+      return [{ kind: 'query', title: name(item), body: where ? `${str(f, 'pattern')}  in ${where}` : str(f, 'pattern'), format: { kind: 'text' } }]
+    }
+    case 'WebFetch':
+    case 'WebSearch': {
+      const target = str(f, 'url') || str(f, 'query')
+      const prompt = str(f, 'prompt')
+      return [{ kind: 'query', title: name(item), body: prompt ? `${target}\n${prompt}` : target, format: { kind: 'text' } }]
+    }
+    case 'TodoWrite': {
+      const todos = Array.isArray(f['todos']) ? (f['todos'] as Record<string, unknown>[]) : []
+      const body = todos.map(t => `${TODO_MARKS[str(t, 'status')] ?? '☐'} ${str(t, 'content')}`).join('\n')
+      return [{ kind: 'input', title: 'todos', body, format: { kind: 'text' } }]
+    }
+    default:
+      if (Object.keys(f).length === 0) return []
+      return [{ kind: 'input', title: 'input', body: JSON.stringify(f, null, 2), format: { kind: 'code', language: 'json' } }]
+  }
+}
+
+const name = (item: ToolItem) => item.tool.toLowerCase()
+
+function outputFormat(item: ToolItem): SectionFormat {
+  if (item.isError) return { kind: 'text' }
+  if (item.tool === 'Read') return codeOrText(str(item.input, 'file_path'))
+  if (item.tool === 'WebFetch' || item.tool === 'WebSearch') return { kind: 'markdown' }
+  return { kind: 'text' }
+}
+
+export function toolSections(item: ToolItem): Section[] {
+  const sections = inputSections(item)
+  const result = item.resultText?.trimEnd()
+  if (result === undefined || result === '') return sections
+  const lines = result.split('\n').length
+  const status = item.isError ? 'error' : 'ok'
+  sections.push({
+    kind: item.isError ? 'error' : 'output',
+    title: item.isError ? 'error' : 'output',
+    meta: `${status} · ${lines} line${lines === 1 ? '' : 's'}`,
+    body: result,
+    format: outputFormat(item),
+  })
+  return sections
+}
