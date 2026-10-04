@@ -443,8 +443,8 @@ describe('detail pane', () => {
   })
 
   test('counts the shown turn thinking from the API form, read once per transcript', async () => {
-    // A transcript of its own: the thinking cache is keyed by the transcript's
-    // fingerprint and lives in the module across tests.
+    // The thinking cache is keyed by the transcript's fingerprint, so a
+    // second draw of the same transcript reads the API form only once.
     const { $, world } = fakeEngine({
       messages: [
         { role: 'user', text: 'Think about main.go', toolUses: [] },
