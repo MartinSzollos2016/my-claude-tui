@@ -19,7 +19,7 @@ claude --debug -p noop </dev/null >/dev/null 2>&1 || true
 log="$(cat "$home"/.claude/debug/*.txt)"
 grep -q 'hooks module tail-view@my-claude-tui loaded' <<<"$log"
 grep -q 'plugin.register: tail-view .* admitted' <<<"$log"
-for command in tail tail-turns tail-width tail-compact tail-icons tail-bar tail-help; do
+for command in tail tail-turns tail-width tail-compact tail-icons tail-bar tail-status tail-help; do
   grep -q "(tail-view): /$command listed" <<<"$log" || { echo "missing /$command"; exit 1; }
 done
 echo "tail-view installs from the marketplace and loads"

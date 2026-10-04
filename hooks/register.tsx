@@ -16,6 +16,7 @@ import type {
 import type { AgentStat, IconSetName } from '../types'
 import {
   alignFromEnd,
+  callInput,
   buildTurns,
   compactCall,
   gitDirFrom,
@@ -25,10 +26,12 @@ import {
   parseGitHead,
   paneColumns,
   resultLine,
+  runningTool,
   sanitizePrompt,
   sanitizeText,
   searchTurns,
   shortPath,
+  statusText,
   taskBoard,
   teamMembers,
   thinkingCounts,
@@ -38,6 +41,7 @@ import {
   turnText,
   workflowState,
   type Item,
+  type RunningTool,
   type TaskEntry,
   type Turn,
   type TurnMatch,
@@ -208,6 +212,30 @@ async function trackWorkflow($: EngineInterface, tool: string, agentId: string |
   workflowAgents = noteWorkflowAgent(workflowAgents, agentId, new Set(agents.map(a => a.id)))
 }
 
+// Main-loop tool calls that have started and not ended, for the status line.
+let runningTools: readonly RunningTool[] = []
+// The status line as last set, so an unchanged text is not set again.
+let lastStatus: string | undefined
+
+// Sets the status line to what the running tools say now, when that differs
+// from what is showing; off in /tail-status, it is cleared instead.
+async function syncStatus($: EngineInterface): Promise<void> {
+  const isOn = (await $.store.get(STATUS_KEY)) !== false
+  const icons = await currentIcons($)
+  const now = await $.clock.now()
+  // Read after the awaits: the latest state wins whichever sync ends last.
+  const text = isOn ? statusText(runningTools, now, icons) : undefined
+  if (text === lastStatus) return
+  lastStatus = text
+  $.ui.status(text)
+}
+
+// Removes the status line at once, whatever the tools say.
+function clearStatus($: EngineInterface): void {
+  lastStatus = undefined
+  $.ui.status(undefined)
+}
+
 // The index of the last main-loop turn that completed with a known index.
 let lastDoneIndex = -1
 
@@ -247,6 +275,7 @@ async function noteTurnStart($: EngineInterface, turnId: string, text: string): 
 async function undoSubmit($: EngineInterface, pushed: number | undefined, wasWorking: boolean): Promise<void> {
   if (pushed !== undefined) pendingTurns = dropPending(pendingTurns, pushed)
   await update($, isWorking, () => wasWorking)
+  clearStatus($)
 }
 
 function stopTicker() {
@@ -259,6 +288,7 @@ async function onTick($: EngineInterface): Promise<void> {
   const working = await read($, isWorking)
   const agents = await $.agent.list()
   if (!working && !agents.some(a => isAgentRunning(a.status))) stopTicker()
+  await syncStatus($)
   await bump($)
 }
 
@@ -281,6 +311,8 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       return { text: await setIcons($, parsed.arg) }
     case 'width':
       return { text: await setWidth($, parsed.arg, e.presentation.columns) }
+    case 'status':
+      return { text: await setStatus($, parsed.arg) }
     case 'help':
       return { text: helpText() }
     case 'turns': {
@@ -344,6 +376,7 @@ async function openMatch($: EngineInterface, value: string, turns: readonly Turn
 const WIDTH_KEY = 'paneWidth'
 const COMPACT_KEY = 'isCompact'
 const ICONS_KEY = 'tail-view.icons'
+const STATUS_KEY = 'tail-view.status'
 const DEFAULT_ICONS: IconSetName = 'nerd'
 const DEFAULT_WIDTH = 80
 const MIN_WIDTH = 30
@@ -414,6 +447,20 @@ async function setIcons($: EngineInterface, rawArg: string): Promise<string> {
   return `Icon set: ${arg}.`
 }
 
+// /tail-status: names the setting, or stores on/off and shows or clears the
+// line at once.
+async function setStatus($: EngineInterface, rawArg: string): Promise<string> {
+  const arg = rawArg.toLowerCase()
+  if (arg === '') {
+    const isOn = (await $.store.get(STATUS_KEY)) !== false
+    return `Status line: ${isOn ? 'on' : 'off'}. Change it with /tail-status on|off.`
+  }
+  if (arg !== 'on' && arg !== 'off') return 'Unknown value. Use /tail-status on|off.'
+  await $.store.set(STATUS_KEY, arg === 'on')
+  await syncStatus($)
+  return `Status line: ${arg}.`
+}
+
 async function toggleCompact($: EngineInterface): Promise<string> {
   const next = !(await isCompact($))
   await $.store.set(COMPACT_KEY, next)
@@ -444,6 +491,7 @@ export const register: Register = on => {
   on('command.run', { command: 'tail-width' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-compact' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-icons' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-status' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-bar' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-help' }, ($, e) => runCommand($, e))
 
@@ -483,13 +531,23 @@ export const register: Register = on => {
     await update($, timings, all => recordToolStart(all, id, start))
     await bump($)
     startTicker($)
+    const isMain = e.agentId === undefined
+    if (isMain) {
+      runningTools = [...runningTools, runningTool(id, e.tool, callInput(e), start)]
+      syncStatus($).catch(ignore)
+    }
 
-    const ran = await next(e)
-
-    const end = await $.clock.now()
-    await update($, timings, all => recordToolEnd(all, id, end, start))
-    await bump($)
-    return ran
+    try {
+      return await next(e)
+    } finally {
+      const end = await $.clock.now()
+      await update($, timings, all => recordToolEnd(all, id, end, start))
+      await bump($)
+      if (isMain) {
+        runningTools = runningTools.filter(r => r.id !== id)
+        syncStatus($).catch(ignore)
+      }
+    }
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -509,6 +567,8 @@ export const register: Register = on => {
       const stat = turnStatFrom(e, prompt, endedAt, opened?.index)
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
+      runningTools = []
+      syncStatus($).catch(ignore)
       refreshGit($).catch(ignore)
     }
     await bump($)

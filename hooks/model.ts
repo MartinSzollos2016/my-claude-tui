@@ -1387,6 +1387,61 @@ export function compactCall(tool: string, rawInput: unknown, ellipsis = '…'): 
   return { name: itemName(item), summary: fitPath(named, itemSummary(named), 80, ellipsis) }
 }
 
+// -- Status line --------------------------------------------------------------
+
+// A main-loop tool call that has started and not yet ended.
+export type RunningTool = { id: string; tool: string; input: unknown; startedAt: number }
+
+export const runningTool = (id: string, tool: string, input: unknown, startedAt: number): RunningTool => ({
+  id,
+  tool,
+  input,
+  startedAt,
+})
+
+// The input of a tool.call event: the event less the fields that are not the
+// tool's own.
+export function callInput(event: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const { tool: _tool, tool_use_id: _id, agentId: _agent, ...input } = event
+  return input
+}
+
+const STATUS_SUMMARY = 60
+
+function statusIcon(tool: string, icons: Icons): string {
+  switch (toolCategory(tool)) {
+    case 'read':
+      return icons.book
+    case 'edit':
+      return icons.penNib
+    case 'search':
+      return icons.folderSearch
+    case 'task':
+      return icons.robot
+    case 'web':
+      return icons.web
+    default:
+      return icons.wrench
+  }
+}
+
+// The line pinned under the prompt while a tool runs: the category icon, the
+// tool, its summary cut to 60 characters in the middle and the whole seconds
+// it has run, e.g. "$ Bash go test ./... . 12s". The oldest running call is
+// the one shown; undefined when nothing runs.
+export function statusText(running: readonly RunningTool[], now: number, icons: Icons): string | undefined {
+  const oldest = running.reduce<RunningTool | undefined>(
+    (best, r) => (best === undefined || r.startedAt < best.startedAt ? r : best),
+    undefined,
+  )
+  if (oldest === undefined) return undefined
+  const secs = Math.max(0, Math.floor((now - oldest.startedAt) / 1000))
+  const elapsed = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`
+  const { name, summary } = compactCall(oldest.tool, oldest.input, icons.ellipsis)
+  const shown = summary === '' ? '' : ` ${truncateMiddle(summary, STATUS_SUMMARY, icons.ellipsis)}`
+  return `${statusIcon(oldest.tool, icons)} ${name}${shown} ${icons.dot} ${elapsed}`
+}
+
 // -- Team board ---------------------------------------------------------------
 
 export type TaskEntry = { id: string; subject: string; status: string; owner?: string }

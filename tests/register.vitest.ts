@@ -87,6 +87,7 @@ describe('session start', () => {
       'tail-compact',
       'tail-icons',
       'tail-bar',
+      'tail-status',
       'tail-help',
     ])
     // Opened once, before any width was known: no columns asked for.
@@ -744,5 +745,111 @@ describe('compact transcript', () => {
     await say($, 'tail-compact')
     expect(await run('ui.render', $, RESULT, async () => 'engine')).toBe('engine')
     expect(await run('ui.render', $, USE, async () => 'engine')).toBe('engine')
+  })
+})
+
+describe('status line', () => {
+  const call = { tool_use_id: 'b1', tool: 'Bash', command: 'go test ./...' }
+  const hold = () => {
+    let release = () => undefined as unknown
+    const next = () => new Promise(resolve => (release = () => resolve({})))
+    return { next, release: () => release() }
+  }
+  const last = (world: { statuses: (string | undefined)[] }) => world.statuses.at(-1)
+
+  test('a main-loop tool sets the status while it runs and clears it after', async () => {
+    const { $, world } = fakeEngine()
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    expect(last(world)).toBe('\u{F0BE0} Bash go test ./... · 0s')
+    gate.release()
+    await running
+    await settle()
+    expect(last(world)).toBeUndefined()
+    expect(world.statuses).toHaveLength(2)
+  })
+
+  test('the ticker refreshes the elapsed time and sets nothing when the text is unchanged', async () => {
+    const { $, world } = fakeEngine()
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    const tick = world.timers[0]!
+    world.now += 400
+    tick()
+    await settle()
+    expect(world.statuses).toHaveLength(1)
+    world.now += 12_000
+    tick()
+    await settle()
+    expect(last(world)).toBe('\u{F0BE0} Bash go test ./... · 12s')
+    expect(world.statuses).toHaveLength(2)
+    gate.release()
+    await running
+  })
+
+  test('a subagent tool call leaves the status alone', async () => {
+    const { $, world } = fakeEngine()
+    const gate = hold()
+    const running = run('tool.call', $, { ...call, agentId: 'ag' }, gate.next)
+    await settle()
+    expect(world.statuses).toEqual([])
+    gate.release()
+    await running
+  })
+
+  test('turn.complete and a dropped prompt clear it', async () => {
+    const { $, world } = fakeEngine()
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    await run(
+      'turn.complete',
+      $,
+      { answer: '', isAborted: true, reason: 'aborted', turnId: 't', durationMs: 1 },
+      async () => ({ text: '' }),
+    )
+    expect(last(world)).toBeUndefined()
+    gate.release()
+    await running
+    const again = hold()
+    const next = run('tool.call', $, call, again.next)
+    await settle()
+    expect(last(world)).toContain('Bash')
+    await run('prompt.submit', $, { text: 'again' }, async () => ({ drop: 'blocked' }))
+    expect(last(world)).toBeUndefined()
+    again.release()
+    await next
+  })
+
+  test('/tail-status keeps the choice in the store, names it, and off sets nothing', async () => {
+    const { $, world } = fakeEngine()
+    expect(await say($, 'tail-status')).toContain('on')
+    expect(await say($, 'tail-status', 'bogus')).toContain('on|off')
+    expect(world.store.get('tail-view.status')).toBeUndefined()
+    expect(await say($, 'tail', 'status off')).toContain('off')
+    expect(world.store.get('tail-view.status')).toBe(false)
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    expect(world.statuses.filter(s => s !== undefined)).toEqual([])
+    gate.release()
+    await running
+    expect(await say($, 'tail-status', 'on')).toContain('on')
+    expect(world.store.get('tail-view.status')).toBe(true)
+  })
+
+  test('turning it off clears a status that is showing, and the ascii set gives ASCII', async () => {
+    const { $, world } = fakeEngine()
+    await say($, 'tail-icons', 'ascii')
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    expect(last(world)).toBe('$ Bash go test ./... . 0s')
+    await say($, 'tail-status', 'off')
+    expect(last(world)).toBeUndefined()
+    gate.release()
+    await running
   })
 })

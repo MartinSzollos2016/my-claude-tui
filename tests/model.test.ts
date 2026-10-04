@@ -5,6 +5,7 @@ import { parseCommand } from '../hooks/commands'
 import { ICON_SETS } from '../hooks/icons'
 import {
   buildTurns,
+  callInput,
   chunkMarkdown,
   chunkText,
   clampDiff,
@@ -24,9 +25,11 @@ import {
   parseNumbered,
   pieceStarts,
   resultLine,
+  runningTool,
   searchTurns,
   toolSections,
   splitDiff,
+  statusText,
   treePrefix,
   unifiedDiff,
   type ToolItem,
@@ -396,6 +399,8 @@ describe('parseCommand', () => {
     expect(parseCommand('tail', 'turns')).toEqual({ sub: 'turns', arg: '' })
     expect(parseCommand('tail-icons', ' ascii ')).toEqual({ sub: 'icons', arg: 'ascii' })
     expect(parseCommand('tail', 'icons unicode')).toEqual({ sub: 'icons', arg: 'unicode' })
+    expect(parseCommand('tail-status', ' off ')).toEqual({ sub: 'status', arg: 'off' })
+    expect(parseCommand('tail', 'status on')).toEqual({ sub: 'status', arg: 'on' })
     expect(parseCommand('other', '')).toBe(undefined)
   })
 })
@@ -941,5 +946,54 @@ describe('Read sections', () => {
     expect(
       toolSections(tool({ tool: 'Read', input: { file_path: '/a.go' }, resultText: '1→x', isError: true }))[1]?.format,
     ).toEqual({ kind: 'text' })
+  })
+})
+
+describe('callInput', () => {
+  test("is the event without the fields that are not the tool's own", () => {
+    expect(callInput({ tool: 'Bash', tool_use_id: 'x', agentId: 'a', command: 'ls', timeout: 5 })).toEqual({
+      command: 'ls',
+      timeout: 5,
+    })
+  })
+})
+
+describe('statusText', () => {
+  const started = (tool: string, input: Record<string, unknown>, at: number, id = tool) =>
+    runningTool(id, tool, input, at)
+
+  test('the category icon, the tool, its summary and the elapsed seconds', () => {
+    const bash = started('Bash', { command: 'go test ./...' }, 0)
+    expect(statusText([bash], 12_400, ICON_SETS.nerd)).toBe(`${ICON_SETS.nerd.wrench} Bash go test ./... · 12s`)
+    expect(statusText([bash], 72_000, ICON_SETS.unicode)).toBe(
+      `${ICON_SETS.unicode.wrench} Bash go test ./... · 1m 12s`,
+    )
+    const read = started('Read', { file_path: '/a/b/main.go' }, 5_000)
+    expect(statusText([read], 6_900, ICON_SETS.nerd)).toBe(`${ICON_SETS.nerd.book} Read a/b/main.go · 1s`)
+  })
+
+  test('the oldest running call is the one shown, and nothing running has no status', () => {
+    const first = started('Grep', { pattern: 'x' }, 1_000)
+    const second = started('Bash', { command: 'ls' }, 4_000)
+    expect(statusText([first, second], 6_000, ICON_SETS.nerd)).toContain('Grep')
+    expect(statusText([], 6_000, ICON_SETS.nerd)).toBeUndefined()
+  })
+
+  test('the summary is cut to 60 characters in the middle', () => {
+    const long = started('Bash', { command: `echo ${'x'.repeat(30)}${'y'.repeat(30)}` }, 0)
+    const line = statusText([long], 0, ICON_SETS.nerd)!
+    const summary = line.slice(line.indexOf('Bash ') + 5, line.lastIndexOf(' · '))
+    expect([...summary]).toHaveLength(60)
+    expect(summary).toContain('…')
+    expect(summary.startsWith('echo x')).toBe(true)
+    expect(summary.endsWith('y')).toBe(true)
+  })
+
+  test('the ascii set gives an ASCII line, untrusted text is cleaned', () => {
+    const bash = started('Bash', { command: `echo \u001b[31mhi\u202e ${'z'.repeat(80)}` }, 0)
+    const line = statusText([bash], 3_000, ICON_SETS.ascii)!
+    expect(line).toMatch(/^[\x20-\x7e]+$/)
+    expect(line).toContain('Bash echo hi')
+    expect(line.endsWith(' . 3s')).toBe(true)
   })
 })

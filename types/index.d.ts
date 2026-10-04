@@ -22,6 +22,10 @@ export type AgentStat = { model?: string; durationMs?: number }
 // 'tail-view.icons' and read by every view.
 export type IconSetName = 'nerd' | 'unicode' | 'ascii'
 
+// The other preferences kept in $.store: 'tail-view.status' (boolean, the status
+// line under the prompt while a tool runs; on unless false) and
+// 'tail-view.notify' (boolean, toasts when a subagent or workflow finishes;
+// off unless true). Set by /tail-status and /tail-notify.
 export type GitInfo = { branch: string }
 
 declare module 'claude-code' {

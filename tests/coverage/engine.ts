@@ -110,6 +110,7 @@ type World = {
   commands: string[]
   copies: string[]
   toasts: string[]
+  statuses: (string | undefined)[]
   focused: string[]
   timers: (() => void)[]
   calls: string[]
@@ -133,6 +134,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     commands: [],
     copies: [],
     toasts: [],
+    statuses: [],
     focused: [],
     timers: [],
     calls: [],
@@ -179,6 +181,9 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       },
       toast: (message: string) => {
         world.toasts.push(message)
+      },
+      status: (message: string | undefined) => {
+        world.statuses.push(message)
       },
       focus: async (args: { key: string }) => {
         world.focused.push(args.key)

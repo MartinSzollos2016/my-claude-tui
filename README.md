@@ -33,15 +33,16 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 
 ## Commands
 
-| Command               | What it does                                        |
-| --------------------- | --------------------------------------------------- |
-| `/tail`               | open the detail pane                                |
-| `/tail-turns`         | list the session's turns and open one in the pane   |
-| `/tail-width <30-80>` | pane width as % of the terminal (default 80, kept)  |
-| `/tail-compact`       | toggle the compact transcript (on by default, kept) |
-| `/tail-icons [set]`   | icon set: `nerd` (default), `unicode` or `ascii`    |
-| `/tail-bar`           | show or hide the info bar                           |
-| `/tail-help`          | list commands and keys                              |
+| Command                  | What it does                                                         |
+| ------------------------ | -------------------------------------------------------------------- |
+| `/tail`                  | open the detail pane                                                 |
+| `/tail-turns`            | list the session's turns and open one in the pane                    |
+| `/tail-width <30-80>`    | pane width as % of the terminal (default 80, kept)                   |
+| `/tail-compact`          | toggle the compact transcript (on by default, kept)                  |
+| `/tail-icons [set]`      | icon set: `nerd` (default), `unicode` or `ascii`                     |
+| `/tail-bar`              | show or hide the info bar                                            |
+| `/tail-status [on\|off]` | status line under the prompt while a tool runs (on by default, kept) |
+| `/tail-help`             | list commands and keys                                               |
 
 `/tail <sub>` works too, e.g. `/tail width 70`.
 
