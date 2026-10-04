@@ -65,6 +65,8 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 | `e` / `c`              | expand all / collapse all                                 |
 | Esc                    | back to the prompt                                        |
 
+The keys are pinned to the bottom of the pane in a footer: moving, cursor, views and expand, then the position of the turn and whether the pane has the keyboard. A key that does not apply is muted and has no hotkey. Under 64 columns each group takes its own row, under 40 only the keys and arrows stay.
+
 Hovering a collapsed row previews its input in a card. Long blocks show a preview with **show all** / **show less**; **copy** in a section's frame copies the whole block.
 
 ## Pane frame
