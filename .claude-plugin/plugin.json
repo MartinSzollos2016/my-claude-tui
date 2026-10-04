@@ -1,11 +1,16 @@
 {
   "name": "tail-view",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "tail-claude's detail view (tool calls, subagent traces) and info bar inside Claude Code",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Martin Szollos",
     "email": "martin.szollos@gmail.com"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "homepage": "https://github.com/MartinSzollos2016/my-claude-tui",
+  "repository": "https://github.com/MartinSzollos2016/my-claude-tui",
+  "documentationUrl": "https://github.com/MartinSzollos2016/my-claude-tui#readme",
+  "supportUrl": "https://github.com/MartinSzollos2016/my-claude-tui/issues",
+  "privacyPolicyUrl": "https://github.com/MartinSzollos2016/my-claude-tui#what-the-plugin-does-on-your-machine"
 }
