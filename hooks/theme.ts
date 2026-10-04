@@ -138,6 +138,8 @@ export function tailThemeAdvice(current: string): string {
   if (isBuiltinTheme(current)) {
     return `Pick "${TAIL_THEMES[current]}" in /theme: ${current} with a ${current.startsWith('dark') ? 'black' : 'white'} pane column and frame.`
   }
-  const names = Object.values(TAIL_THEMES).map(n => `"${n}"`).join(', ')
+  const names = Object.values(TAIL_THEMES)
+    .map(n => `"${n}"`)
+    .join(', ')
   return `Pick one of ${names} in /theme for a black or white pane column and frame.`
 }

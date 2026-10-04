@@ -152,7 +152,10 @@ export function sanitizePrompt(text: string): string {
   }
   const task = /<task-notification>[\s\S]*?<summary>\s*([^<]+?)\s*<\/summary>/.exec(text)
   if (task) return `Task notification: ${task[1]}`
-  return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').replace(/<[^>]+>/g, '').trim()
+  return text
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
+    .replace(/<[^>]+>/g, '')
+    .trim()
 }
 
 // -- Formatters (tail-claude format.go) --------------------------------------
@@ -218,8 +221,7 @@ const basename = (p: string) => shortPath(p, 1)
 
 // -- Tool summaries (agent-ouija claude/tools/summary.go) ---------------------
 
-const str = (f: Record<string, unknown>, key: string): string =>
-  typeof f[key] === 'string' ? (f[key] as string) : ''
+const str = (f: Record<string, unknown>, key: string): string => (typeof f[key] === 'string' ? (f[key] as string) : '')
 
 const num = (f: Record<string, unknown>, key: string): number =>
   typeof f[key] === 'number' ? Math.trunc(f[key] as number) : 0
@@ -523,30 +525,72 @@ function inputSections(item: ToolItem): Section[] {
   switch (item.tool) {
     case 'Bash': {
       const desc = str(f, 'description')
-      return [{ kind: 'command', title: '$ command', ...(desc ? { meta: desc } : {}), body: str(f, 'command'), format: { kind: 'code', language: 'bash' } }]
+      return [
+        {
+          kind: 'command',
+          title: '$ command',
+          ...(desc ? { meta: desc } : {}),
+          body: str(f, 'command'),
+          format: { kind: 'code', language: 'bash' },
+        },
+      ]
     }
     case 'Read': {
       const limit = num(f, 'limit')
       const offset = num(f, 'offset') || 1
       const meta = limit > 0 ? `lines ${offset}-${offset + limit - 1}` : undefined
-      return [{ kind: 'file', title: 'read', ...(meta ? { meta } : {}), body: str(f, 'file_path'), format: { kind: 'text' } }]
+      return [
+        { kind: 'file', title: 'read', ...(meta ? { meta } : {}), body: str(f, 'file_path'), format: { kind: 'text' } },
+      ]
     }
     case 'Edit': {
-      const diff = [...str(f, 'old_string').split('\n').map(l => `-${l}`), ...str(f, 'new_string').split('\n').map(l => `+${l}`)].join('\n')
-      return [{ kind: 'diff', title: 'diff', meta: str(f, 'file_path'), body: diff, format: { kind: 'code', language: 'diff' } }]
+      const diff = [
+        ...str(f, 'old_string')
+          .split('\n')
+          .map(l => `-${l}`),
+        ...str(f, 'new_string')
+          .split('\n')
+          .map(l => `+${l}`),
+      ].join('\n')
+      return [
+        {
+          kind: 'diff',
+          title: 'diff',
+          meta: str(f, 'file_path'),
+          body: diff,
+          format: { kind: 'code', language: 'diff' },
+        },
+      ]
     }
     case 'Write':
-      return [{ kind: 'file', title: 'write', meta: str(f, 'file_path'), body: str(f, 'content'), format: codeOrText(str(f, 'file_path')) }]
+      return [
+        {
+          kind: 'file',
+          title: 'write',
+          meta: str(f, 'file_path'),
+          body: str(f, 'content'),
+          format: codeOrText(str(f, 'file_path')),
+        },
+      ]
     case 'Grep':
     case 'Glob': {
       const where = str(f, 'glob') || str(f, 'path')
-      return [{ kind: 'query', title: name(item), body: where ? `${str(f, 'pattern')}  in ${where}` : str(f, 'pattern'), format: { kind: 'text' } }]
+      return [
+        {
+          kind: 'query',
+          title: name(item),
+          body: where ? `${str(f, 'pattern')}  in ${where}` : str(f, 'pattern'),
+          format: { kind: 'text' },
+        },
+      ]
     }
     case 'WebFetch':
     case 'WebSearch': {
       const target = str(f, 'url') || str(f, 'query')
       const prompt = str(f, 'prompt')
-      return [{ kind: 'query', title: name(item), body: prompt ? `${target}\n${prompt}` : target, format: { kind: 'text' } }]
+      return [
+        { kind: 'query', title: name(item), body: prompt ? `${target}\n${prompt}` : target, format: { kind: 'text' } },
+      ]
     }
     case 'TodoWrite': {
       const todos = Array.isArray(f['todos']) ? (f['todos'] as Record<string, unknown>[]) : []
@@ -555,7 +599,9 @@ function inputSections(item: ToolItem): Section[] {
     }
     default:
       if (Object.keys(f).length === 0) return []
-      return [{ kind: 'input', title: 'input', body: JSON.stringify(f, null, 2), format: { kind: 'code', language: 'json' } }]
+      return [
+        { kind: 'input', title: 'input', body: JSON.stringify(f, null, 2), format: { kind: 'code', language: 'json' } },
+      ]
   }
 }
 
@@ -607,7 +653,8 @@ function resultText(output: unknown): string | undefined {
   if (output === null || typeof output !== 'object') return undefined
   const o = output as Record<string, unknown>
   for (const key of ['stdout', 'content', 'text', 'output', 'result']) {
-    if (typeof o[key] === 'string') return [o[key], typeof o['stderr'] === 'string' ? o['stderr'] : ''].filter(Boolean).join('\n')
+    if (typeof o[key] === 'string')
+      return [o[key], typeof o['stderr'] === 'string' ? o['stderr'] : ''].filter(Boolean).join('\n')
   }
   if (o['file'] !== null && typeof o['file'] === 'object') return resultText(o['file'])
   return undefined
@@ -617,7 +664,10 @@ function resultText(output: unknown): string | undefined {
 // the pane. Errors keep their first line so a failure still reads at a glance.
 export function resultLine(output: unknown, isErrored: boolean): string {
   if (isErrored) {
-    const first = sanitizeText(resultText(output) ?? String(output ?? '')).trim().split('\n')[0] ?? ''
+    const first =
+      sanitizeText(resultText(output) ?? String(output ?? ''))
+        .trim()
+        .split('\n')[0] ?? ''
     return truncate(`error: ${first}`, 80)
   }
   const text = resultText(output)

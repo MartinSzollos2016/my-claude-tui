@@ -1,6 +1,14 @@
 // Rendering: the detail view (pane) and the info bar (band). Takes plain
 // data plus callbacks and returns element trees; no engine calls here.
-import type { AgentStatus, BoxProps, RenderChildren, RenderElement, ElementConstructor, Elements, TextProps } from 'claude-code'
+import type {
+  AgentStatus,
+  BoxProps,
+  RenderChildren,
+  RenderElement,
+  ElementConstructor,
+  Elements,
+  TextProps,
+} from 'claude-code'
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
@@ -29,7 +37,10 @@ import { C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './t
 // Text narrowed to theme keys: tsc rejects a raw color (hex, rgb, ansi)
 // anywhere in the views, so everything follows the person's /theme.
 type ThemedTextProps = Omit<TextProps, 'color' | 'backgroundColor'> & { color?: ThemeKey; backgroundColor?: ThemeKey }
-type ThemedBoxProps = Omit<BoxProps, 'backgroundColor' | 'borderColor'> & { backgroundColor?: ThemeKey; borderColor?: ThemeKey }
+type ThemedBoxProps = Omit<BoxProps, 'backgroundColor' | 'borderColor'> & {
+  backgroundColor?: ThemeKey
+  borderColor?: ThemeKey
+}
 
 export type El = Pick<Elements['terminal'], 'Button' | 'Markdown' | 'Code'> & {
   Box: ElementConstructor<ThemedBoxProps>
@@ -152,11 +163,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const turn = data.turns[data.selected]
 
   if (!turn) {
-    return paneBody(
-      el,
-      data,
-      <Text dimColor>No turns yet. Send a prompt and the detail view fills in.</Text>,
-    )
+    return paneBody(el, data, <Text dimColor>No turns yet. Send a prompt and the detail view fills in.</Text>)
   }
 
   return paneBody(
@@ -253,7 +260,15 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
   const summary = itemSummary(item)
   const width = Math.max(20, data.columns - depth * 4)
 
-  const chevron = !canOpen ? G.selected : isSubagent(item) ? (isOpen ? G.expanded : G.drill) : isOpen ? G.expanded : G.collapsed
+  const chevron = !canOpen
+    ? G.selected
+    : isSubagent(item)
+      ? isOpen
+        ? G.expanded
+        : G.drill
+      : isOpen
+        ? G.expanded
+        : G.collapsed
 
   const status = item.kind === 'tool' && item.agentId ? data.agents.get(item.agentId) : undefined
   const isRunning = isAgentRunning(status) || (item.kind === 'tool' && item.isPending && data.isLatest)
@@ -262,7 +277,8 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
   const duration = itemDuration(item, data)
   const model = item.kind === 'tool' && item.agentId ? data.agentStats[item.agentId]?.model : undefined
   const modelText = model === undefined ? '' : `${shortModel(model)}  `
-  const durationText = duration === undefined ? '' : duration >= 1000 ? formatDuration(duration) : duration > 0 ? '<1s' : ''
+  const durationText =
+    duration === undefined ? '' : duration >= 1000 ? formatDuration(duration) : duration > 0 ? '<1s' : ''
 
   // One button carries name and summary, so a click or Enter anywhere on the
   // row toggles it; the label is cut to the room the fixed columns leave.
@@ -287,11 +303,21 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
             </Text>
           )}
         </Box>
-        <Text color={C.ongoing} hover={hover}>{spinner}</Text>
+        <Text color={C.ongoing} hover={hover}>
+          {spinner}
+        </Text>
         <Box flexShrink={0}>
-          {modelText !== '' && model !== undefined && <Text color={modelColor(model)} hover={hover}>{modelText}</Text>}
-          <Text color={C.ongoing} hover={hover}>{durationText !== '' ? `${G.dot} ` : '  '}</Text>
-          <Text dimColor hover={hover}>{durationText.padEnd(7)}</Text>
+          {modelText !== '' && model !== undefined && (
+            <Text color={modelColor(model)} hover={hover}>
+              {modelText}
+            </Text>
+          )}
+          <Text color={C.ongoing} hover={hover}>
+            {durationText !== '' ? `${G.dot} ` : '  '}
+          </Text>
+          <Text dimColor hover={hover}>
+            {durationText.padEnd(7)}
+          </Text>
         </Box>
       </Box>
       {isOpen && canOpen && renderExpanded(el, item, data, act, depth)}
@@ -305,7 +331,14 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: 
   if (item.kind === 'output') {
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-        {renderFrame(el, `frame-${item.id}`, 'message', undefined, C.accent, renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act))}
+        {renderFrame(
+          el,
+          `frame-${item.id}`,
+          'message',
+          undefined,
+          C.accent,
+          renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act),
+        )}
       </Box>
     )
   }
@@ -341,7 +374,14 @@ function longSpec(section: Section): LongSpec {
   return section.format
 }
 
-function renderFrame(el: El, key: string, title: string, meta: string | undefined, tone: ThemeKey, body: RenderElement) {
+function renderFrame(
+  el: El,
+  key: string,
+  title: string,
+  meta: string | undefined,
+  tone: ThemeKey,
+  body: RenderElement,
+) {
   const { Box, Text } = el
   return (
     <Box key={key} flexDirection="column" borderStyle="round" borderColor={tone} paddingX={1}>
@@ -389,11 +429,21 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
           </Text>
         ),
       )}
-      {isBudgetCut && <Text color={C.muted}>{`${shown.note} – pane text budget reached; collapse other rows to see more`}</Text>}
-      {isPreviewed && (
-        <Button key={`full:${id}`} plain dimColor label={`${shown.note} – show all`} onPress={() => act.toggleFull(id)} />
+      {isBudgetCut && (
+        <Text color={C.muted}>{`${shown.note} – pane text budget reached; collapse other rows to see more`}</Text>
       )}
-      {canShrink && !isBudgetCut && <Button key={`full:${id}`} plain dimColor label="show less" onPress={() => act.toggleFull(id)} />}
+      {isPreviewed && (
+        <Button
+          key={`full:${id}`}
+          plain
+          dimColor
+          label={`${shown.note} – show all`}
+          onPress={() => act.toggleFull(id)}
+        />
+      )}
+      {canShrink && !isBudgetCut && (
+        <Button key={`full:${id}`} plain dimColor label="show less" onPress={() => act.toggleFull(id)} />
+      )}
     </Box>
   )
 }
@@ -468,9 +518,7 @@ export function renderBar(el: El, data: BarData) {
           </Text>
         )}
         {data.runningAgents > 0 && sep}
-        {data.runningAgents > 0 && (
-          <Text color={C.ongoing}>{`agents running ${G.dot} ${data.runningAgents}`}</Text>
-        )}
+        {data.runningAgents > 0 && <Text color={C.ongoing}>{`agents running ${G.dot} ${data.runningAgents}`}</Text>}
       </Box>
       <Box flexDirection="row" flexShrink={0}>
         {data.contextTokens !== undefined && <Text dimColor>{`${formatTokens(data.contextTokens)} ctx `}</Text>}

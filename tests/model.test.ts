@@ -32,11 +32,27 @@ const transcript: SessionMessage[] = [
     text: 'Looking.',
     toolUses: [
       { tool_use_id: 'r1', tool: 'Read', input: { file_path: '/a/b/c/main.go' }, text: 'package main' },
-      { tool_use_id: 'a1', tool: 'Agent', input: { subagent_type: 'Explore', description: 'Find callers' }, agentId: 'agent-1', text: 'done', durationMs: 4200 },
+      {
+        tool_use_id: 'a1',
+        tool: 'Agent',
+        input: { subagent_type: 'Explore', description: 'Find callers' },
+        agentId: 'agent-1',
+        text: 'done',
+        durationMs: 4200,
+      },
     ],
   },
-  { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'r1', text: 'package main', isError: false, result: null } as never] },
-  { role: 'assistant', text: 'Fixed.', toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: { command: 'go test ./...' } }] },
+  {
+    role: 'user',
+    text: '',
+    toolUses: [],
+    toolResults: [{ tool_use_id: 'r1', text: 'package main', isError: false, result: null } as never],
+  },
+  {
+    role: 'assistant',
+    text: 'Fixed.',
+    toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: { command: 'go test ./...' } }],
+  },
   prompt('Thanks'),
   { role: 'assistant', text: 'You are welcome.', toolUses: [] },
 ]
@@ -73,7 +89,9 @@ describe('buildTurns', () => {
 describe('summaries', () => {
   test('per-tool one-liners match agent-ouija', () => {
     expect(toolSummary('Read', { file_path: '/x/y/z.go', offset: 10, limit: 5 })).toBe('y/z.go - lines 10-14')
-    expect(toolSummary('Edit', { file_path: '/x/z.go', old_string: 'a', new_string: 'b\nc' })).toBe('x/z.go - 1 -> 2 lines')
+    expect(toolSummary('Edit', { file_path: '/x/z.go', old_string: 'a', new_string: 'b\nc' })).toBe(
+      'x/z.go - 1 -> 2 lines',
+    )
     expect(toolSummary('Bash', { command: 'ls', description: 'List' })).toBe('List: ls')
     expect(toolSummary('Grep', { pattern: 'foo', path: '/src/pkg' })).toBe('"foo" in pkg')
     expect(toolSummary('WebFetch', { url: 'https://example.com/docs?q=1' })).toBe('example.com/docs')
@@ -101,9 +119,17 @@ const tool = (over: Partial<ToolItem>): ToolItem => ({
 
 describe('toolSections', () => {
   test('Bash separates the command from its output', () => {
-    const sections = toolSections(tool({ input: { command: 'go test ./...', description: 'Run tests' }, resultText: 'ok\nPASS' }))
+    const sections = toolSections(
+      tool({ input: { command: 'go test ./...', description: 'Run tests' }, resultText: 'ok\nPASS' }),
+    )
     expect(sections.map(s => s.kind)).toEqual(['command', 'output'])
-    expect(sections[0]).toEqual({ kind: 'command', title: '$ command', meta: 'Run tests', body: 'go test ./...', format: { kind: 'code', language: 'bash' } })
+    expect(sections[0]).toEqual({
+      kind: 'command',
+      title: '$ command',
+      meta: 'Run tests',
+      body: 'go test ./...',
+      format: { kind: 'code', language: 'bash' },
+    })
     expect(sections[1]?.meta).toBe('ok · 2 lines')
   })
 
@@ -118,7 +144,13 @@ describe('toolSections', () => {
   })
 
   test('Read shows the file and highlights its content by extension', () => {
-    const [file, out] = toolSections(tool({ tool: 'Read', input: { file_path: '/src/app/main.go', offset: 10, limit: 5 }, resultText: 'package main' }))
+    const [file, out] = toolSections(
+      tool({
+        tool: 'Read',
+        input: { file_path: '/src/app/main.go', offset: 10, limit: 5 },
+        resultText: 'package main',
+      }),
+    )
     expect(file?.kind).toBe('file')
     expect(file?.body).toBe('/src/app/main.go')
     expect(file?.meta).toBe('lines 10-14')
@@ -126,17 +158,33 @@ describe('toolSections', () => {
   })
 
   test('Edit is a diff of the file', () => {
-    const [diff] = toolSections(tool({ tool: 'Edit', input: { file_path: '/a.ts', old_string: 'a', new_string: 'b' }, resultText: 'ok' }))
-    expect(diff).toEqual({ kind: 'diff', title: 'diff', meta: '/a.ts', body: '-a\n+b', format: { kind: 'code', language: 'diff' } })
+    const [diff] = toolSections(
+      tool({ tool: 'Edit', input: { file_path: '/a.ts', old_string: 'a', new_string: 'b' }, resultText: 'ok' }),
+    )
+    expect(diff).toEqual({
+      kind: 'diff',
+      title: 'diff',
+      meta: '/a.ts',
+      body: '-a\n+b',
+      format: { kind: 'code', language: 'diff' },
+    })
   })
 
   test('Write shows the written content in its language', () => {
     const [file] = toolSections(tool({ tool: 'Write', input: { file_path: '/x/y.py', content: 'print(1)' } }))
-    expect(file).toEqual({ kind: 'file', title: 'write', meta: '/x/y.py', body: 'print(1)', format: { kind: 'code', language: 'python' } })
+    expect(file).toEqual({
+      kind: 'file',
+      title: 'write',
+      meta: '/x/y.py',
+      body: 'print(1)',
+      format: { kind: 'code', language: 'python' },
+    })
   })
 
   test('Grep and WebSearch are queries; web results are markdown', () => {
-    expect(toolSections(tool({ tool: 'Grep', input: { pattern: 'Run(', glob: '*.go' } }))[0]?.body).toBe('Run(  in *.go')
+    expect(toolSections(tool({ tool: 'Grep', input: { pattern: 'Run(', glob: '*.go' } }))[0]?.body).toBe(
+      'Run(  in *.go',
+    )
     const web = toolSections(tool({ tool: 'WebSearch', input: { query: 'bubbletea' }, resultText: '# hits' }))
     expect(web.map(s => s.kind)).toEqual(['query', 'output'])
     expect(web[1]?.format).toEqual({ kind: 'markdown' })
@@ -144,7 +192,16 @@ describe('toolSections', () => {
 
   test('TodoWrite lists items with their status', () => {
     const [list] = toolSections(
-      tool({ tool: 'TodoWrite', input: { todos: [{ content: 'a', status: 'completed' }, { content: 'b', status: 'in_progress' }, { content: 'c', status: 'pending' }] } }),
+      tool({
+        tool: 'TodoWrite',
+        input: {
+          todos: [
+            { content: 'a', status: 'completed' },
+            { content: 'b', status: 'in_progress' },
+            { content: 'c', status: 'pending' },
+          ],
+        },
+      }),
     )
     expect(list?.body).toBe('☑ a\n◐ b\n☐ c')
   })
@@ -209,7 +266,9 @@ describe('formatters', () => {
 
   test('sanitizePrompt unwraps commands and notifications', () => {
     expect(sanitizePrompt('<command-name>/tail</command-name><command-args>bar</command-args>')).toBe('/tail bar')
-    expect(sanitizePrompt('<task-notification><summary>Agent done</summary></task-notification>')).toBe('Task notification: Agent done')
+    expect(sanitizePrompt('<task-notification><summary>Agent done</summary></task-notification>')).toBe(
+      'Task notification: Agent done',
+    )
     expect(sanitizePrompt('hi<system-reminder>x</system-reminder>')).toBe('hi')
   })
 

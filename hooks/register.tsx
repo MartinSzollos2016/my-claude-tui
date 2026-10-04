@@ -10,7 +10,18 @@ import { atom, read, update } from 'claude-code'
 import type { AgentStatus, EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
-import { buildTurns, isSubagent, paneColumns, resultLine, sanitizePrompt, sanitizeText, shortPath, traceItems, type Item, type Turn } from './model'
+import {
+  buildTurns,
+  isSubagent,
+  paneColumns,
+  resultLine,
+  sanitizePrompt,
+  sanitizeText,
+  shortPath,
+  traceItems,
+  type Item,
+  type Turn,
+} from './model'
 import { COMMANDS, helpText, parseCommand } from './commands'
 import { C, tailThemeAdvice } from './theme'
 import { renderBar, renderPane, type El, type Trace } from './view'
@@ -92,7 +103,11 @@ export function statFor(stats: readonly TurnStat[], turn: Turn | undefined): Tur
 }
 
 // Loads the trace of every expanded subagent, nested ones included.
-async function loadTraces($: EngineInterface, items: readonly Item[], open: ReadonlySet<string>): Promise<Map<string, Trace>> {
+async function loadTraces(
+  $: EngineInterface,
+  items: readonly Item[],
+  open: ReadonlySet<string>,
+): Promise<Map<string, Trace>> {
   const traces = new Map<string, Trace>()
   let frontier = items.filter(item => isSubagent(item) && open.has(item.id))
 
@@ -218,7 +233,9 @@ async function toggleCompact($: EngineInterface): Promise<string> {
   const next = !(await isCompact($))
   await $.store.set(COMPACT_KEY, next)
   $.ui.invalidate('ui.render')
-  return next ? 'Compact transcript on: tool results are one line, details in /tail.' : 'Compact transcript off: tool results are drawn in full.'
+  return next
+    ? 'Compact transcript on: tool results are one line, details in /tail.'
+    : 'Compact transcript off: tool results are drawn in full.'
 }
 
 export const register: Register = on => {
@@ -284,7 +301,8 @@ export const register: Register = on => {
     const start = await $.clock.now()
     await update($, timings, all => {
       const keys = Object.keys(all)
-      const kept = keys.length >= MAX_TIMINGS ? Object.fromEntries(keys.slice(-MAX_TIMINGS / 2).map(k => [k, all[k]!])) : all
+      const kept =
+        keys.length >= MAX_TIMINGS ? Object.fromEntries(keys.slice(-MAX_TIMINGS / 2).map(k => [k, all[k]!])) : all
       return { ...kept, [id]: { start } satisfies ToolTiming }
     })
     await bump($)
@@ -312,7 +330,9 @@ export const register: Register = on => {
         durationMs: e.durationMs,
         endedAt,
         model: usage?.model,
-        inputTokens: usage ? usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens : undefined,
+        inputTokens: usage
+          ? usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
+          : undefined,
         outputTokens: usage?.output_tokens,
       }
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
@@ -366,18 +386,30 @@ export const register: Register = on => {
       },
       {
         toggle: id =>
-          detach(update($, expanded, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED)))),
+          detach(
+            update($, expanded, ids =>
+              ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED),
+            ),
+          ),
         prev: () => detach(setTurn(cur => cur - 1)),
         next: () => detach(setTurn(cur => cur + 1)),
         latest: () => detach(setTurn(() => null)),
         expandAll: () =>
-          detach(update($, expanded, ids => [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED))),
+          detach(
+            update($, expanded, ids =>
+              [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED),
+            ),
+          ),
         collapseAll: () => {
           detach(update($, expanded, () => []))
           detach(update($, fullBlocks, () => []))
         },
         toggleFull: id =>
-          detach(update($, fullBlocks, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED)))),
+          detach(
+            update($, fullBlocks, ids =>
+              ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED),
+            ),
+          ),
       },
     )
   })
