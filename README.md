@@ -10,6 +10,7 @@ A Claude Code mod that brings [tail-claude](https://github.com/kylesnowschwartz/
 - **Info bar** above the prompt: project · branch(*dirty) · permission mode ·
   running agents, and context tokens/% plus cost on the right. `/tail bar`
   toggles it.
+- **Themes** (`/tail theme`): black/white pane column and frame, see below.
 
 Data comes from the engine (`$.session.messages`, `$.agent.list`,
 `$.session.usage`), not from parsing JSONL; durations are measured live by the
@@ -22,7 +23,21 @@ Every color is a Claude Code **theme key** (`success`, `warning`, `planMode`,
 …, see `hooks/theme.ts`), so the mod follows `/theme` (dark, light,
 daltonized, ANSI) including a switch mid-session. The pane body is painted
 with `inverseText` (black on dark themes, white on light ones) instead of the
-engine's grey sidebar fill, for full text contrast. The engine does not validate
+engine's grey sidebar fill, for full text contrast.
+
+The pane's column and frame are painted by Claude Code itself with the
+`composerSidebarBackground` key, which a plugin cannot draw over. The plugin
+therefore ships a variant of each built-in theme in `themes/` that overrides
+only that key (black on dark themes, white on light ones):
+
+| Built-in | tail-view variant |
+|---|---|
+| `dark`, `dark-daltonized`, `dark-ansi` | `Tail Dark …` (`custom:tail-view:dark…`) |
+| `light`, `light-daltonized`, `light-ansi` | `Tail Light …` (`custom:tail-view:light…`) |
+
+Switch with `/tail theme` (toggles between the current built-in theme and its
+variant) or pick a `Tail …` theme in `/theme`. `auto` and other custom themes
+are left to `/theme`. The engine does not validate
 keys, so `Text` in the views is typed to accept only `ThemeKey` and a render
 test checks every color in the drawn tree.
 
