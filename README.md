@@ -19,6 +19,12 @@ A Claude Code mod that brings [tail-claude](https://github.com/kylesnowschwartz/
   Subagent rows drill into the agent's **Execution Trace** (nested,
   expandable). Header: model, tool/output counts, subagent icons, tokens,
   ctx %, duration.
+- **Layout**: the pane asks for **60 %** of the terminal (`/tail width 30–80`
+  sets the share, kept across sessions; a width you drag the dock to wins),
+  and the transcript on the left stays a **conversation**: tool results are
+  one dim line (`⎿ 12 lines`, errors in red with their first line) and tool
+  groups stay folded, since the detail is in the pane. `/tail compact`
+  switches this off and on.
 - **Long output**: results, inputs and outputs are previewed (100 lines /
   8k chars for results, 60 lines for code) with a **show all** / **show less**
   toggle per block. Claude Code refuses a pane with a text over 10k
