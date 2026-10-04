@@ -25,7 +25,8 @@ export type IconSetName = 'nerd' | 'unicode' | 'ascii'
 // The other preferences kept in $.store: 'tail-view.status' (boolean, the status
 // line under the prompt while a tool runs; on unless false) and
 // 'tail-view.notify' (boolean, toasts when a subagent or workflow finishes;
-// off unless true). Set by /tail-status and /tail-notify.
+// off unless true). Set by /tail-status and /tail-notify. The Spinner and
+// TurnDuration rewrites follow 'tail-view.status' too.
 export type GitInfo = { branch: string }
 
 declare module 'claude-code' {
@@ -50,6 +51,8 @@ declare module 'claude-code' {
       mode: string | null
       isWorking: boolean
       isBarHidden: boolean
+      // The row the keyboard cursor stands on (an item or folded run id); null for none.
+      cursor: string | null
     }
   }
 }

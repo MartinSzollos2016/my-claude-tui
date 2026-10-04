@@ -33,6 +33,8 @@ export type Icons = {
   result: string
   prompt: string
   marker: string
+  // The block before the row the keyboard cursor stands on.
+  cursor: string
   arrow: string
   dash: string
   // What a cut text ends in, the check marks of the task board and the
@@ -89,6 +91,7 @@ const nerd: Icons = {
   result: '⎿',
   prompt: '❯',
   marker: '›',
+  cursor: '▌',
   arrow: '→',
   dash: '–',
   ellipsis: '…',
@@ -155,6 +158,7 @@ const ascii: Icons = {
   result: '|',
   prompt: '>',
   marker: '>',
+  cursor: '>',
   arrow: '>',
   dash: '-',
   ellipsis: '...',

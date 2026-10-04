@@ -20,6 +20,9 @@ import {
   callInput,
   buildTurns,
   compactCall,
+  cursorRows,
+  moveCursor,
+  rowText,
   finishedSince,
   finishedWorkflows,
   gitDirFrom,
@@ -90,6 +93,7 @@ const searchQuery = atom({ plugin: 'tail-view', key: 'query' } as const, '')
 const timings = atom({ plugin: 'tail-view', key: 'timings' } as const, {})
 const turnStats = atom({ plugin: 'tail-view', key: 'turnStats' } as const, [])
 const agentStats = atom({ plugin: 'tail-view', key: 'agentStats' } as const, {})
+const cursor = atom({ plugin: 'tail-view', key: 'cursor' } as const, null)
 const git = atom({ plugin: 'tail-view', key: 'git' } as const, null)
 const mode = atom({ plugin: 'tail-view', key: 'mode' } as const, null)
 const isWorking = atom({ plugin: 'tail-view', key: 'isWorking' } as const, false)
@@ -415,8 +419,17 @@ async function copyBlock($: EngineInterface, text: string, surface?: RenderSurfa
   $.ui.toast(copied.isCopied ? 'Copied' : `Not copied: ${copied.reason}`)
 }
 
+// Moves the keyboard cursor one row along `ids` and puts the keyboard focus
+// on that row's button, so Enter opens or closes it. A row with no button
+// (nothing to open) refuses the focus, which changes nothing here.
+async function stepCursor($: EngineInterface, ids: readonly string[], delta: number): Promise<void> {
+  const id = await update($, cursor, cur => moveCursor(ids, cur, delta))
+  if (id !== null) await $.ui.focus({ requestId: PANE, key: id })
+}
+
 // Shows one turn in the detail view; the latest one follows new turns.
 async function pickTurn($: EngineInterface, index: number, latest: number) {
+  await update($, cursor, () => null)
   await update($, selectedTurn, () => (index >= latest ? null : index))
   await update($, paneView, () => 'detail' as const)
 }
@@ -583,6 +596,7 @@ export const register: Register = on => {
     const wasWorking = await read($, isWorking)
     await update($, isWorking, () => true)
     await update($, selectedTurn, () => null)
+    await update($, cursor, () => null)
     startTicker($)
     let result
     try {
@@ -670,7 +684,10 @@ export const register: Register = on => {
     const usage = await $.session.usage()
     const allStats = await read($, turnStats)
 
-    const step = (delta: number | null) => update($, selectedTurn, cur => nextSelectedTurn(cur, latest, delta))
+    const step = async (delta: number | null) => {
+      await update($, cursor, () => null)
+      await update($, selectedTurn, cur => nextSelectedTurn(cur, latest, delta))
+    }
     const view = await read($, paneView)
     const query = await read($, searchQuery)
     const isSearching = view === 'turns' && query.trim() !== ''
@@ -684,6 +701,15 @@ export const register: Register = on => {
     const thinking = alignFromEnd(thinkingByTurn, turns.length, selected)
     tasksCache = memo(tasksCache, turnsMemo.key, () => taskBoard(turns))
     const tasks = tasksCache.value
+
+    const childrenOf = (agentId: string) => {
+      const trace = traces.get(agentId)
+      return trace && 'items' in trace ? trace.items : undefined
+    }
+    const rowIds = cursorRows(turn?.items ?? [], open, childrenOf)
+    const stored = await read($, cursor)
+    const cursorId = stored !== null && rowIds.includes(stored) ? stored : null
+    const cursorText = cursorId === null ? undefined : rowText(turn?.items ?? [], cursorId, childrenOf, icons)
 
     const thinkingIds = turn && thinking && thinking.text !== '' ? [`t${turn.index}:thinking`] : []
 
@@ -706,6 +732,7 @@ export const register: Register = on => {
         agents,
         agentStats: await read($, agentStats),
         traces,
+        cursor: cursorId,
         isFocused: e.props.isFocused,
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
@@ -738,6 +765,9 @@ export const register: Register = on => {
         submitSearch: value => openMatch($, value, turns).catch(ignore),
         focusSearch: () => focusSearch($).catch(ignore),
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
+        cursorDown: () => stepCursor($, rowIds, 1).catch(ignore),
+        cursorUp: () => stepCursor($, rowIds, -1).catch(ignore),
+        copyCursor: surface => (cursorText === undefined ? undefined : copyBlock($, cursorText, surface).catch(ignore)),
         toggleFull: id => update($, fullBlocks, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
       },
     )
