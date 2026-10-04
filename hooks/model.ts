@@ -4,6 +4,7 @@
 import type { AgentInfo, AgentStatus, SessionMessage } from 'claude-code'
 
 import type { TurnStat } from '../types'
+import type { Icons } from './icons'
 
 type OutputItem = { kind: 'output'; id: string; text: string }
 
@@ -282,23 +283,33 @@ export function shortMode(mode: string): string {
   }
 }
 
-export function truncate(s: string, max: number): string {
+// The glyphs model text carries, from the chosen icon set; the defaults are
+// the Nerd Font and Unicode sets'.
+export type Glyphs = Pick<Icons, 'ellipsis' | 'dot' | 'taskDone' | 'taskActive' | 'taskTodo'>
+type TaskMarks = Pick<Icons, 'taskDone' | 'taskActive' | 'taskTodo'>
+
+const DEFAULT_GLYPHS: Glyphs = { ellipsis: '…', dot: '·', taskDone: '☑', taskActive: '◐', taskTodo: '☐' }
+
+// Cuts to `max` code points, the ellipsis included, at the end.
+export function truncate(s: string, max: number, ellipsis = '…'): string {
   const one = s.replaceAll('\n', ' ')
   const chars = [...one]
-  return chars.length <= max ? one : chars.slice(0, max - 1).join('') + '…'
+  if (chars.length <= max) return one
+  const width = [...ellipsis].length
+  return max < width ? chars.slice(0, max).join('') : chars.slice(0, max - width).join('') + ellipsis
 }
 
 // Cuts to `max` code points from the middle, keeping more of the end (a path's
 // file name) than of the start; "…" marks the cut. Never splits a surrogate pair.
-export function truncateMiddle(s: string, max: number): string {
+export function truncateMiddle(s: string, max: number, ellipsis = '…'): string {
   const one = s.replaceAll('\n', ' ')
   const chars = [...one]
   if (chars.length <= max) return one
-  if (max <= 0) return ''
-  if (max === 1) return '…'
-  const keep = max - 1
+  const width = [...ellipsis].length
+  if (max <= width) return [...ellipsis].slice(0, Math.max(0, max)).join('')
+  const keep = max - width
   const head = Math.floor(keep / 3)
-  return `${chars.slice(0, head).join('')}…${chars.slice(chars.length - (keep - head)).join('')}`
+  return `${chars.slice(0, head).join('')}${ellipsis}${chars.slice(chars.length - (keep - head)).join('')}`
 }
 
 export function shortPath(path: string, n: number): string {
@@ -332,16 +343,16 @@ const PATH_SEGMENTS = 6
 // widened to its last few segments and cut in the middle, so the file name
 // stays; the rest of the summary (line range, edit size) is kept whole.
 // Everything else is cut at the end.
-export function fitPath(item: ToolItem, summary: string, max: number): string {
+export function fitPath(item: ToolItem, summary: string, max: number, ellipsis = '…'): string {
   const path = pathOf(item)
   const known = [shortPath(path, 2), shortPath(path, 1)].find(k => k !== '' && summary.includes(k))
-  if (path === '' || known === undefined) return truncate(summary, max)
+  if (path === '' || known === undefined) return truncate(summary, max, ellipsis)
   const at = summary.lastIndexOf(known)
   const prefix = summary.slice(0, at)
   const suffix = summary.slice(at + known.length)
   const room = max - [...prefix].length - [...suffix].length
-  if (room < 4) return truncate(summary, max)
-  return prefix + truncateMiddle(shortPath(path, PATH_SEGMENTS), room) + suffix
+  if (room < 4) return truncate(summary, max, ellipsis)
+  return prefix + truncateMiddle(shortPath(path, PATH_SEGMENTS), room, ellipsis) + suffix
 }
 
 // -- Tool summaries (agent-ouija claude/tools/summary.go) ---------------------
@@ -522,7 +533,7 @@ export function itemSummary(item: Item): string {
 // Caps text to maxLines and maxChars, with a note on what was cut.
 type Clamped = { text: string; note?: string }
 
-export function clampText(text: string, maxLines: number, maxChars: number): Clamped {
+export function clampText(text: string, maxLines: number, maxChars: number, ellipsis = '…'): Clamped {
   const lines = text.split('\n')
   const kept = lines.length > maxLines ? lines.slice(0, maxLines).join('\n') : text
   const hiddenLines = Math.max(0, lines.length - maxLines)
@@ -530,10 +541,10 @@ export function clampText(text: string, maxLines: number, maxChars: number): Cla
   if (chars.length > maxChars) {
     const hiddenChars = chars.length - maxChars
     const more = hiddenLines > 0 ? `, ${hiddenLines} more line${hiddenLines === 1 ? '' : 's'}` : ''
-    return { text: chars.slice(0, maxChars).join(''), note: `… (${hiddenChars} chars hidden${more})` }
+    return { text: chars.slice(0, maxChars).join(''), note: `${ellipsis} (${hiddenChars} chars hidden${more})` }
   }
   return hiddenLines > 0
-    ? { text: kept, note: `… (${hiddenLines} line${hiddenLines === 1 ? '' : 's'} hidden)` }
+    ? { text: kept, note: `${ellipsis} (${hiddenLines} line${hiddenLines === 1 ? '' : 's'} hidden)` }
     : { text }
 }
 
@@ -643,9 +654,7 @@ const codeOrText = (path: string): SectionFormat => {
   return language ? { kind: 'code', language } : { kind: 'text' }
 }
 
-const TODO_MARKS: Record<string, string> = { completed: '☑', in_progress: '◐' }
-
-function inputSections(item: ToolItem): Section[] {
+function inputSections(item: ToolItem, glyphs: Glyphs): Section[] {
   const f = item.input
   switch (item.tool) {
     case 'Bash': {
@@ -721,7 +730,7 @@ function inputSections(item: ToolItem): Section[] {
     }
     case 'TodoWrite': {
       const todos = Array.isArray(f['todos']) ? (f['todos'] as Record<string, unknown>[]) : []
-      const body = todos.map(t => `${TODO_MARKS[str(t, 'status')] ?? '☐'} ${str(t, 'content')}`).join('\n')
+      const body = todos.map(t => `${taskMark(str(t, 'status'), glyphs)} ${str(t, 'content')}`).join('\n')
       return [{ kind: 'input', title: 'todos', body, format: { kind: 'text' } }]
     }
     default:
@@ -756,8 +765,8 @@ export function firstErrorLine(text: string): string {
   return first
 }
 
-export function toolSections(item: ToolItem): Section[] {
-  const sections = inputSections(item)
+export function toolSections(item: ToolItem, glyphs: Glyphs = DEFAULT_GLYPHS): Section[] {
+  const sections = inputSections(item, glyphs)
   const result = item.resultText?.trimEnd()
   if (result === undefined || result === '') return sections
   const lines = result.split('\n').length
@@ -765,7 +774,7 @@ export function toolSections(item: ToolItem): Section[] {
   sections.push({
     kind: item.isError ? 'error' : 'output',
     title: item.isError ? 'error' : 'output',
-    meta: `${status} · ${lines} line${lines === 1 ? '' : 's'}`,
+    meta: `${status} ${glyphs.dot} ${lines} line${lines === 1 ? '' : 's'}`,
     body: result,
     format: outputFormat(item),
   })
@@ -823,17 +832,17 @@ export function resultLine(output: unknown, isErrored: boolean): string {
 
 // The counts a turn list row shows: "3 tools · 1 agent", or "reply" for a
 // turn that only answered.
-function turnCounts(turn: Turn): string {
+function turnCounts(turn: Turn, dot: string): string {
   const parts: string[] = []
   const tools = turn.toolCount - turn.subagentCount
   if (tools > 0) parts.push(`${tools} tool${tools === 1 ? '' : 's'}`)
   if (turn.subagentCount > 0) parts.push(`${turn.subagentCount} agent${turn.subagentCount === 1 ? '' : 's'}`)
-  return parts.length > 0 ? parts.join(' · ') : 'reply'
+  return parts.length > 0 ? parts.join(` ${dot} `) : 'reply'
 }
 
 // A turn row's tail: its counts, then how long it took when that is known.
-export function turnTail(turn: Turn, stat?: { durationMs: number }): string {
-  return [turnCounts(turn), stat ? formatDuration(stat.durationMs) : ''].filter(Boolean).join(' · ')
+export function turnTail(turn: Turn, stat?: { durationMs: number }, dot = '·'): string {
+  return [turnCounts(turn, dot), stat ? formatDuration(stat.durationMs) : ''].filter(Boolean).join(` ${dot} `)
 }
 
 export const EMPTY_TURN_TEXT = 'No tool calls or output in this turn.'
@@ -883,7 +892,7 @@ const SNIPPET = 80
 // Turns whose prompt, output, tool summaries or tool results contain `query`
 // as plain text (case-insensitive, no pattern syntax), each with a one-line
 // snippet around its first hit. indexOf keeps it linear in the text.
-export function searchTurns(turns: readonly Turn[], query: string): TurnMatch[] {
+export function searchTurns(turns: readonly Turn[], query: string, ellipsis = '…'): TurnMatch[] {
   const needle = query.trim().toLowerCase()
   if (needle === '') return []
   const matches: TurnMatch[] = []
@@ -891,7 +900,7 @@ export function searchTurns(turns: readonly Turn[], query: string): TurnMatch[] 
     for (const hay of searchable(turn)) {
       const at = hay.toLowerCase().indexOf(needle)
       if (at >= 0) {
-        matches.push({ index: turn.index, snippet: snippetAt(hay, at) })
+        matches.push({ index: turn.index, snippet: snippetAt(hay, at, ellipsis) })
         break
       }
     }
@@ -921,33 +930,44 @@ function charIndexAt(chars: readonly string[], at: number): number {
 
 // Cuts by code point, so no surrogate pair is split. `at` is an offset into
 // the lowercased text, mapped back to a code point of `text` first.
-function snippetAt(text: string, at: number): string {
+function snippetAt(text: string, at: number, ellipsis: string): string {
   const chars = [...text]
   const hit = charIndexAt(chars, at)
   const start = Math.max(0, Math.min(hit - 20, chars.length - SNIPPET))
   const end = Math.min(chars.length, start + SNIPPET)
-  const head = start > 0 ? '…' : ''
-  const tail = end < chars.length ? '…' : ''
-  const body = chars.slice(start + head.length, end - tail.length).join('')
+  const width = [...ellipsis].length
+  const head = start > 0 ? ellipsis : ''
+  const tail = end < chars.length ? ellipsis : ''
+  const body = chars.slice(start > 0 ? start + width : start, end < chars.length ? end - width : end).join('')
   return head + body.replaceAll('\n', ' ') + tail
 }
 
 // A snippet in three parts around the first hit of `query` (case-insensitive,
 // offsets mapped as snippetAt does): what precedes it, the hit as written, and
 // what follows. No hit leaves the whole snippet in `before`.
-export function splitMatch(snippet: string, query: string): { before: string; match: string; after: string } {
+export function splitMatch(
+  snippet: string,
+  query: string,
+  ellipsis = '…',
+): { before: string; match: string; after: string } {
+  const whole = { before: snippet, match: '', after: '' }
   const needle = query.trim().toLowerCase()
-  const at = needle === '' ? -1 : snippet.toLowerCase().indexOf(needle)
-  if (at < 0) return { before: snippet, match: '', after: '' }
-  const chars = [...snippet]
+  if (needle === '') return whole
+  // The ellipsis marking a cut at either end is not part of the text.
+  const lead = snippet.startsWith(ellipsis) ? ellipsis : ''
+  const tail = snippet.length > lead.length && snippet.endsWith(ellipsis) ? ellipsis : ''
+  const core = snippet.slice(lead.length, snippet.length - tail.length)
+  const at = core.toLowerCase().indexOf(needle)
+  if (at < 0) return whole
+  const chars = [...core]
   const start = charIndexAt(chars, at)
   let end = start
   for (let covered = 0; end < chars.length && covered < needle.length; end++)
     covered += chars[end]!.toLowerCase().length
   return {
-    before: chars.slice(0, start).join(''),
+    before: lead + chars.slice(0, start).join(''),
     match: chars.slice(start, end).join(''),
-    after: chars.slice(end).join(''),
+    after: chars.slice(end).join('') + tail,
   }
 }
 
@@ -1023,7 +1043,7 @@ export function workflowState(turn: Turn | undefined, unknownAgents: number, isW
 
 // The one line a tool call gets in the compact transcript: its name and the
 // shortest useful summary (a Bash call's description, else its first line).
-export function compactCall(tool: string, rawInput: unknown): { name: string; summary: string } {
+export function compactCall(tool: string, rawInput: unknown, ellipsis = '…'): { name: string; summary: string } {
   const input = (rawInput !== null && typeof rawInput === 'object' ? sanitizeValue(rawInput) : {}) as Record<
     string,
     unknown
@@ -1032,17 +1052,18 @@ export function compactCall(tool: string, rawInput: unknown): { name: string; su
   const item: ToolItem = { kind: 'tool', id: '', tool: name, input, summary: '', isError: false, isPending: false }
   if (name === 'Bash') {
     const line = str(input, 'description') || (str(input, 'command').split('\n')[0] ?? '')
-    return { name, summary: truncate(line, 80) }
+    return { name, summary: truncate(line, 80, ellipsis) }
   }
-  const summary = itemSummary({ ...item, summary: toolSummary(name, input) })
-  return { name: itemName(item), summary: truncate(summary, 80) }
+  const named: ToolItem = { ...item, summary: toolSummary(name, input) }
+  return { name: itemName(item), summary: fitPath(named, itemSummary(named), 80, ellipsis) }
 }
 
 // -- Team board ---------------------------------------------------------------
 
 export type TaskEntry = { id: string; subject: string; status: string; owner?: string }
 
-export const taskMark = (status: string): string => TODO_MARKS[status] ?? '☐'
+export const taskMark = (status: string, marks: TaskMarks = DEFAULT_GLYPHS): string =>
+  status === 'completed' ? marks.taskDone : status === 'in_progress' ? marks.taskActive : marks.taskTodo
 
 // The team's tasks as the main loop's TaskCreate and TaskUpdate calls left
 // them: the latest status, owner and subject win, a deleted task drops out.

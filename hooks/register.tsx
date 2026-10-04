@@ -535,7 +535,11 @@ export const register: Register = on => {
     const view = await read($, paneView)
     const query = await read($, searchQuery)
     const isSearching = view === 'turns' && query.trim() !== ''
-    if (isSearching) searchCache = memo(searchCache, `${turnsMemo.key}\n${query}`, () => searchTurns(turns, query))
+    const icons = await currentIcons($)
+    if (isSearching)
+      searchCache = memo(searchCache, `${turnsMemo.key}\n${icons.ellipsis}\n${query}`, () =>
+        searchTurns(turns, query, icons.ellipsis),
+      )
 
     const thinkingByTurn = view === 'detail' && turn ? await turnThinking($, turnsMemo.key) : []
     const thinking = alignFromEnd(thinkingByTurn, turns.length, selected)
@@ -557,7 +561,7 @@ export const register: Register = on => {
         isLatest: selected === latest,
         thinking,
         isWorking: await read($, isWorking),
-        icons: await currentIcons($),
+        icons,
         now: await $.clock.now(),
         frame,
         agents,
@@ -615,8 +619,8 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     if (!(await isCompact($))) return next(e)
     const { Box, Text } = $.ui.resolve(e) as unknown as El
-    const { name, summary } = compactCall(e.props.tool, e.props.input)
     const icons = await currentIcons($)
+    const { name, summary } = compactCall(e.props.tool, e.props.input, icons.ellipsis)
     const mark = e.props.isInterrupted
       ? C.interrupted
       : e.props.isErrored
@@ -630,7 +634,7 @@ export const register: Register = on => {
           {`${icons.bullet} `}
         </Text>
         <Text bold>{name}</Text>
-        <Text dimColor wrap="truncate-end">
+        <Text dimColor wrap={icons.ellipsis === ICON_SETS.nerd.ellipsis ? 'truncate-end' : 'wrap'}>
           {summary ? `  ${summary}` : ''}
         </Text>
         {e.props.isInterrupted && <Text color={C.interrupted}>{` ${icons.dot} interrupted`}</Text>}

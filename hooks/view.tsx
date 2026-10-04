@@ -82,6 +82,13 @@ function scopeOf(prefix: string, id: string): string {
   const tail = hash.toString(36)
   return `${full.slice(0, SCOPE_MAX - tail.length - 1)}~${tail}`
 }
+// What a cut text ends in comes from the icon set, so the engine's own
+// ellipsis (a Unicode one) is only left to draw where the set allows it.
+const cutter = (icons: Icons) => (text: string, max: number) => truncate(text, max, icons.ellipsis)
+const isUnicodeCut = (icons: Icons) => icons.ellipsis === ICON_SETS.nerd.ellipsis
+const endWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-end' : 'wrap')
+const middleWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-middle' : 'wrap')
+
 const buttonHover = (scope: string) => ({ scope, ...HOVER_TEXT })
 
 // The state of a tool call as a glyph, so it reads without color too.
@@ -210,6 +217,7 @@ function hasExpandedContent(item: Item): boolean {
 export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const { Box, Text } = el
   const data: Ctx = { ...input, icons: input.icons ?? ICON_SETS.nerd, budget: { left: PANE_TEXT_BUDGET } }
+  const trunc = cutter(data.icons)
   const turn = data.turns[data.selected]
   if (data.view === 'team') return paneBody(el, data, renderTeam(el, data, act))
 
@@ -224,16 +232,18 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     <Box flexDirection="column">
       {renderHeader(el, turn, data)}
       {turn.prompt !== '' && (
-        <Text color={C.muted} wrap="truncate-end">
+        <Text color={C.muted} wrap={endWrap(data.icons)}>
           {`${data.icons.prompt} `}
-          {truncate(turn.prompt, data.columns * 2)}
+          {trunc(turn.prompt, data.columns * 2)}
         </Text>
       )}
       {renderNav(el, data, act)}
       <Box flexDirection="column" marginTop={1}>
         {renderThinking(el, turn, data, act)}
         {turn.items.length === 0 && (data.thinking?.text ?? '') === '' && (
-          <Text color={C.muted}>{data.isWorking && data.isLatest ? 'Working…' : EMPTY_TURN_TEXT}</Text>
+          <Text color={C.muted}>
+            {data.isWorking && data.isLatest ? `Working${data.icons.ellipsis}` : EMPTY_TURN_TEXT}
+          </Text>
         )}
         {turn.items.map(item => renderItem(el, item, data, act, 0))}
       </Box>
@@ -245,6 +255,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 // it in the detail view. A search narrows the list to the matching turns
 // and shows where each one matched.
 function renderTurnList(el: El, data: Ctx, act: PaneActions) {
+  const trunc = cutter(data.icons)
   const { Box, Button, Input, Text } = el
   const width = data.columns - 2
   const query = data.query ?? ''
@@ -256,8 +267,8 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
       const index = turn.index
       const marker = index === data.selected ? data.icons.marker : ' '
       const number = `#${index + 1}`.padEnd(5)
-      const tail = turnTail(turn, data.stats[index])
-      const prompt = truncate(turn.prompt || '(no prompt)', Math.max(10, width - number.length - tail.length - 6))
+      const tail = turnTail(turn, data.stats[index], data.icons.dot)
+      const prompt = trunc(turn.prompt || '(no prompt)', Math.max(10, width - number.length - tail.length - 6))
       return {
         index,
         snippet: snippets.get(index) ?? '',
@@ -324,7 +335,7 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
       )}
       <Box flexDirection="column" marginTop={1}>
         {isFiltered && rows.length === 0 && (
-          <Text color={C.muted}>{`No turn matches "${truncate(sanitizeText(query), 40)}".`}</Text>
+          <Text color={C.muted}>{`No turn matches "${trunc(sanitizeText(query), 40)}".`}</Text>
         )}
         {shown.map(row => (
           <Box key={`turn-row-${row.index}`} flexDirection="column">
@@ -342,13 +353,13 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
                 onPress={() => act.pickTurn(row.index)}
               />
             )}
-            {row.snippet !== '' && renderSnippet(el, row.snippet, query)}
+            {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
           </Box>
         ))}
         {hidden > 0 && (
           <Text
             color={C.muted}
-          >{`${hidden} more turn${hidden === 1 ? '' : 's'}${isFiltered ? ' – refine the search' : ''}`}</Text>
+          >{`${hidden} more turn${hidden === 1 ? '' : 's'}${isFiltered ? ` ${data.icons.dash} refine the search` : ''}`}</Text>
         )}
       </Box>
     </Box>
@@ -357,11 +368,11 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
 
 // The line a search hit gets under its turn: the matched part underlined and
 // bold in the accent, the surrounding text muted.
-function renderSnippet(el: El, snippet: string, query: string) {
+function renderSnippet(el: El, snippet: string, query: string, data: Ctx) {
   const { Text } = el
-  const { before, match, after } = splitMatch(sanitizeText(snippet), query)
+  const { before, match, after } = splitMatch(sanitizeText(snippet), query, data.icons.ellipsis)
   return (
-    <Text color={C.muted} wrap="truncate-end">
+    <Text color={C.muted} wrap={endWrap(data.icons)}>
       {`      ${before}`}
       {match !== '' && (
         <Text bold underline color={C.accent}>
@@ -376,6 +387,7 @@ function renderSnippet(el: El, snippet: string, query: string) {
 // The team board: each teammate with its type and status, then the tasks
 // with their TodoWrite marks and owners.
 function renderTeam(el: El, data: Ctx, act: PaneActions) {
+  const trunc = cutter(data.icons)
   const { Box, Button, Text } = el
   const members = data.members ?? []
   const tasks = data.tasks ?? []
@@ -383,8 +395,8 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
   // Every row draws from the pane's text budget; what does not fit is counted.
   const memberRows: { member: TeamMember; name: string; type: string; cost: number }[] = []
   for (const member of members) {
-    const name = truncate(member.name, 24).padEnd(24)
-    const type = truncate(member.type, 20).padEnd(20)
+    const name = trunc(member.name, 24).padEnd(24)
+    const type = trunc(member.type, 20).padEnd(20)
     const cost = name.length + type.length + member.status.length + 4
     if (cost > data.budget.left) break
     data.budget.left -= cost
@@ -392,8 +404,8 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
   }
   const taskRows: { task: TaskEntry; label: string }[] = []
   for (const task of tasks) {
-    const owner = task.owner ? `  ${data.icons.arrow} ${truncate(task.owner, 40)}` : ''
-    const label = `${taskMark(task.status)} #${truncate(task.id, 20)} ${truncate(task.subject, 200)}${owner}`
+    const owner = task.owner ? `  ${data.icons.arrow} ${trunc(task.owner, 40)}` : ''
+    const label = `${taskMark(task.status, data.icons)} #${trunc(task.id, 20)} ${trunc(task.subject, 200)}${owner}`
     if (label.length > data.budget.left) break
     data.budget.left -= label.length
     taskRows.push({ task, label })
@@ -436,7 +448,7 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
           <Text
             key={`task-${row.task.id}`}
             color={row.task.status === 'completed' ? C.muted : C.text}
-            wrap="truncate-end"
+            wrap={endWrap(data.icons)}
           >
             {row.label}
           </Text>
@@ -596,13 +608,14 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
 // The turn's thinking as one row above the items, when any of it is
 // readable; expanded, it reads as Markdown like the model's output.
 function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
+  const trunc = cutter(data.icons)
   const { icons } = data
   const { Box, Button, Text } = el
   const thinking = data.thinking
   if (thinking === undefined || thinking.text === '') return undefined
   const id = `t${turn.index}:thinking`
   const isOpen = data.expanded.has(id)
-  const label = truncate(`${'Thinking'.padEnd(12)} - ${thinking.text}`, Math.max(8, data.columns - 8))
+  const label = trunc(`${'Thinking'.padEnd(12)} - ${thinking.text}`, Math.max(8, data.columns - 8))
   return (
     <Box key={`item-${id}`} flexDirection="column">
       <Box flexDirection="row">
@@ -629,6 +642,7 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
             C.accent,
             renderLong(el, id, thinking.text, { kind: 'markdown' }, data, act),
             thinking.text,
+            data,
             act,
           )}
         </Box>
@@ -647,6 +661,7 @@ function withWorkflowNote(item: Item, summary: string, data: Ctx): string {
 }
 
 function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: number) {
+  const trunc = cutter(data.icons)
   const { icons } = data
   const { Box, Button, Text } = el
   const isOpen = data.expanded.has(item.id)
@@ -685,8 +700,8 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
   const prefix = `${name.padEnd(12)} - `
   const label =
     summary && item.kind === 'tool' && pathOf(item) !== ''
-      ? prefix + fitPath(item, summary, Math.max(8, room - prefix.length))
-      : truncate(summary ? prefix + summary : name, Math.max(8, room))
+      ? prefix + fitPath(item, summary, Math.max(8, room - prefix.length), icons.ellipsis)
+      : trunc(summary ? prefix + summary : name, Math.max(8, room))
   const hover = { scope: scopeOf('row:', item.id), backgroundColor: C.rowHover }
   const toggle = () => canOpen && act.toggle(item.id)
 
@@ -704,7 +719,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
           {canOpen ? (
             <Button key={item.id} plain dimColor label={label} hover={{ ...hover, ...HOVER_TEXT }} onPress={toggle} />
           ) : (
-            <Text color={C.muted} wrap="truncate-end" hover={hover}>
+            <Text color={C.muted} wrap={endWrap(data.icons)} hover={hover}>
               {label}
             </Text>
           )}
@@ -743,6 +758,7 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: 
           C.accent,
           renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act),
           item.text,
+          data,
           act,
         )}
       </Box>
@@ -761,7 +777,7 @@ function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
   const { Box } = el
   return (
     <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-      {toolSections(item).map(section => {
+      {toolSections(item, data.icons).map(section => {
         const id = `${item.id}:${section.kind}`
         const preview = renderLong(el, id, section.body, longSpec(section), data, act)
         const isError = section.kind === 'error'
@@ -774,6 +790,7 @@ function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
           TONE[section.kind],
           isError ? withFirstError(el, section.body, preview, data) : preview,
           section.body,
+          data,
           act,
         )
       })}
@@ -783,13 +800,14 @@ function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
 
 // An error's first telling line, in red, above the preview of its output.
 function withFirstError(el: El, body: string, preview: RenderElement, data: Ctx) {
+  const trunc = cutter(data.icons)
   const { Box, Text } = el
-  const line = truncate(firstErrorLine(body), Math.max(8, data.columns - 12))
+  const line = trunc(firstErrorLine(body), Math.max(8, data.columns - 12))
   if (line === '' || line.length > data.budget.left) return preview
   data.budget.left -= line.length
   return (
     <Box flexDirection="column">
-      <Text color={C.error} wrap="truncate-end">
+      <Text color={C.error} wrap={endWrap(data.icons)}>
         {line}
       </Text>
       {preview}
@@ -813,19 +831,27 @@ function renderFrame(
   tone: ThemeKey,
   body: RenderElement,
   copyText: string,
+  data: Ctx,
   act: PaneActions,
 ) {
   const { Box, Button, Text } = el
+  const trunc = cutter(data.icons)
   return (
-    <Box key={`frame-${blockId}`} flexDirection="column" borderStyle="round" borderColor={tone} paddingX={1}>
+    <Box
+      key={`frame-${blockId}`}
+      flexDirection="column"
+      borderStyle={data.icons.border}
+      borderColor={tone}
+      paddingX={1}
+    >
       <Box flexDirection="row" justifyContent="space-between">
         <Box flexDirection="row" flexShrink={1}>
           <Text bold color={tone}>
             {title}
           </Text>
           {meta !== undefined && meta !== '' && (
-            <Text color={C.muted} wrap={isPathMeta ? 'truncate-middle' : 'truncate-end'}>
-              {`  ${isPathMeta ? truncateMiddle(meta, 300) : truncate(meta, 300)}`}
+            <Text color={C.muted} wrap={isPathMeta ? middleWrap(data.icons) : endWrap(data.icons)}>
+              {`  ${isPathMeta ? truncateMiddle(meta, isUnicodeCut(data.icons) ? 300 : Math.max(8, data.columns - 30), data.icons.ellipsis) : trunc(meta, 300)}`}
             </Text>
           )}
         </Box>
@@ -854,12 +880,12 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
   const preview = PREVIEW[spec.kind]
   const limit = isFull ? { lines: Infinity, chars: Infinity } : preview
   const allowed = Math.min(limit.chars, data.budget.left)
-  const shown = clampText(text, limit.lines, allowed)
+  const shown = clampText(text, limit.lines, allowed, data.icons.ellipsis)
   data.budget.left -= shown.text.length
 
   const isBudgetCut = shown.note !== undefined && allowed < limit.chars
   const isPreviewed = !isFull && shown.note !== undefined && !isBudgetCut
-  const canShrink = isFull && clampText(text, preview.lines, preview.chars).note !== undefined
+  const canShrink = isFull && clampText(text, preview.lines, preview.chars, data.icons.ellipsis).note !== undefined
 
   const pieces = spec.kind === 'markdown' ? chunkMarkdown(shown.text, TEXT_CHUNK) : chunkText(shown.text, TEXT_CHUNK)
 
@@ -875,7 +901,9 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
         ),
       )}
       {isBudgetCut && (
-        <Text color={C.muted}>{`${shown.note} – pane text budget reached; collapse other rows to see more`}</Text>
+        <Text
+          color={C.muted}
+        >{`${shown.note} ${data.icons.dash} pane text budget reached; collapse other rows to see more`}</Text>
       )}
       {isPreviewed && (
         <Button
@@ -883,7 +911,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
           plain
           dimColor
           hover={buttonHover(scopeOf('btn:full:', id))}
-          label={`${shown.note} – show all`}
+          label={`${shown.note} ${data.icons.dash} show all`}
           onPress={() => act.toggleFull(id)}
         />
       )}
@@ -902,6 +930,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
 }
 
 function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, depth: number) {
+  const trunc = cutter(data.icons)
   const { icons } = data
   const { Box, Text } = el
   const trace = data.traces.get(item.agentId)
@@ -910,14 +939,14 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
   if (!trace) {
     return (
       <Box marginLeft={4}>
-        <Text color={C.muted}>Loading trace…</Text>
+        <Text color={C.muted}>{`Loading trace${data.icons.ellipsis}`}</Text>
       </Box>
     )
   }
   if ('denied' in trace) {
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-        <Text color={C.muted}>{`Trace unavailable: ${truncate(trace.denied, 300)}`}</Text>
+        <Text color={C.muted}>{`Trace unavailable: ${trunc(trace.denied, 300)}`}</Text>
         {renderSections(el, item, data, act)}
       </Box>
     )
