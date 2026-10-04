@@ -15,6 +15,7 @@ import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
   chunkMarkdown,
   chunkText,
+  clampDiff,
   clampText,
   contextMeter,
   formatClock,
@@ -33,6 +34,7 @@ import {
   sanitizeText,
   shortMode,
   shortModel,
+  splitDiff,
   splitMatch,
   taskMark,
   toolCategory,
@@ -182,10 +184,13 @@ type PaneData = {
 // and every block draws from one budget per pane, leaving room for the rows.
 const TEXT_CHUNK = 8000
 const PANE_TEXT_BUDGET = 70_000
+// What a hunk header the splitting of a long diff adds may take at most.
+const DIFF_HEADER_SLACK = 40
 
 const PREVIEW = {
   text: { lines: 100, chars: TEXT_CHUNK },
   code: { lines: 60, chars: TEXT_CHUNK },
+  diff: { lines: 60, chars: TEXT_CHUNK },
   markdown: { lines: Infinity, chars: 30_000 },
 } as const
 
@@ -936,7 +941,8 @@ function renderFrame(
   )
 }
 
-type LongSpec = { kind: 'text'; isError: boolean } | { kind: 'code'; language: string } | { kind: 'markdown' }
+type LongSpec =
+  { kind: 'text'; isError: boolean } | { kind: 'code'; language: string } | { kind: 'diff' } | { kind: 'markdown' }
 
 // A block of any length: previewed by lines and characters until the person
 // asks for all of it, cut into pieces under the per-element limit, and drawn
@@ -947,20 +953,35 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
   const preview = PREVIEW[spec.kind]
   const limit = isFull ? { lines: Infinity, chars: Infinity } : preview
   const allowed = Math.min(limit.chars, data.budget.left)
-  const shown = clampText(text, limit.lines, allowed, data.icons.ellipsis)
-  data.budget.left -= shown.text.length
+  const clamp = spec.kind === 'diff' ? clampDiff : clampText
+  // Cutting a diff into pieces adds a header to each piece after the first.
+  const room =
+    spec.kind === 'diff' ? allowed - DIFF_HEADER_SLACK * Math.ceil(Math.max(0, allowed) / TEXT_CHUNK) : allowed
+  const shown = clamp(text, limit.lines, room, data.icons.ellipsis)
 
   const isBudgetCut = shown.note !== undefined && allowed < limit.chars
   const isPreviewed = !isFull && shown.note !== undefined && !isBudgetCut
-  const canShrink = isFull && clampText(text, preview.lines, preview.chars, data.icons.ellipsis).note !== undefined
+  const canShrink = isFull && clamp(text, preview.lines, preview.chars, data.icons.ellipsis).note !== undefined
 
-  const pieces = spec.kind === 'markdown' ? chunkMarkdown(shown.text, TEXT_CHUNK) : chunkText(shown.text, TEXT_CHUNK)
+  // A diff is cut only into pieces that are valid diffs; nothing drawn when
+  // not even a header fits what is left of the budget.
+  const pieces =
+    spec.kind === 'markdown'
+      ? chunkMarkdown(shown.text, TEXT_CHUNK)
+      : spec.kind === 'diff'
+        ? shown.text === ''
+          ? []
+          : splitDiff(shown.text, Infinity, TEXT_CHUNK)
+        : chunkText(shown.text, TEXT_CHUNK)
+  data.budget.left -= spec.kind === 'diff' ? pieces.reduce((sum, p) => sum + p.length, 0) : shown.text.length
 
   return (
     <Box flexDirection="column">
       {pieces.map(piece =>
         spec.kind === 'markdown' ? (
           <Markdown text={piece} />
+        ) : spec.kind === 'diff' ? (
+          <Code format="diff" source={piece} />
         ) : spec.kind === 'code' ? (
           <Code language={spec.language} source={piece} />
         ) : (
