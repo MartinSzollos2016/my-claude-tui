@@ -5,6 +5,7 @@ import type { ToolTiming } from '../types'
 import { buildTurns } from '../hooks/model'
 import {
   MAX_TIMINGS,
+  isTextOnly,
   memo,
   nextSelectedTurn,
   recordToolEnd,
@@ -189,5 +190,15 @@ describe('pending queue repair', () => {
   test('discardStale keeps only entries after the last completed turn', () => {
     expect(discardStale([2, 3, 5], 3)).toEqual([5])
     expect(discardStale([0], -1)).toEqual([0])
+  })
+})
+
+describe('isTextOnly', () => {
+  test('VS Code alone or nothing drawing answers in text', () => {
+    expect(isTextOnly([])).toBe(true)
+    expect(isTextOnly(['vscode'])).toBe(true)
+    expect(isTextOnly(['vscode', 'terminal'])).toBe(false)
+    expect(isTextOnly(['terminal'])).toBe(false)
+    expect(isTextOnly(['desktop'])).toBe(false)
   })
 })

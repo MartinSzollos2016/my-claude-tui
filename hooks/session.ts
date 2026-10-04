@@ -1,7 +1,7 @@
 // Pure state transitions behind register.tsx's hooks: what a tool call, a
 // finished turn or a key press does to the plugin's state. register.tsx only
 // reads the engine and writes the atoms, so this file is unit tested whole.
-import type { TurnUsage } from 'claude-code'
+import type { RenderSurface, TurnUsage } from 'claude-code'
 
 import type { ToolTiming, TurnStat } from '../types'
 import type { Turn } from './model'
@@ -124,4 +124,10 @@ export function remember<K, V>(map: Map<K, V>, key: K, value: V, max: number): v
   map.delete(key)
   map.set(key, value)
   while (map.size > max) map.delete(map.keys().next().value as K)
+}
+
+// Where /tail answers in text instead of opening the pane: VS Code draws no
+// pane, and a `claude -p` run draws nothing at all.
+export function isTextOnly(surfaces: readonly RenderSurface[]): boolean {
+  return surfaces.every(surface => surface === 'vscode')
 }

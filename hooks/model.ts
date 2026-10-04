@@ -3,6 +3,8 @@
 // agent-ouija (claude/tools/summary.go). No engine calls here.
 import type { AgentStatus, SessionMessage } from 'claude-code'
 
+import type { TurnStat } from '../types'
+
 type OutputItem = { kind: 'output'; id: string; text: string }
 
 export type ToolItem = {
@@ -735,12 +737,55 @@ export function resultLine(output: unknown, isErrored: boolean): string {
 
 // The counts a turn list row shows: "3 tools · 1 agent", or "reply" for a
 // turn that only answered.
-export function turnCounts(turn: Turn): string {
+function turnCounts(turn: Turn): string {
   const parts: string[] = []
   const tools = turn.toolCount - turn.subagentCount
   if (tools > 0) parts.push(`${tools} tool${tools === 1 ? '' : 's'}`)
   if (turn.subagentCount > 0) parts.push(`${turn.subagentCount} agent${turn.subagentCount === 1 ? '' : 's'}`)
   return parts.length > 0 ? parts.join(' · ') : 'reply'
+}
+
+// A turn row's tail: its counts, then how long it took when that is known.
+export function turnTail(turn: Turn, stat?: { durationMs: number }): string {
+  return [turnCounts(turn), stat ? formatDuration(stat.durationMs) : ''].filter(Boolean).join(' · ')
+}
+
+export const EMPTY_TURN_TEXT = 'No tool calls or output in this turn.'
+
+// -- Text reports (surfaces that draw no pane) ---------------------------------
+//
+// VS Code and `claude -p` draw no pane, so /tail and /tail-turns answer with
+// the same content as text, capped like one text element.
+
+const REPORT_CHARS = 8000
+
+function clampReport(text: string): string {
+  const shown = clampText(text, Infinity, REPORT_CHARS)
+  return shown.note === undefined ? shown.text : `${shown.text}\n${shown.note}`
+}
+
+export function turnText(turn: Turn | undefined, stat: TurnStat | undefined): string {
+  if (!turn) return 'No turns yet. Send a prompt and /tail lists its tool calls.'
+  const head = [`Turn ${turn.index + 1}`, turnTail(turn)]
+  if (stat?.model) head.splice(2, 0, shortModel(stat.model))
+  if (stat) head.push(formatDuration(stat.durationMs))
+  const lines = [head.join(' · ')]
+  if (turn.prompt !== '') lines.push(`❯ ${truncate(turn.prompt, 200)}`)
+  if (turn.items.length === 0) lines.push(`  ${EMPTY_TURN_TEXT}`)
+  for (const item of turn.items) {
+    const state = item.kind !== 'tool' ? '' : item.isError ? ' (error)' : item.isPending ? ' (no result yet)' : ''
+    const duration = item.kind === 'tool' && item.durationMs !== undefined ? `  ${formatDuration(item.durationMs)}` : ''
+    lines.push(`  ${itemName(item).padEnd(12)} ${itemSummary(item)}${state}${duration}`)
+  }
+  return clampReport(lines.join('\n'))
+}
+
+export function turnListText(turns: readonly Turn[], stats: readonly (TurnStat | undefined)[]): string {
+  if (turns.length === 0) return 'No turns yet.'
+  const lines = turns.map(
+    (turn, i) => `${`#${i + 1}`.padEnd(5)}${truncate(turn.prompt || '(no prompt)', 60)}  ${turnTail(turn, stats[i])}`,
+  )
+  return clampReport([`Turns (${turns.length}), newest last:`, ...lines].join('\n'))
 }
 
 // The one line a tool call gets in the compact transcript: its name and the

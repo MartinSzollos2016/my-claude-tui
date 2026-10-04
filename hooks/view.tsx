@@ -17,6 +17,7 @@ import {
   chunkText,
   clampText,
   formatClock,
+  EMPTY_TURN_TEXT,
   formatDuration,
   formatTokens,
   isAgentRunning,
@@ -27,7 +28,7 @@ import {
   shortModel,
   toolCategory,
   toolSections,
-  turnCounts,
+  turnTail,
   type Section,
   traceStats,
   truncate,
@@ -188,7 +189,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       {renderNav(el, data, act)}
       <Box flexDirection="column" marginTop={1}>
         {turn.items.length === 0 && (
-          <Text dimColor>{data.isWorking && data.isLatest ? 'Working…' : 'No tool calls or output in this turn.'}</Text>
+          <Text dimColor>{data.isWorking && data.isLatest ? 'Working…' : EMPTY_TURN_TEXT}</Text>
         )}
         {turn.items.map(item => renderItem(el, item, data, act, 0))}
       </Box>
@@ -205,7 +206,7 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
     const stat = data.stats[index]
     const marker = index === data.selected ? '›' : ' '
     const number = `#${index + 1}`.padEnd(5)
-    const tail = [turnCounts(turn), stat ? formatDuration(stat.durationMs) : ''].filter(Boolean).join(' · ')
+    const tail = turnTail(turn, stat)
     const prompt = truncate(turn.prompt || '(no prompt)', Math.max(10, width - number.length - tail.length - 6))
     return {
       index,
