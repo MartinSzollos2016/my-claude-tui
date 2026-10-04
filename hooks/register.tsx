@@ -3,7 +3,7 @@
 // by the tool.call and turn.complete hooks. Commands are in commands.ts,
 // rendering in view.tsx, transformations in model.ts.
 import { atom, read, update } from 'claude-code'
-import type { AgentStatus, EngineInterface, Register, Timer } from 'claude-code'
+import type { AgentStatus, CommandRunInput, CommandRunResult, EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
@@ -58,36 +58,33 @@ export function parseGitStatus(stdout: string): GitInfo | null {
   return { branch, isDirty: rest.some(line => line.trim() !== '') }
 }
 
-// The repo's own config is untrusted: `core.fsmonitor` (and its hook
-// variant) names a program git runs on every status, which would execute
-// code from a cloned repo just by opening it here. Override it on the
-// command line, which beats every config file, and take no index lock so
-// the status never races the person's own git commands.
-export const GIT_STATUS_ARGV = [
-  'git',
-  '--no-optional-locks',
-  '-c',
-  'core.fsmonitor=false',
-  '-c',
-  'core.untrackedCache=false',
-  'status',
-  '--porcelain=v1',
-  '--branch',
-] as const
-
+// The only program the plugin runs: `git status` in the session's directory,
+// for the branch in the info bar. The repo's own config is untrusted:
+// `core.fsmonitor` names a program git runs on every status, which would
+// execute code from a cloned repo just by opening it here, so it is
+// overridden on the command line; no index lock, no credential prompts.
+// The command is written out in full so its whole text is reviewable.
 async function refreshGit($: EngineInterface): Promise<void> {
-  try {
-    const root = await $.session.cwd()
-    const ran = await $.process.run(GIT_STATUS_ARGV, {
-      cwd: root,
+  const ran = await $.process.run(
+    [
+      'git',
+      '--no-optional-locks',
+      '-c',
+      'core.fsmonitor=false',
+      '-c',
+      'core.untrackedCache=false',
+      'status',
+      '--porcelain=v1',
+      '--branch',
+    ],
+    {
+      cwd: await $.session.cwd(),
       timeoutMs: 5000,
       env: { GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' },
-    })
-    const info = ran.exitCode === 0 ? parseGitStatus(ran.stdout) : null
-    await update($, git, () => info)
-  } catch {
-    await update($, git, () => null)
-  }
+    },
+  )
+  const info = ran.exitCode === 0 ? parseGitStatus(ran.stdout) : null
+  await update($, git, () => info)
 }
 
 // Prefer the stat recorded for this turn's prompt; the latest turn of a
@@ -139,11 +136,10 @@ function visibleIds(items: readonly Item[], traces: ReadonlyMap<string, Trace>):
   return ids
 }
 
-// Background work started from a hook: its failure (the session ended, a
-// pane could not open) must not surface as an unhandled rejection.
-function detach(work: Promise<unknown>): void {
-  work.catch(() => undefined)
-}
+// Background work started from a hook ends in `.catch(ignore)`: its failure
+// (the session ended, a pane could not open) must not surface as an
+// unhandled rejection.
+const ignore = (): undefined => undefined
 
 // Module-local: a reload starts these over, which only costs a missed frame.
 let ticker: Timer | undefined
@@ -166,7 +162,32 @@ async function onTick($: EngineInterface): Promise<void> {
 // Redraws twice a second while anything runs: spinners and elapsed times.
 function startTicker($: EngineInterface) {
   if (ticker) return
-  ticker = $.clock.every(TICK_MS, () => detach(onTick($)))
+  ticker = $.clock.every(TICK_MS, () => onTick($).catch(ignore))
+}
+
+async function runCommand($: EngineInterface, e: CommandRunInput): Promise<CommandRunResult> {
+  const parsed = parseCommand(e.command, e.args) ?? { sub: 'open', arg: '' }
+  switch (parsed.sub) {
+    case 'bar': {
+      const hidden = await update($, isBarHidden, wasHidden => !wasHidden)
+      return { text: hidden ? 'Info bar hidden.' : 'Info bar shown.' }
+    }
+    case 'theme':
+      return { text: await themeAdvice($) }
+    case 'compact':
+      return { text: await toggleCompact($) }
+    case 'width':
+      return { text: await setWidth($, parsed.arg, e.presentation.columns) }
+    case 'help':
+      return { text: helpText() }
+    case 'turns':
+      await update($, paneView, () => 'turns' as const)
+      await openPane($, true, e.presentation.columns)
+      return { text: 'Turn list opened: Enter or click a turn to see it in detail.' }
+    case 'open':
+      await openPane($, true, e.presentation.columns)
+      return { text: 'Detail view opened. /tail-help lists the commands and keys.' }
+  }
 }
 
 // Shows one turn in the detail view; the latest one follows new turns.
@@ -252,44 +273,19 @@ export const register: Register = on => {
         ...(spec.argumentHint ? { argumentHint: spec.argumentHint } : {}),
       })
     }
-    detach(refreshGit($))
-    detach(openPane($, false))
+    refreshGit($).catch(ignore)
+    openPane($, false).catch(ignore)
     return started
   })
 
-  on('command.run', async ($, e, next) => {
-    const parsed = parseCommand(e.command, e.args)
-    if (!parsed) return next(e)
-    switch (parsed.sub) {
-      case 'bar': {
-        const hidden = await update($, isBarHidden, h => !h)
-        return { text: hidden ? 'Info bar hidden.' : 'Info bar shown.' }
-      }
-      case 'theme':
-        return { text: await themeAdvice($) }
-      case 'compact':
-        return { text: await toggleCompact($) }
-      case 'width':
-        return { text: await setWidth($, parsed.arg, e.presentation.columns) }
-      case 'help':
-        return { text: helpText() }
-      case 'turns':
-        await update($, paneView, () => 'turns' as const)
-        await openPane($, true, e.presentation.columns)
-        return { text: 'Turn list opened: Enter or click a turn to see it in detail.' }
-      case 'open':
-        await openPane($, true, e.presentation.columns)
-        return { text: 'Detail view opened. /tail-help lists the commands and keys.' }
-    }
-  })
-
-  // Theme keys resolve at paint; redraw once the new theme is stored so
-  // nothing cached keeps the old palette.
-  on('config.set', { key: 'theme' }, async ($, e, next) => {
-    const set = await next(e)
-    await bump($)
-    return set
-  })
+  // One registration per command, so the hook never sees anyone else's.
+  on('command.run', { command: 'tail' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-turns' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-width' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-theme' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-compact' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-bar' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-help' }, ($, e) => runCommand($, e))
 
   on('classic.UserPromptSubmit', async ($, e, next) => {
     if (e.permission_mode) await update($, mode, () => e.permission_mode ?? null)
@@ -345,7 +341,7 @@ export const register: Register = on => {
       }
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
-      detach(refreshGit($))
+      refreshGit($).catch(ignore)
     }
     await bump($)
     return next(e)
@@ -397,33 +393,27 @@ export const register: Register = on => {
       },
       {
         toggle: id =>
-          detach(
-            update($, expanded, ids =>
-              ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED),
-            ),
-          ),
-        prev: () => detach(setTurn(cur => cur - 1)),
-        next: () => detach(setTurn(cur => cur + 1)),
-        latest: () => detach(setTurn(() => null)),
+          update($, expanded, ids =>
+            ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED),
+          ).catch(ignore),
+        prev: () => setTurn(cur => cur - 1).catch(ignore),
+        next: () => setTurn(cur => cur + 1).catch(ignore),
+        latest: () => setTurn(() => null).catch(ignore),
         expandAll: () =>
-          detach(
-            update($, expanded, ids =>
-              [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED),
-            ),
-          ),
+          update($, expanded, ids =>
+            [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED),
+          ).catch(ignore),
         collapseAll: () => {
-          detach(update($, expanded, () => []))
-          detach(update($, fullBlocks, () => []))
+          update($, expanded, () => []).catch(ignore)
+          update($, fullBlocks, () => []).catch(ignore)
         },
-        showTurns: () => detach(update($, paneView, () => 'turns' as const)),
-        showDetail: () => detach(update($, paneView, () => 'detail' as const)),
-        pickTurn: index => detach(pickTurn($, index, latest)),
+        showTurns: () => update($, paneView, () => 'turns' as const).catch(ignore),
+        showDetail: () => update($, paneView, () => 'detail' as const).catch(ignore),
+        pickTurn: index => pickTurn($, index, latest).catch(ignore),
         toggleFull: id =>
-          detach(
-            update($, fullBlocks, ids =>
-              ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED),
-            ),
-          ),
+          update($, fullBlocks, ids =>
+            ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED),
+          ).catch(ignore),
       },
     )
   })
@@ -471,7 +461,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    detach(autoSize($, e.viewport?.columns))
+    autoSize($, e.viewport?.columns).catch(ignore)
     if (e.props.hasSurvey || (await read($, isBarHidden))) return next(e)
     await read($, tick)
 

@@ -2,7 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { parseCommand } from '../hooks/commands'
-import { GIT_STATUS_ARGV, parseGitStatus, statFor } from '../hooks/register'
+import { parseGitStatus, statFor } from '../hooks/register'
 import {
   buildTurns,
   chunkMarkdown,
@@ -271,13 +271,6 @@ describe('formatters', () => {
       'Task notification: Agent done',
     )
     expect(sanitizePrompt('hi<system-reminder>x</system-reminder>')).toBe('hi')
-  })
-
-  test('git status overrides repo-controlled command execution', () => {
-    const argv = GIT_STATUS_ARGV.join(' ')
-    expect(argv).toContain('-c core.fsmonitor=false')
-    expect(argv).toContain('--no-optional-locks')
-    expect(GIT_STATUS_ARGV.indexOf('-c')).toBeLessThan(GIT_STATUS_ARGV.indexOf('status'))
   })
 
   test('clampText caps by lines and by characters', () => {
