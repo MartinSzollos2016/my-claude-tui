@@ -53,15 +53,12 @@ import {
   turnTable,
   type FooterLayout,
   type GroupItem,
-  type Item,
   type ItemStatus,
   type RowBlock,
   type ScrollFrame,
   type Section,
   type TaskEntry,
   type TeamMember,
-  type ToolItem,
-  type Turn,
   type TurnMatch,
   type TurnThinking,
   type WorkflowState,
@@ -75,6 +72,7 @@ import {
   shortModel,
   treePrefix,
 } from './model/format'
+import type { Item, ToolItem, Turn } from './model/types'
 
 // Text narrowed to theme keys: tsc rejects a raw color (hex, rgb, ansi)
 // anywhere in the views, so everything follows the person's /theme.
