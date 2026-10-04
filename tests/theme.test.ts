@@ -2,7 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { buildTurns, sanitizeText, sanitizeValue } from '../hooks/model'
-import { C, contextColor, modeColor, modelColor, THEME_KEYS } from '../hooks/theme'
+import { C, contextColor, modeColor, modelColor, THEME_KEYS, toggleTailTheme } from '../hooks/theme'
 
 const keys = new Set<string>(THEME_KEYS)
 
@@ -24,6 +24,21 @@ describe('theme', () => {
     }
     expect(modeColor('default')).toBe(undefined)
     expect(modeColor(null)).toBe(undefined)
+  })
+})
+
+describe('toggleTailTheme', () => {
+  test('switches a built-in theme to its tail-view variant and back', () => {
+    for (const base of ['dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi']) {
+      expect(toggleTailTheme(base)).toBe(`custom:tail-view:${base}`)
+      expect(toggleTailTheme(`custom:tail-view:${base}`)).toBe(base)
+    }
+  })
+
+  test('leaves auto and other custom themes to /theme', () => {
+    expect(toggleTailTheme('auto')).toBe(undefined)
+    expect(toggleTailTheme('custom:mine')).toBe(undefined)
+    expect(toggleTailTheme('custom:tail-view:unknown')).toBe(undefined)
   })
 })
 

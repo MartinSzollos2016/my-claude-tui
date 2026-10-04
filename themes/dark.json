@@ -1,0 +1,7 @@
+{
+  "name": "Tail Dark",
+  "base": "dark",
+  "overrides": {
+    "composerSidebarBackground": "rgb(0,0,0)"
+  }
+}

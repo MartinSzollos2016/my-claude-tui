@@ -85,3 +85,29 @@ export function modeColor(mode: string | null): ThemeKey | undefined {
       return undefined
   }
 }
+
+// -- Plugin themes ------------------------------------------------------------
+//
+// The engine paints the docked pane's column (frame included) with the
+// composerSidebarBackground theme key, out of a plugin's reach. themes/*.json
+// ship one variant of each built-in theme that only overrides that key: black
+// on the dark themes, white on the light ones. The engine loads them as
+// `custom:tail-view:<base>`.
+
+export const BUILTIN_THEMES = ['dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi'] as const
+
+const TAIL_THEME_PREFIX = 'custom:tail-view:'
+
+const isBuiltinTheme = (theme: string): theme is (typeof BUILTIN_THEMES)[number] =>
+  (BUILTIN_THEMES as readonly string[]).includes(theme)
+
+// The theme /tail theme switches to: the tail-view variant of a built-in
+// theme, or back to the built-in one. Undefined for `auto` and for custom
+// themes, which only the person can map.
+export function toggleTailTheme(current: string): string | undefined {
+  if (current.startsWith(TAIL_THEME_PREFIX)) {
+    const base = current.slice(TAIL_THEME_PREFIX.length)
+    return isBuiltinTheme(base) ? base : undefined
+  }
+  return isBuiltinTheme(current) ? TAIL_THEME_PREFIX + current : undefined
+}

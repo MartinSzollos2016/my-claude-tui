@@ -1,0 +1,7 @@
+{
+  "name": "Tail Dark (ANSI colors only)",
+  "base": "dark-ansi",
+  "overrides": {
+    "composerSidebarBackground": "ansi:black"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "Tail Light (ANSI colors only)",
+  "base": "light-ansi",
+  "overrides": {
+    "composerSidebarBackground": "ansi:white"
+  }
+}

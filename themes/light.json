@@ -1,0 +1,7 @@
+{
+  "name": "Tail Light",
+  "base": "light",
+  "overrides": {
+    "composerSidebarBackground": "rgb(255,255,255)"
+  }
+}
