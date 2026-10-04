@@ -101,6 +101,7 @@ const git = atom({ plugin: 'tail-view', key: 'git' } as const, null)
 const mode = atom({ plugin: 'tail-view', key: 'mode' } as const, null)
 const isWorking = atom({ plugin: 'tail-view', key: 'isWorking' } as const, false)
 const isBarHidden = atom({ plugin: 'tail-view', key: 'isBarHidden' } as const, false)
+const spinner = atom({ plugin: 'tail-view', key: 'spinner' } as const, null)
 
 const bump = ($: EngineInterface) => update($, tick, n => n + 1)
 
@@ -229,8 +230,10 @@ async function trackWorkflow($: EngineInterface, tool: string, agentId: string |
 
 // Main-loop tool calls that have started and not ended, for the status line.
 let runningTools: readonly RunningTool[] = []
-// The status line as last set, so an unchanged text is not set again.
+// The status line and the spinner text as last set, so an unchanged text is
+// not set again.
 let lastStatus: string | undefined
+let lastSpinner: string | null = null
 
 // The /tail-status switch: on unless stored false.
 async function isStatusOn($: EngineInterface): Promise<boolean> {
@@ -248,24 +251,32 @@ async function loadPrefs($: EngineInterface): Promise<Prefs> {
   }
 }
 
-// Sets the status line to what the running tools say now, when that differs
-// from what is showing; off in /tail-status, it is cleared instead.
+// Sets the status line and the spinner text to what the running tools say
+// now, each when it differs from what is showing; off in /tail-status, both
+// are cleared instead. The spinner text is state its hook reads, so only the
+// spinner is drawn again, not every row of the transcript.
 async function syncStatus($: EngineInterface, given?: Prefs): Promise<void> {
   const prefs = given ?? (await loadPrefs($))
   const now = await $.clock.now()
   // Read after the awaits: the latest state wins whichever sync ends last.
   const text = prefs.isStatusOn ? statusText(runningTools, now, prefs.icons) : undefined
-  if (text === lastStatus) return
-  lastStatus = text
-  $.ui.status(text)
-  // The transcript's spinner says the same, so it is drawn again too.
-  $.ui.invalidate('ui.render')
+  const message = prefs.isStatusOn ? (spinnerMessage(runningTools, now, prefs.icons) ?? null) : null
+  if (text !== lastStatus) {
+    lastStatus = text
+    $.ui.status(text)
+  }
+  if (message !== lastSpinner) {
+    lastSpinner = message
+    await update($, spinner, () => message)
+  }
 }
 
-// Removes the status line at once, whatever the tools say.
-function clearStatus($: EngineInterface): void {
+// Removes the status line and the spinner text at once, whatever the tools say.
+async function clearStatus($: EngineInterface): Promise<void> {
   lastStatus = undefined
   $.ui.status(undefined)
+  lastSpinner = null
+  await update($, spinner, () => null)
 }
 
 // Agents' statuses at the last look, the ids already announced and the
@@ -342,7 +353,7 @@ async function noteTurnStart($: EngineInterface, turnId: string, text: string): 
 async function undoSubmit($: EngineInterface, pushed: number | undefined, wasWorking: boolean): Promise<void> {
   if (pushed !== undefined) pendingTurns = dropPending(pendingTurns, pushed)
   await update($, isWorking, () => wasWorking)
-  clearStatus($)
+  await clearStatus($)
 }
 
 function stopTicker() {
@@ -529,6 +540,7 @@ async function setIcons($: EngineInterface, rawArg: string): Promise<string> {
   if (!isIconSetName(arg)) return `Unknown icon set. Use /tail-icons ${options}.`
   await $.store.set(ICONS_KEY, arg)
   $.ui.invalidate('ui.render')
+  await syncStatus($)
   await bump($)
   return `Icon set: ${arg}.`
 }
@@ -668,7 +680,7 @@ export const register: Register = on => {
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
       runningTools = []
-      clearStatus($)
+      await clearStatus($)
       refreshGit($).catch(ignore)
     }
     notifyFinished($).catch(ignore)
@@ -831,11 +843,11 @@ export const register: Register = on => {
   })
 
   // While a main-loop tool runs the spinner names it, as the status line
-  // does; /tail-status off leaves the engine's own text.
+  // does; /tail-status off leaves the engine's own text. syncStatus keeps the
+  // text in state, so a change redraws the spinner alone.
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    if (!(await isStatusOn($))) return next(e)
-    const message = spinnerMessage(runningTools, await $.clock.now(), await currentIcons($))
-    if (message === undefined) return next(e)
+    const message = await read($, spinner)
+    if (message === null) return next(e)
     // An empty suffix: the engine's own would add a Unicode ellipsis to the text.
     return next({ ...e, props: { ...e.props, message, suffix: '' } })
   })

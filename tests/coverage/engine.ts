@@ -111,6 +111,8 @@ type World = {
   copies: string[]
   toasts: string[]
   statuses: (string | undefined)[]
+  // What each $.ui.invalidate asked to redraw.
+  invalidations: string[]
   focused: string[]
   timers: (() => void)[]
   calls: string[]
@@ -135,6 +137,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     copies: [],
     toasts: [],
     statuses: [],
+    invalidations: [],
     focused: [],
     timers: [],
     calls: [],
@@ -179,7 +182,9 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
         return { isPlaced: true }
       },
       panes: async () => [{ id: 'tail', isPlaced: true }],
-      invalidate: () => undefined,
+      invalidate: (event: string) => {
+        world.invalidations.push(event)
+      },
       copy: async (args: { text: string }) => {
         world.copies.push(args.text)
         return world.copyResult

@@ -983,11 +983,32 @@ describe('transcript spinner and turn duration', () => {
     const running = run('tool.call', $, call, gate.next)
     await settle()
     world.now += 12_400
+    // The spinner says what the last sync set: the ticker moves it on.
+    expect((await props($, spinner))['message']).toBe('Bash go test ./... · 0s')
+    world.timers[0]!()
+    await settle()
     expect(await props($, spinner)).toMatchObject({ message: 'Bash go test ./... · 12s', suffix: '', word: 'Sauteing' })
     gate.release()
     await running
     await settle()
     expect(await props($, spinner)).toMatchObject({ message: null, suffix: '…' })
+  })
+
+  test('a status change redraws through state, never the whole transcript', async () => {
+    const { $, world } = fakeEngine()
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    for (let i = 0; i < 3; i++) {
+      world.now += 1_000
+      world.timers[0]!()
+      await settle()
+    }
+    gate.release()
+    await running
+    await settle()
+    expect(world.statuses.length).toBeGreaterThan(2)
+    expect(world.invalidations).toEqual([])
   })
 
   test('the spinner is left alone for a subagent tool, with the switch off, and draws ASCII in the ascii set', async () => {
