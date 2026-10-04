@@ -47,6 +47,15 @@ describe('tailThemeAdvice', () => {
     expect(tailThemeAdvice('custom:tail-view:dark-ansi')).toContain('Already using "Tail Dark (ANSI colors only)"')
   })
 
+  test('says when the tail-view variants are not loaded', () => {
+    expect(tailThemeAdvice('dark', ['dark', 'light', 'auto'])).toBe(
+      'Tail themes are not loaded in this session; run /reload-plugins or reinstall tail-view.',
+    )
+    expect(tailThemeAdvice('dark', ['dark', 'custom:tail-view:dark'])).toContain('"Tail Dark"')
+    expect(tailThemeAdvice('dark')).toContain('"Tail Dark"')
+    expect(tailThemeAdvice('custom:tail-view:light', ['light'])).toContain('Already using "Tail Light"')
+  })
+
   test('lists the variants for auto and other custom themes', () => {
     for (const current of ['auto', 'custom:mine']) {
       const advice = tailThemeAdvice(current)
