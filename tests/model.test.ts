@@ -681,7 +681,6 @@ describe('contextMeter', () => {
     expect(contextMeter(-5, 10, nerd)).toBe('▱▱▱▱▱▱▱▱▱▱')
     expect(contextMeter(250, 10, nerd)).toBe('▰▰▰▰▰▰▰▰▰▰')
     expect(contextMeter(50, 4, nerd)).toBe('▰▰▱▱')
-    expect(contextMeter(30, undefined, nerd)).toHaveLength(10)
     expect(contextMeter(62, 10, ICON_SETS.unicode)).toBe('▰▰▰▰▰▰▱▱▱▱')
     expect(contextMeter(62, 10, ascii)).toBe('######----')
   })

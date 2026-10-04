@@ -298,10 +298,9 @@ type TaskMarks = Pick<Icons, 'taskDone' | 'taskActive' | 'taskTodo'>
 
 const DEFAULT_GLYPHS: Glyphs = { ellipsis: '…', dot: '·', taskDone: '☑', taskActive: '◐', taskTodo: '☐' }
 
-// Cuts to `max` code points, the ellipsis included, at the end.
 // The context window as a bar of `cells` cells, round(percent/100*cells) of
 // them full, kept within 0..cells.
-export function contextMeter(percent: number, cells: number = 10, icons: Pick<Icons, 'meterFull' | 'meterEmpty'>) {
+export function contextMeter(percent: number, cells: number, icons: Pick<Icons, 'meterFull' | 'meterEmpty'>) {
   const full = Math.min(cells, Math.max(0, Math.round((percent / 100) * cells)))
   return icons.meterFull.repeat(full) + icons.meterEmpty.repeat(cells - full)
 }
@@ -318,6 +317,7 @@ export function treePrefix(
   return depthPath.map(goes => (goes ? icons.treeGuide : blank)).join('') + (isLast ? icons.treeLast : icons.treeBranch)
 }
 
+// Cuts to `max` code points, the ellipsis included, at the end.
 export function truncate(s: string, max: number, ellipsis = '…'): string {
   const one = s.replaceAll('\n', ' ')
   const chars = [...one]
