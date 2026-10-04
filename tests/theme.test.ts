@@ -2,13 +2,22 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { buildTurns, sanitizeText, sanitizeValue } from '../hooks/model'
-import { C, contextColor, modeColor, modelColor, THEME_KEYS, toggleTailTheme } from '../hooks/theme'
+import { C, contextColor, modeColor, modelColor, THEME_KEYS, toggleTailTheme, TONE } from '../hooks/theme'
 
 const keys = new Set<string>(THEME_KEYS)
 
 describe('theme', () => {
   test('every semantic role is a Claude Code theme key', () => {
     for (const value of Object.values(C)) expect(keys.has(value)).toBe(true)
+  })
+
+  test('every section kind has a theme-key frame color', () => {
+    for (const kind of ['command', 'input', 'file', 'diff', 'query', 'output', 'error'] as const) {
+      expect(keys.has(TONE[kind])).toBe(true)
+    }
+    expect(TONE.output).toBe('success')
+    expect(TONE.error).toBe('error')
+    expect(keys.has(C.rowHover)).toBe(true)
   })
 
   test('model, context and mode colors are theme keys', () => {

@@ -1,3 +1,5 @@
+import type { SectionKind } from './model'
+
 // Colors as Claude Code theme keys. The engine resolves a key against the
 // theme the person picked in /theme (dark, light, their daltonized and ANSI
 // variants, or a custom one) at paint time, so every color here follows the
@@ -10,6 +12,7 @@
 
 export const THEME_KEYS = [
   'inverseText',
+  'userMessageBackground',
   'claude',
   'suggestion',
   'permission',
@@ -37,6 +40,8 @@ export const C = {
   // of the text color), replacing the engine's grey sidebar fill so the
   // text reads at full contrast.
   paneBackground: 'inverseText',
+  // A hovered row: the subtle fill Claude Code gives the person's messages.
+  rowHover: 'userMessageBackground',
   brand: 'claude',
   accent: 'suggestion',
   error: 'error',
@@ -53,6 +58,18 @@ export const C = {
   modeBypass: 'error',
   modeAuto: 'permission',
 } as const satisfies Record<string, ThemeKey>
+
+// Frame colors of the expanded sections: what went in in the permission /
+// suggestion hues, a diff in the edit hue, the outcome green or red.
+export const TONE = {
+  command: 'permission',
+  query: 'permission',
+  input: 'suggestion',
+  file: 'suggestion',
+  diff: 'autoAccept',
+  output: 'success',
+  error: 'error',
+} as const satisfies Record<SectionKind, ThemeKey>
 
 // Model families keep tail-claude's hues (opus red, sonnet blue, haiku
 // green, fable violet) through the theme's agent palette.
