@@ -822,12 +822,22 @@ function searchable(turn: Turn): string[] {
   return texts
 }
 
+// Cuts by code point, so no surrogate pair is split. `at` is an offset into
+// the lowercased text, whose length can differ from `text`'s, so it is mapped
+// back to a code point of `text` first.
 function snippetAt(text: string, at: number): string {
-  const start = Math.max(0, Math.min(at - 20, text.length - SNIPPET))
-  const end = Math.min(text.length, start + SNIPPET)
+  const chars = [...text]
+  let hit = 0
+  for (let pos = 0; hit < chars.length - 1; hit++) {
+    pos += chars[hit]!.toLowerCase().length
+    if (pos > at) break
+  }
+  const start = Math.max(0, Math.min(hit - 20, chars.length - SNIPPET))
+  const end = Math.min(chars.length, start + SNIPPET)
   const head = start > 0 ? '…' : ''
-  const tail = end < text.length ? '…' : ''
-  return head + text.slice(start + head.length, end - tail.length).replaceAll('\n', ' ') + tail
+  const tail = end < chars.length ? '…' : ''
+  const body = chars.slice(start + head.length, end - tail.length).join('')
+  return head + body.replaceAll('\n', ' ') + tail
 }
 
 // The one line a tool call gets in the compact transcript: its name and the

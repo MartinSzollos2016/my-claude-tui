@@ -231,6 +231,16 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
       }
     })
 
+  // Every row draws from the pane's text budget; what does not fit is counted.
+  const shown: typeof rows = []
+  for (const row of rows.reverse()) {
+    const cost = row.label.length + row.snippet.length
+    if (cost > data.budget.left) break
+    data.budget.left -= cost
+    shown.push(row)
+  }
+  const hidden = rows.length - shown.length
+
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" gap={2}>
@@ -257,7 +267,7 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
         {isFiltered && rows.length === 0 && (
           <Text dimColor>{`No turn matches "${truncate(sanitizeText(query), 40)}".`}</Text>
         )}
-        {rows.reverse().map(row => (
+        {shown.map(row => (
           <Box key={`turn-row-${row.index}`} flexDirection="column">
             <Button
               key={`turn-${row.index}`}
@@ -270,6 +280,11 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
             {row.snippet !== '' && <Text dimColor wrap="truncate-end">{`      ${sanitizeText(row.snippet)}`}</Text>}
           </Box>
         ))}
+        {hidden > 0 && (
+          <Text
+            color={C.muted}
+          >{`${hidden} more turn${hidden === 1 ? '' : 's'}${isFiltered ? ' – refine the search' : ''}`}</Text>
+        )}
       </Box>
     </Box>
   )
