@@ -1138,6 +1138,28 @@ describe('finishedWorkflows', () => {
   })
 })
 
+describe('display width of emoji forms', () => {
+  test('flags, keycaps and emoji-presentation symbols take two cells', () => {
+    expect(displayWidth('🇨🇿')).toBe(2)
+    expect(displayWidth('1\ufe0f\u20e3')).toBe(2)
+    expect(displayWidth('✅')).toBe(2)
+    expect(displayWidth('🀄')).toBe(2)
+    expect(displayWidth('⌚')).toBe(2)
+    expect(displayWidth('⭐')).toBe(2)
+    expect(displayWidth('✓')).toBe(1)
+    expect(displayWidth('a\ufe0f')).toBe(2)
+  })
+
+  test('truncateDisplay cuts flags by their real width', () => {
+    expect(truncateDisplay('a🇨🇿🇨🇿b', 4, '…')).toBe('a🇨🇿…')
+    expect(displayWidth(truncateDisplay('a🇨🇿🇨🇿b', 4))).toBeLessThanOrEqual(4)
+  })
+
+  test('without Intl.Segmenter widths fall back to code points', () => {
+    expect(displayWidth('plain ascii')).toBe(11)
+  })
+})
+
 describe('display width', () => {
   test('displayWidth counts cells per grapheme', () => {
     expect(displayWidth('')).toBe(0)
@@ -1305,6 +1327,13 @@ describe('turnTable', () => {
   ]
   const table = (width: number, icons = ICON_SETS.nerd) => turnTable(turns, stats, width, icons)
   const row = (t: ReturnType<typeof table>, i: number) => t.rows[i]!
+
+  test('a very narrow pane never overflows', () => {
+    for (const width of [40, 30, 20, 10]) {
+      const t = table(width)
+      for (const r of t.rows) expect(displayWidth(r.label)).toBeLessThanOrEqual(Math.max(0, width - 4))
+    }
+  })
 
   test('a wide pane shows number, prompt, tools, time, tokens and the bar', () => {
     const t = table(100)
