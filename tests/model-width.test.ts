@@ -8,9 +8,9 @@ import {
   splitMatch,
   taskMark,
   toolSections,
-  toolSummary,
   turnTail,
 } from '../hooks/model'
+import { toolSummary } from '../hooks/model/summaries'
 import type { ToolItem } from '../hooks/model/types'
 import {
   displayWidth,

@@ -30,9 +30,7 @@ import {
   hoverCard,
   isAgentRunning,
   isSubagent,
-  itemName,
   itemStatus,
-  itemSummary,
   overflowRows,
   pageScroll,
   pieceStarts,
@@ -40,7 +38,6 @@ import {
   splitDiff,
   splitMatch,
   taskMark,
-  toolCategory,
   traceStats,
   turnTable,
   type FooterLayout,
@@ -65,6 +62,7 @@ import {
   treePrefix,
 } from './model/format'
 import { sanitizeText } from './model/sanitize'
+import { itemName, itemSummary, toolCategory } from './model/summaries'
 import type { Item, ToolItem, Turn } from './model/types'
 import {
   displayWidth,
