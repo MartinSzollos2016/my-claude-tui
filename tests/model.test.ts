@@ -18,12 +18,14 @@ import {
   languageFor,
   paneColumns,
   resultLine,
+  searchTurns,
   toolSections,
   type ToolItem,
   itemSummary,
   sanitizePrompt,
   sanitizeText,
   shortModel,
+  splitMatch,
   toolSummary,
   traceItems,
   truncateMiddle,
@@ -498,5 +500,38 @@ describe('fitPath', () => {
     expect(fitPath(bash, bash.summary, 10)).toBe('xxxxxxxxx…')
     const grep = item('Grep', { pattern: 'x' })
     expect(fitPath(grep, grep.summary, 30)).toBe('"x"')
+  })
+})
+
+describe('splitMatch', () => {
+  test('splits a snippet around the query, whatever the case', () => {
+    expect(splitMatch('foo Bar baz', 'bar')).toEqual({ before: 'foo ', match: 'Bar', after: ' baz' })
+    expect(splitMatch('foo Bar baz', '  BAR ')).toEqual({ before: 'foo ', match: 'Bar', after: ' baz' })
+    expect(splitMatch('…tail Bar', 'bar')).toEqual({ before: '…tail ', match: 'Bar', after: '' })
+  })
+
+  test('no match, or no query, leaves the snippet whole', () => {
+    expect(splitMatch('foo', 'zzz')).toEqual({ before: 'foo', match: '', after: '' })
+    expect(splitMatch('foo', '  ')).toEqual({ before: 'foo', match: '', after: '' })
+  })
+
+  test('maps offsets like snippetAt: lowercase length changes and surrogate pairs', () => {
+    // "İ" lowercases to two UTF-16 units, so offsets in the lowercased text drift.
+    expect(splitMatch('İx', 'x')).toEqual({ before: 'İ', match: 'x', after: '' })
+    expect(splitMatch('😀 Bar 😀', 'bar')).toEqual({ before: '😀 ', match: 'Bar', after: ' 😀' })
+    expect(splitMatch('😀😀', '😀')).toEqual({ before: '', match: '😀', after: '😀' })
+  })
+
+  test('agrees with searchTurns: the snippet it made holds the match it finds', () => {
+    const long = `${'a'.repeat(60)} needle ${'b'.repeat(60)}`
+    const turns = buildTurns([
+      { role: 'user', text: long, toolUses: [] },
+      { role: 'assistant', text: 'ok', toolUses: [] },
+    ])
+    const [hit] = searchTurns(turns, 'NEEDLE')
+    const split = splitMatch(hit!.snippet, 'NEEDLE')
+    expect(split.match).toBe('needle')
+    expect(split.before.startsWith('…')).toBe(true)
+    expect(split.after.endsWith('…')).toBe(true)
   })
 })
