@@ -1,6 +1,6 @@
 {
   "name": "tail-view",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "tail-claude's detail view (tool calls, subagent traces) and info bar inside Claude Code",
   "types": "./types/index.d.ts",
   "author": {
