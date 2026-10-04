@@ -169,7 +169,15 @@ describe('formatting edges', () => {
 
   test('helpText lists every command', () => {
     const help = helpText()
-    for (const name of ['/tail ', '/tail-turns', '/tail-width', '/tail-compact', '/tail-bar', '/tail-help']) {
+    for (const name of [
+      '/tail ',
+      '/tail-turns',
+      '/tail-width',
+      '/tail-compact',
+      '/tail-bar',
+      '/tail-status',
+      '/tail-help',
+    ]) {
       expect(help).toContain(name)
     }
   })

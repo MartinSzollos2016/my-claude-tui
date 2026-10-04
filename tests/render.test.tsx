@@ -689,6 +689,7 @@ describe('commands', () => {
       'tail-compact',
       'tail-help',
       'tail-icons',
+      'tail-status',
       'tail-turns',
       'tail-width',
     ])
@@ -718,7 +719,15 @@ describe('commands', () => {
   test('/tail-help and /tail help list every command', async ($, on) => {
     mock.store(on)
     for (const ran of [await $.command.run(run('tail-help')), await $.command.run(run('tail', 'help'))]) {
-      for (const name of ['/tail-turns', '/tail-width', '/tail-compact', '/tail-icons', '/tail-bar', '/tail-help'])
+      for (const name of [
+        '/tail-turns',
+        '/tail-width',
+        '/tail-compact',
+        '/tail-icons',
+        '/tail-bar',
+        '/tail-status',
+        '/tail-help',
+      ])
         expect(ran.text).toContain(name)
     }
   })
@@ -742,6 +751,15 @@ describe('commands', () => {
     expect(rows).not.toContain('✓')
     expect(rows).toMatch(/^[\x20-\x7e\n]*$/)
     await ui.unmount()
+  })
+
+  test('/tail-status is stored and answers in the engine', async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_700_000_000_000 })
+    expect((await $.command.run(run('tail-status'))).text).toContain('on')
+    expect((await $.command.run(run('tail-status', 'off'))).text).toBe('Status line: off.')
+    expect((await $.command.run(run('tail', 'status'))).text).toContain('off')
+    expect((await $.command.run(run('tail-status', 'on'))).text).toBe('Status line: on.')
   })
 
   test('/tail-width works like its /tail form', async ($, on) => {
