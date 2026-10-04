@@ -26,6 +26,7 @@ import {
   resultLine,
   sanitizePrompt,
   sanitizeText,
+  searchTurns,
   shortPath,
   traceItems,
   turnListText,
@@ -33,6 +34,7 @@ import {
   turnText,
   type Item,
   type Turn,
+  type TurnMatch,
 } from './model'
 import { COMMANDS, helpText, parseCommand } from './commands'
 import {
@@ -65,6 +67,7 @@ const selectedTurn = atom({ plugin: 'tail-view', key: 'turn' } as const, null)
 const paneView = atom({ plugin: 'tail-view', key: 'view' } as const, 'detail')
 const expanded = atom({ plugin: 'tail-view', key: 'expanded' } as const, [])
 const fullBlocks = atom({ plugin: 'tail-view', key: 'full' } as const, [])
+const searchQuery = atom({ plugin: 'tail-view', key: 'query' } as const, '')
 const timings = atom({ plugin: 'tail-view', key: 'timings' } as const, {})
 const turnStats = atom({ plugin: 'tail-view', key: 'turnStats' } as const, [])
 const agentStats = atom({ plugin: 'tail-view', key: 'agentStats' } as const, {})
@@ -92,6 +95,7 @@ async function refreshGit($: EngineInterface): Promise<void> {
 
 // Module-local caches: a reload starts them over, which costs one rebuild.
 let turnsCache: Memo<Turn[]> | undefined
+let searchCache: Memo<TurnMatch[]> | undefined
 
 // The session's turns, rebuilt only when the transcript's fingerprint moved.
 async function currentTurns($: EngineInterface): Promise<Memo<Turn[]>> {
@@ -279,6 +283,20 @@ async function pickTurn($: EngineInterface, index: number, latest: number) {
   await update($, paneView, () => 'detail' as const)
 }
 
+// The search key: opens the turn list and puts the cursor in its field.
+async function focusSearch($: EngineInterface): Promise<void> {
+  await update($, paneView, () => 'turns' as const)
+  await $.ui.focus({ requestId: PANE, key: 'turn-search' })
+}
+
+// Enter in the search field: keeps the query and opens the newest match,
+// the first one the list shows.
+async function openMatch($: EngineInterface, value: string, turns: readonly Turn[]): Promise<void> {
+  await update($, searchQuery, () => value)
+  const newest = searchTurns(turns, value).at(-1)
+  if (newest) await pickTurn($, newest.index, turns.length - 1)
+}
+
 // Names the tail-view theme matching the current one; picking it is the
 // person's, in /theme (the config API only accepts built-in themes).
 async function themeAdvice($: EngineInterface): Promise<string> {
@@ -432,7 +450,8 @@ export const register: Register = on => {
     const el = $.ui.resolve(e) as unknown as El
     await read($, tick)
 
-    const turns = (await currentTurns($)).value
+    const turnsMemo = await currentTurns($)
+    const turns = turnsMemo.value
     const latest = turns.length - 1
     const chosen = await read($, selectedTurn)
     const selected = chosen === null || chosen > latest ? latest : chosen
@@ -444,6 +463,10 @@ export const register: Register = on => {
     const allStats = await read($, turnStats)
 
     const step = (delta: number | null) => update($, selectedTurn, cur => nextSelectedTurn(cur, latest, delta))
+    const view = await read($, paneView)
+    const query = await read($, searchQuery)
+    const isSearching = view === 'turns' && query.trim() !== ''
+    if (isSearching) searchCache = memo(searchCache, `${turnsMemo.key}\n${query}`, () => searchTurns(turns, query))
 
     return renderPane(
       el,
@@ -465,7 +488,9 @@ export const register: Register = on => {
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
         full: new Set(await read($, fullBlocks)),
-        view: await read($, paneView),
+        view,
+        query,
+        matches: isSearching ? searchCache?.value : undefined,
         stats: turns.map(t => statFor(allStats, t)),
       },
       {
@@ -484,6 +509,9 @@ export const register: Register = on => {
         showTurns: () => update($, paneView, () => 'turns' as const).catch(ignore),
         showDetail: () => update($, paneView, () => 'detail' as const).catch(ignore),
         pickTurn: index => pickTurn($, index, latest).catch(ignore),
+        search: value => update($, searchQuery, () => value).catch(ignore),
+        submitSearch: value => openMatch($, value, turns).catch(ignore),
+        focusSearch: () => focusSearch($).catch(ignore),
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
         toggleFull: id => update($, fullBlocks, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
       },

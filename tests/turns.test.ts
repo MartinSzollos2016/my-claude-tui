@@ -8,6 +8,7 @@ import {
   EMPTY_TURN_TEXT,
   isAgentFinished,
   isAgentRunning,
+  searchTurns,
   turnListText,
   turnTail,
   turnText,
@@ -145,5 +146,54 @@ describe('turnListText', () => {
       'Turns (2), newest last:\n#1   Fix the bug  3 tools · 1 agent · 2.0s\n#2   Thanks  reply',
     )
     expect(turnListText([], [])).toBe('No turns yet.')
+  })
+})
+
+describe('searchTurns', () => {
+  const turns = buildTurns([
+    ...main,
+    prompt('Now add TESTS'),
+    { role: 'assistant', text: 'Added.', toolUses: [] },
+    prompt('Explain (a+)+$[ please'),
+    { role: 'assistant', text: 'It is a pattern.', toolUses: [] },
+  ])
+
+  test('finds prompts, outputs, summaries and results, ignoring case', () => {
+    expect(searchTurns(turns, 'tests').map(m => m.index)).toEqual([1])
+    expect(searchTurns(turns, 'PACKAGE MAIN').map(m => m.index)).toEqual([0])
+    expect(searchTurns(turns, 'find callers').map(m => m.index)).toEqual([0])
+    expect(searchTurns(turns, 'looking').map(m => m.index)).toEqual([0])
+    expect(searchTurns(turns, 'nowhere')).toEqual([])
+  })
+
+  test('an empty query matches nothing, so the list shows every turn', () => {
+    expect(searchTurns(turns, '')).toEqual([])
+    expect(searchTurns(turns, '   ')).toEqual([])
+  })
+
+  test('matches regex-special characters literally', () => {
+    expect(searchTurns(turns, '(a+)+$[').map(m => m.index)).toEqual([2])
+    expect(searchTurns(turns, '.*')).toEqual([])
+    expect(searchTurns(turns, 'a.*(b')).toEqual([])
+    const literal = buildTurns([prompt('see a.*(b here')])
+    expect(searchTurns(literal, 'a.*(b').map(m => m.index)).toEqual([0])
+  })
+
+  test('a snippet of at most 80 characters around the first hit', () => {
+    const long = buildTurns([prompt(`${'a'.repeat(200)} needle ${'b'.repeat(200)}`)])
+    const [match] = searchTurns(long, 'needle')
+    expect(match!.snippet.length).toBeLessThanOrEqual(80)
+    expect(match!.snippet).toContain('needle')
+    expect(match!.snippet.startsWith('…')).toBe(true)
+    expect(match!.snippet.endsWith('…')).toBe(true)
+    expect(searchTurns(buildTurns([prompt('short\nline')]), 'line')[0]!.snippet).toBe('short line')
+  })
+
+  test('stays linear on a long input', () => {
+    const big = buildTurns([prompt('x'), { role: 'assistant', text: 'a'.repeat(1_000_000), toolUses: [] }])
+    const started = performance.now()
+    expect(searchTurns(big, 'ab')).toEqual([])
+    expect(searchTurns(big, 'a'.repeat(50) + 'b')).toEqual([])
+    expect(performance.now() - started).toBeLessThan(500)
   })
 })

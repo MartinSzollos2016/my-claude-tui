@@ -24,6 +24,7 @@ import {
   isSubagent,
   itemName,
   itemSummary,
+  sanitizeText,
   shortMode,
   shortModel,
   toolCategory,
@@ -35,6 +36,7 @@ import {
   type Item,
   type ToolItem,
   type Turn,
+  type TurnMatch,
 } from './model'
 import { C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 
@@ -49,6 +51,8 @@ type ThemedBoxProps = Omit<BoxProps, 'backgroundColor' | 'borderColor'> & {
 export type El = Pick<Elements['terminal'], 'Button' | 'Markdown' | 'Code'> & {
   Box: ElementConstructor<ThemedBoxProps>
   Text: ElementConstructor<ThemedTextProps>
+  // Optional: the mobile surface draws no field.
+  Input?: Elements['terminal']['Input']
 }
 
 const G = {
@@ -117,6 +121,9 @@ type PaneData = {
   // What the pane shows, and the stat recorded for each turn (by index).
   view: 'detail' | 'turns'
   stats: readonly (TurnStat | undefined)[]
+  // The turn search: what is typed, and the turns that match it.
+  query?: string
+  matches?: readonly TurnMatch[]
 }
 
 // The engine refuses a tree with a text over 10000 characters or over 100000
@@ -146,6 +153,9 @@ type PaneActions = {
   showTurns: () => void
   showDetail: () => void
   pickTurn: (index: number) => void
+  search: (query: string) => void
+  submitSearch: (query: string) => void
+  focusSearch: () => void
 }
 
 function itemDuration(item: Item, data: Ctx): number | undefined {
@@ -198,38 +208,67 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 }
 
 // Every turn of the session, newest first: one button per turn that opens
-// it in the detail view.
+// it in the detail view. A search narrows the list to the matching turns
+// and shows where each one matched.
 function renderTurnList(el: El, data: Ctx, act: PaneActions) {
-  const { Box, Button, Text } = el
+  const { Box, Button, Input, Text } = el
   const width = data.columns - 2
-  const rows = data.turns.map((turn, index) => {
-    const stat = data.stats[index]
-    const marker = index === data.selected ? '›' : ' '
-    const number = `#${index + 1}`.padEnd(5)
-    const tail = turnTail(turn, stat)
-    const prompt = truncate(turn.prompt || '(no prompt)', Math.max(10, width - number.length - tail.length - 6))
-    return {
-      index,
-      label: `${marker} ${number}${prompt.padEnd(Math.max(0, width - number.length - tail.length - 5))}  ${tail}`,
-    }
-  })
+  const query = data.query ?? ''
+  const isFiltered = query.trim() !== ''
+  const snippets = new Map((data.matches ?? []).map(match => [match.index, match.snippet] as const))
+  const rows = data.turns
+    .filter(turn => !isFiltered || snippets.has(turn.index))
+    .map(turn => {
+      const index = turn.index
+      const marker = index === data.selected ? '›' : ' '
+      const number = `#${index + 1}`.padEnd(5)
+      const tail = turnTail(turn, data.stats[index])
+      const prompt = truncate(turn.prompt || '(no prompt)', Math.max(10, width - number.length - tail.length - 6))
+      return {
+        index,
+        snippet: snippets.get(index) ?? '',
+        label: `${marker} ${number}${prompt.padEnd(Math.max(0, width - number.length - tail.length - 5))}  ${tail}`,
+      }
+    })
 
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" gap={2}>
-        <Text bold color={C.brand}>{`Turns (${data.turns.length})`}</Text>
+        <Text bold color={C.brand}>
+          {isFiltered ? `Turns (${rows.length} of ${data.turns.length})` : `Turns (${data.turns.length})`}
+        </Text>
         <Button key="nav-detail" plain hotkey="d" label="back to detail" onPress={act.showDetail} />
+        <Button key="nav-search" plain hotkey="s" label="search" onPress={act.focusSearch} />
       </Box>
-      <Box flexDirection="column" marginTop={1}>
-        {rows.reverse().map(row => (
-          <Button
-            key={`turn-${row.index}`}
-            plain
-            dimColor={row.index !== data.selected}
-            label={row.label}
-            hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover }}
-            onPress={() => act.pickTurn(row.index)}
+      {Input && (
+        <Box flexDirection="row" gap={2}>
+          <Input
+            key="turn-search"
+            placeholder="Search turns"
+            value={query}
+            submitLabel="open"
+            onInput={value => act.search(value)}
+            onSubmit={value => act.submitSearch(value)}
           />
+          {isFiltered && <Button key="search-clear" plain dimColor label="clear" onPress={() => act.search('')} />}
+        </Box>
+      )}
+      <Box flexDirection="column" marginTop={1}>
+        {isFiltered && rows.length === 0 && (
+          <Text dimColor>{`No turn matches "${truncate(sanitizeText(query), 40)}".`}</Text>
+        )}
+        {rows.reverse().map(row => (
+          <Box key={`turn-row-${row.index}`} flexDirection="column">
+            <Button
+              key={`turn-${row.index}`}
+              plain
+              dimColor={row.index !== data.selected}
+              label={row.label}
+              hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover }}
+              onPress={() => act.pickTurn(row.index)}
+            />
+            {row.snippet !== '' && <Text dimColor wrap="truncate-end">{`      ${sanitizeText(row.snippet)}`}</Text>}
+          </Box>
         ))}
       </Box>
     </Box>
@@ -294,6 +333,7 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
       <Button key="nav-next" plain hotkey="n" dimColor={data.selected >= total - 1} label="next" onPress={act.next} />
       <Button key="nav-latest" plain hotkey="l" dimColor={data.isLatest} label="latest" onPress={act.latest} />
       <Button key="nav-turns" plain hotkey="t" label="turns" onPress={act.showTurns} />
+      <Button key="nav-search" plain hotkey="s" label="search" onPress={act.focusSearch} />
       <Button key="nav-expand" plain hotkey="e" label="expand all" onPress={act.expandAll} />
       <Button key="nav-collapse" plain hotkey="c" label="collapse" onPress={act.collapseAll} />
     </Box>

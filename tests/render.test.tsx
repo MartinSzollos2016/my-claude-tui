@@ -120,6 +120,34 @@ const PANE = {
 } as const
 
 describe('detail pane', () => {
+  test('typing in the turn search narrows the list and Enter opens the match', async ($, on) => {
+    const three: SessionMessage[] = [
+      ...main,
+      { role: 'user', text: 'Now add tests', toolUses: [] },
+      { role: 'assistant', text: 'Added.', toolUses: [] },
+      { role: 'user', text: 'Thanks', toolUses: [] },
+      { role: 'assistant', text: 'You are welcome.', toolUses: [] },
+    ]
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', (_$, e) => ({ value: e.agentId ? child : three }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    await ui.press({ key: 'nav-turns' })
+    await ui.input({ key: 'turn-search', text: 'tests', kind: 'change' })
+    const labels = (await ui.findAll({ type: 'Button' }))
+      .filter(b => /^turn-\d+$/.test(String(b.key ?? '')))
+      .map(b => String(b.props['label']))
+    expect(labels.length).toBe(1)
+    expect(labels[0]).toContain('Now add tests')
+
+    await ui.input({ key: 'turn-search', text: 'fix' })
+    expect(await ui.find({ text: /turn 1\/3/ })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('copies a whole block and says so', async ($, on) => {
     const lines = Array.from({ length: 500 }, (_, i) => `line ${i}`).join('\n')
     const long: SessionMessage[] = [
