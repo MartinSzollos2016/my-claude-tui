@@ -144,6 +144,8 @@ const foldedOpen = new Set(['group:fr1', 'group:fg1', 'fe'])
 const foldedStats = [{ prompt: '日本語 fold', durationMs: 9_000, endedAt: 0, inputTokens: 3, outputTokens: 4 }]
 
 const calls: string[] = []
+// The windows each drawing reports, apart from the calls of the keys.
+const measured: { scrollTop: number; windowRows: number; total: number }[] = []
 const act = {
   copy: (text: string, surface?: string) => calls.push(`copy:${surface}:${text}`),
   toggle: (id: string) => calls.push(`toggle:${id}`),
@@ -164,6 +166,7 @@ const act = {
     calls.push(`down:${at.scrollTop}/${at.windowRows}/${at.total}/${at.starts['b1']}/${at.starts['e1']}`),
   cursorUp: () => calls.push('up'),
   scroll: (top: number) => calls.push(`scroll:${top}`),
+  measure: (at: { scrollTop: number; windowRows: number; total: number }) => measured.push(at),
   cursorOpen: () => calls.push('open'),
   copyCursor: (surface?: string) => calls.push(`copyCursor:${surface}`),
 }
@@ -1550,6 +1553,12 @@ describe('own scroll', () => {
       expect(acts(fits, 'nav-pagedown')).toBe(false)
     }
     expect(byKey(pane({ rows: 10, icons: ICON_SETS.ascii }), 'nav-pagedown')?.props['label']).toBe('v page')
+  })
+
+  test('each drawing reports where its window stands, for the scroll of the engine', () => {
+    measured.length = 0
+    pane({ rows: 10, scrollTop: 99 })
+    expect(measured).toEqual([expect.objectContaining({ scrollTop: 4, windowRows: 4, total: 6 })])
   })
 
   test('the status row says top or end while the content overflows', () => {

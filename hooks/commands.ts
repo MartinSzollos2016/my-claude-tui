@@ -69,7 +69,7 @@ export function helpText(): string {
     '',
     'In the pane: Tab/shift+Tab move, Enter or click expands a row, p/n/l previous/next/latest turn,',
     't turn list, s search turns, m team board, j/k move the row cursor, o opens it, y copies it, e/c expand/collapse all,',
-    'f/b page the pane down/up (the wheel does not scroll it), "show all" opens a long block,',
+    'f/b page the pane down/up (the wheel and PgUp/PgDn scroll it too), "show all" opens a long block,',
     '"copy" copies it whole, Esc returns to the prompt.',
   ].join('\n')
 }
