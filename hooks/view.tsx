@@ -25,6 +25,7 @@ import {
   shortModel,
   toolCategory,
   toolSections,
+  turnCounts,
   type Section,
   traceStats,
   truncate,
@@ -110,6 +111,9 @@ export type PaneData = {
   rows: number
   // Blocks shown whole instead of previewed, by block id.
   full: ReadonlySet<string>
+  // What the pane shows, and the stat recorded for each turn (by index).
+  view: 'detail' | 'turns'
+  stats: readonly (TurnStat | undefined)[]
 }
 
 // The engine refuses a tree with a text over 10000 characters or over 100000
@@ -135,6 +139,9 @@ export type PaneActions = {
   expandAll: () => void
   collapseAll: () => void
   toggleFull: (id: string) => void
+  showTurns: () => void
+  showDetail: () => void
+  pickTurn: (index: number) => void
 }
 
 const isAgentRunning = (status: AgentStatus | undefined) =>
@@ -165,6 +172,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   if (!turn) {
     return paneBody(el, data, <Text dimColor>No turns yet. Send a prompt and the detail view fills in.</Text>)
   }
+  if (data.view === 'turns') return paneBody(el, data, renderTurnList(el, data, act))
 
   return paneBody(
     el,
@@ -185,6 +193,45 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
         {turn.items.map(item => renderItem(el, item, data, act, 0))}
       </Box>
     </Box>,
+  )
+}
+
+// Every turn of the session, newest first: one button per turn that opens
+// it in the detail view.
+function renderTurnList(el: El, data: Ctx, act: PaneActions) {
+  const { Box, Button, Text } = el
+  const width = data.columns - 2
+  const rows = data.turns.map((turn, index) => {
+    const stat = data.stats[index]
+    const marker = index === data.selected ? '›' : ' '
+    const number = `#${index + 1}`.padEnd(5)
+    const tail = [turnCounts(turn), stat ? formatDuration(stat.durationMs) : ''].filter(Boolean).join(' · ')
+    const prompt = truncate(turn.prompt || '(no prompt)', Math.max(10, width - number.length - tail.length - 6))
+    return {
+      index,
+      label: `${marker} ${number}${prompt.padEnd(Math.max(0, width - number.length - tail.length - 5))}  ${tail}`,
+    }
+  })
+
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" gap={2}>
+        <Text bold color={C.brand}>{`Turns (${data.turns.length})`}</Text>
+        <Button key="nav-detail" plain hotkey="d" label="back to detail" onPress={act.showDetail} />
+      </Box>
+      <Box flexDirection="column" marginTop={1}>
+        {rows.reverse().map(row => (
+          <Button
+            key={`turn-${row.index}`}
+            plain
+            dimColor={row.index !== data.selected}
+            label={row.label}
+            hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover }}
+            onPress={() => act.pickTurn(row.index)}
+          />
+        ))}
+      </Box>
+    </Box>
   )
 }
 
@@ -245,6 +292,7 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
       <Text dimColor>{`turn ${data.selected + 1}/${total}${data.isLatest ? ' (live)' : ''}`}</Text>
       <Button key="nav-next" plain hotkey="n" dimColor={data.selected >= total - 1} label="next" onPress={act.next} />
       <Button key="nav-latest" plain hotkey="l" dimColor={data.isLatest} label="latest" onPress={act.latest} />
+      <Button key="nav-turns" plain hotkey="t" label="turns" onPress={act.showTurns} />
       <Button key="nav-expand" plain hotkey="e" label="expand all" onPress={act.expandAll} />
       <Button key="nav-collapse" plain hotkey="c" label="collapse" onPress={act.collapseAll} />
     </Box>
