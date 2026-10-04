@@ -67,6 +67,26 @@ const PANE = {
 } as const
 
 describe('detail pane', () => {
+  test('paints the body with the theme background, full height', async ($, on) => {
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+    let messages: SessionMessage[] = main
+    on('session.messages', () => ({ value: messages }))
+
+    for (const shown of [main, []]) {
+      messages = shown
+      const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+      const root = (await ui.drawn()) as { type: string; props: Record<string, unknown> }
+      expect(root.type).toBe('Box')
+      expect(root.props['backgroundColor']).toBe('inverseText')
+      expect(root.props['width']).toBe(PANE.props.bodyColumns)
+      expect(root.props['minHeight']).toBe(PANE.props.scroll.bodyRows)
+      await ui.unmount()
+    }
+  })
+
   test('lists the turn items and drills into a subagent trace', async ($, on) => {
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.messages', (_$, e) => ({ value: (e.agentId === 'agent-1' ? child : main) }))

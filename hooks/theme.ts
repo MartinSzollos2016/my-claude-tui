@@ -9,6 +9,7 @@
 // of Claude Code 2.1.289.
 
 export const THEME_KEYS = [
+  'inverseText',
   'claude',
   'suggestion',
   'permission',
@@ -32,6 +33,10 @@ export type ThemeKey = (typeof THEME_KEYS)[number]
 // Semantic roles, mapped from tail-claude's theme.go onto the nearest
 // Claude Code role so the mod reads as part of the host UI.
 export const C = {
+  // The pane body: black on dark themes, white on light ones (the inverse
+  // of the text color), replacing the engine's grey sidebar fill so the
+  // text reads at full contrast.
+  paneBackground: 'inverseText',
   brand: 'claude',
   accent: 'suggestion',
   error: 'error',

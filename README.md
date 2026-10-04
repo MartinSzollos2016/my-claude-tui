@@ -20,7 +20,9 @@ the mod show no timing.
 
 Every color is a Claude Code **theme key** (`success`, `warning`, `planMode`,
 …, see `hooks/theme.ts`), so the mod follows `/theme` (dark, light,
-daltonized, ANSI) including a switch mid-session. The engine does not validate
+daltonized, ANSI) including a switch mid-session. The pane body is painted
+with `inverseText` (black on dark themes, white on light ones) instead of the
+engine's grey sidebar fill, for full text contrast. The engine does not validate
 keys, so `Text` in the views is typed to accept only `ThemeKey` and a render
 test checks every color in the drawn tree.
 
