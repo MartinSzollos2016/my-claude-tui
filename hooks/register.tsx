@@ -27,7 +27,8 @@ import {
   stepCursor,
   rowText,
   scrollToRow,
-  clampScroll,
+  engineScroll,
+  type EngineScroll,
   finishedSince,
   finishedWorkflows,
   gitDirFrom,
@@ -492,21 +493,20 @@ async function moveRowCursor(
 // and the next drawing clamps whatever the wheel did meanwhile.
 const drawnFrames: Partial<Record<'detail' | 'turns' | 'team', ScrollFrame>> = {}
 
-// The engine's wheel, arrows and page keys over the pane: the pane is as tall
-// as its window, so the engine has nothing to move. The shown view's own
-// scroll moves by `by` rows instead, clamped like f and b, and the engine's
-// window stays (no `next`); the state change draws the pane again.
-async function scrollPane($: EngineInterface, by: number): Promise<UiScrollResult> {
+// The engine's wheel and page keys over the pane: the pane is as tall as its
+// window, so the engine has nothing to move. The shown view's own scroll moves
+// instead (engineScroll: a wheel step, a page, the top or the end), clamped
+// like f and b, and the engine's window stays (no `next`); the state change
+// draws the pane again.
+async function scrollPane($: EngineInterface, move: EngineScroll): Promise<UiScrollResult> {
   const view = await read($, paneView)
   const frame = drawnFrames[view]
-  await update($, paneScroll, all => {
-    const top = frame === undefined ? Math.max(0, all[view] + by) : clampAt(frame, clampAt(frame, all[view]) + by)
-    return { ...all, [view]: top }
-  })
+  await update($, paneScroll, all => ({
+    ...all,
+    [view]: frame === undefined ? Math.max(0, all[view] + move.by) : engineScroll(all[view], move, frame),
+  }))
   return {}
 }
-
-const clampAt = (frame: ScrollFrame, top: number) => clampScroll(top, frame.total, frame.windowRows)
 
 // Every view's content back to the top: the shown turn or the view changed.
 async function scrollToTop($: EngineInterface): Promise<void> {
@@ -894,7 +894,7 @@ export const register: Register = on => {
     )
   })
 
-  on('ui.scroll', { requestId: PANE }, ($, e) => scrollPane($, e.by))
+  on('ui.scroll', { requestId: PANE }, ($, e) => scrollPane($, e))
 
   // The transcript stays a conversation; tool detail lives in the pane.
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
