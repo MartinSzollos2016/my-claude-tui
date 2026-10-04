@@ -74,12 +74,13 @@ npm run coverage  # Istanbul coverage of the unit-tested logic (coverage/index.h
 ```
 
 `npm run typecheck` needs the plugin API types Claude Code writes to `.claude-plugin/types/`
-when it loads the plugin. The pre-push hook runs `npm run check` and `npm audit`; CI runs the
-same checks plus coverage and gitleaks.
+when it loads the plugin. The pre-push hook runs `npm run check`, `npm run coverage` and
+`npm audit`; CI runs the same plus gitleaks.
 
-Coverage covers what the unit tests import directly (Vitest with Istanbul). The render tests
-run inside Claude Code's sandboxed test runner, which cannot be instrumented, so the pane and
-hook wiring they exercise count as uncovered.
+Coverage (Vitest with Istanbul) measures the unit tests: about 73 % of lines overall and
+95–100 % of the logic and views, with floors enforced in CI and the pre-push hook. The hook
+wiring in `register.tsx` is exercised only by the render tests, which run inside Claude Code's
+sandboxed test runner and cannot be instrumented.
 
 Commits use [Conventional Commits](https://www.conventionalcommits.org/) with a
 [gitmoji](https://gitmoji.dev/), e.g. `✨ feat(view): add turn list`.
