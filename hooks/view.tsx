@@ -47,7 +47,7 @@ import {
   taskMark,
   toolCategory,
   treePrefix,
-  turnTail,
+  turnTable,
   type Section,
   type TaskEntry,
   type TeamMember,
@@ -329,28 +329,19 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 function renderTurnList(el: El, data: Ctx, act: PaneActions) {
   const trunc = cutter(data.icons)
   const { Box, Button, Input, Text } = el
-  const width = data.columns - 2
   const query = data.query ?? ''
   const isFiltered = query.trim() !== ''
   const snippets = new Map((data.matches ?? []).map(match => [match.index, match.snippet] as const))
-  const rows = data.turns
-    .filter(turn => !isFiltered || snippets.has(turn.index))
-    .map(turn => {
-      const index = turn.index
-      const marker = index === data.selected ? data.icons.marker : ' '
-      const number = padEndDisplay(`#${index + 1}`, 5)
-      const tail = turnTail(turn, data.stats[index], data.icons.dot)
-      const prompt = trunc(
-        turn.prompt || '(no prompt)',
-        Math.max(10, width - displayWidth(number) - displayWidth(tail) - 6),
-      )
-      return {
-        index,
-        snippet: snippets.get(index) ?? '',
-        label: `${marker} ${number}${padEndDisplay(prompt, Math.max(0, width - displayWidth(number) - displayWidth(tail) - 5))}  ${tail}`,
-      }
-    })
+  const table = turnTable(data.turns, data.stats, data.columns, data.icons)
+  const rows = table.rows
+    .filter(row => !isFiltered || snippets.has(row.index))
+    .map(row => ({
+      index: row.index,
+      snippet: snippets.get(row.index) ?? '',
+      label: `${row.index === data.selected ? data.icons.marker : ' '} ${row.label}`,
+    }))
 
+  data.budget.left -= table.header.length + 2
   // Every row draws from the pane's text budget; what does not fit is counted.
   const shown: typeof rows = []
   for (const row of rows.reverse()) {
@@ -409,6 +400,11 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
         </Box>
       )}
       <Box flexDirection="column" marginTop={1}>
+        {rows.length > 0 && (
+          <Text key="turn-header" color={C.muted}>
+            {`  ${table.header}`}
+          </Text>
+        )}
         {isFiltered && rows.length === 0 && (
           <Box flexDirection="column">
             <Text color={C.muted}>{`No turn matches "${trunc(sanitizeText(query), 40)}".`}</Text>

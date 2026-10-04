@@ -110,6 +110,29 @@ const base = {
   stats: [undefined, undefined],
 }
 
+// Four reads and three searches in a row (two groups), then an edit; the
+// regressions below draw it folded, open, narrow and in every icon set.
+const foldedTurn = buildTurns([
+  { role: 'user', text: '日本語 fold', toolUses: [] },
+  {
+    role: 'assistant',
+    text: '',
+    toolUses: [
+      ...[1, 2, 3, 4].map(n => ({
+        tool_use_id: `fr${n}`,
+        tool: 'Read',
+        input: { file_path: `/s/f${n}.ts` },
+        text: 'x',
+      })),
+      ...[1, 2, 3].map(n => ({ tool_use_id: `fg${n}`, tool: 'Grep', input: { pattern: `p${n}` }, text: 'm' })),
+      { tool_use_id: 'fe', tool: 'Edit', input: { file_path: '/s/a', old_string: 'a', new_string: 'b' }, text: 'ok' },
+    ],
+  },
+])
+const foldedTimings = { fr1: { start: 0, end: 800 }, fr2: { start: 800, end: 1500 }, fg1: { start: 0, end: 90 } }
+const foldedOpen = new Set(['group:fr1', 'group:fg1', 'fe'])
+const foldedStats = [{ prompt: '日本語 fold', durationMs: 9_000, endedAt: 0, inputTokens: 3, outputTokens: 4 }]
+
 const calls: string[] = []
 const act = {
   copy: (text: string, surface?: string) => calls.push(`copy:${surface}:${text}`),
@@ -487,6 +510,24 @@ describe('renderPane', () => {
       renderPane(el, { ...ascii, turns: rich, expanded: richOpen }, act),
       renderPane(el, { ...ascii, turns: rich, expanded: richOpen, full: new Set(['r2:diff', 'r1:output']) }, act),
     )
+    const folded = { ...ascii, turns: foldedTurn.map(t => ({ ...t, prompt: 'fold' })), timings: foldedTimings }
+    trees.push(
+      renderPane(el, folded, act),
+      renderPane(el, { ...folded, expanded: foldedOpen }, act),
+      renderPane(el, { ...folded, expanded: foldedOpen, columns: 60 }, act),
+      renderPane(
+        el,
+        {
+          ...folded,
+          view: 'turns',
+          stats: [{ ...foldedStats[0]!, prompt: 'fold' }],
+          query: 'fold',
+          matches: [{ index: 0, snippet: 'a fold' }],
+        },
+        act,
+      ),
+      renderPane(el, { ...folded, view: 'turns', stats: [{ ...foldedStats[0]!, prompt: 'fold' }], columns: 54 }, act),
+    )
     for (const tree of trees) {
       expect(text(tree)).toMatch(/^[\x20-\x7e\n]*$/)
       for (const n of nodes(tree))
@@ -587,7 +628,7 @@ describe('renderPane', () => {
     expect(row?.type).toBe('Text')
     expect(row?.props['color']).toBe('text')
     expect(row?.props['bold']).toBe(true)
-    expect(text(row)).toContain('reply')
+    expect(text(row)).toContain('Thanks')
     expect(byKey(list, 'turn-0')?.type).toBe('Button')
   })
 
@@ -690,6 +731,12 @@ describe('renderPane', () => {
       renderPane(el, { ...base, isFocused: false }, act),
       renderPane(el, { ...base, view: 'team' }, act),
       renderPane(el, { ...base, turns: [], icons: ICON_SETS.unicode }, act),
+      renderPane(el, { ...base, turns: foldedTurn, timings: foldedTimings }, act),
+      renderPane(el, { ...base, turns: foldedTurn, timings: foldedTimings, expanded: foldedOpen }, act),
+      renderPane(el, { ...base, turns: foldedTurn, timings: foldedTimings, expanded: foldedOpen, columns: 60 }, act),
+      renderPane(el, { ...base, turns: foldedTurn, view: 'turns', stats: foldedStats, selected: 0 }, act),
+      renderPane(el, { ...base, turns: foldedTurn, view: 'turns', stats: foldedStats, selected: 1, columns: 54 }, act),
+      renderPane(el, { ...base, turns: foldedTurn, view: 'turns', stats: foldedStats, columns: 69 }, act),
     ]
     const allowed: unknown[] = [...Object.values(C), ...['fable', 'opus', 'sonnet', 'haiku'].map(m => modelColor(m))]
     let texts = 0
@@ -794,7 +841,7 @@ describe('renderPane', () => {
     const list = renderPane(el, { ...base, view: 'turns', stats: [base.turnStat, undefined] }, act)
     expect(text(list)).toContain('Turns (2)')
     expect(text(byKey(list, 'turn-0'))).toContain('1m 5s')
-    expect(text(byKey(list, 'turn-1'))).toContain('reply')
+    expect(text(byKey(list, 'turn-1'))).toContain('Thanks')
     ;(byKey(list, 'turn-1')?.props['onPress'] as () => void)()
     expect(calls).toContain('pick:1')
     expect(text(renderPane(el, { ...base, turns: [] }, act))).toContain('No turns yet')
@@ -1651,5 +1698,109 @@ describe('grouped runs', () => {
     expect(row?.props['plain']).toBe(true)
     expect(row?.props['dimColor']).toBe(true)
     expect(row?.props['hover']).toMatchObject({ scope: 'row:group:g0' })
+  })
+})
+
+describe('turn table', () => {
+  const wide = buildTurns([
+    { role: 'user', text: 'Fix the bug', toolUses: [{ tool_use_id: 'a', tool: 'Bash', input: {}, text: 'x' }] },
+    { role: 'assistant', text: 'ok', toolUses: [] },
+    { role: 'user', text: '日本語の質問'.repeat(12), toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [] },
+  ])
+  const stats = [
+    { prompt: 'Fix the bug', durationMs: 65_000, endedAt: 0, inputTokens: 1000, outputTokens: 500 },
+    { prompt: '', durationMs: 65_000, endedAt: 0, inputTokens: 10, outputTokens: 5 },
+  ]
+  const table = (columns: number, extra: Record<string, unknown> = {}) =>
+    renderPane(el, { ...base, turns: wide, stats, view: 'turns', columns, ...extra }, act)
+  const timeColumn = (tree: unknown, key: string) => {
+    const label = text(byKey(tree, key))
+    return displayWidth(label.slice(0, label.indexOf('1m 5s')))
+  }
+
+  test('rows are a table with a muted header, the time column in one display column', () => {
+    const tree = table(100)
+    const header = byKey(tree, 'turn-header')
+    expect(header?.type).toBe('Text')
+    expect(header?.props['color']).toBe(C.muted)
+    expect(text(header)).toMatch(/#\s+prompt\s+tools\s+time\s+tokens/)
+    expect(timeColumn(tree, 'turn-0')).toBe(timeColumn(tree, 'turn-1'))
+    expect(displayWidth(text(byKey(tree, 'turn-0')))).toBe(displayWidth(text(byKey(tree, 'turn-1'))))
+    expect(text(byKey(tree, 'turn-0'))).toContain('1.5k')
+    expect(text(byKey(tree, 'turn-0'))).toContain('████████')
+  })
+
+  test('the selected row is bold text, the others buttons', () => {
+    const tree = table(100, { selected: 1 })
+    expect(byKey(tree, 'turn-1')?.type).toBe('Text')
+    expect(byKey(tree, 'turn-1')?.props['bold']).toBe(true)
+    expect(byKey(tree, 'turn-0')?.type).toBe('Button')
+    expect(text(byKey(tree, 'turn-1'))).toContain(ICON_SETS.nerd.marker)
+  })
+
+  test('three widths: all columns, no tokens or bar, then no tools', () => {
+    const w100 = text(byKey(table(100), 'turn-header'))
+    const w69 = text(byKey(table(69), 'turn-header'))
+    const w54 = text(byKey(table(54), 'turn-header'))
+    expect(w100).toMatch(/tools.*time.*tokens/)
+    expect(w69).toContain('tools')
+    expect(w69).not.toContain('tokens')
+    expect(text(byKey(table(69), 'turn-0'))).not.toContain('█')
+    expect(w54).not.toContain('tools')
+    expect(w54).toContain('time')
+    for (const columns of [100, 69, 54]) {
+      const tree = table(columns)
+      expect(displayWidth(text(byKey(tree, 'turn-0')))).toBeLessThanOrEqual(columns - 2)
+    }
+  })
+
+  test('the match snippet stays under its row, highlighted', () => {
+    const tree = table(100, { query: 'bug', matches: [{ index: 0, snippet: 'Fix the bug now' }] })
+    expect(text(tree)).toContain('Fix the bug now')
+    expect(nodes(tree).some(n => n.props['underline'] === true && text(n) === 'bug')).toBe(true)
+  })
+
+  test('the ascii set draws the table in ASCII', () => {
+    const tree = renderPane(
+      el,
+      { ...base, turns: wide.slice(0, 1), stats, view: 'turns', icons: ICON_SETS.ascii, selected: 0 },
+      act,
+    )
+    expect(text(tree)).toMatch(/^[\x20-\x7e\n]*$/)
+    expect(text(byKey(tree, 'turn-0'))).toContain('========')
+  })
+})
+
+describe('group and bar regressions', () => {
+  test('hover scopes stay unique and within 64 characters with groups open', () => {
+    const tree = renderPane(el, { ...base, turns: foldedTurn, timings: foldedTimings, expanded: foldedOpen }, act)
+    const scopes = nodes(tree)
+      .map(n => (n.props['hover'] as { scope?: string } | undefined)?.scope)
+      .filter((scope): scope is string => scope !== undefined)
+    for (const scope of new Set(scopes)) {
+      expect(scope.length).toBeGreaterThanOrEqual(1)
+      expect(scope.length).toBeLessThanOrEqual(64)
+    }
+    expect(scopes).toContain('row:group:fr1')
+    expect(scopes).toContain('row:fr1')
+  })
+
+  test('the pane text stays within the engine limit with a thousand folded calls', () => {
+    const many = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: Array.from({ length: 1000 }, (_, n) => ({
+          tool_use_id: `m${n}`,
+          tool: 'Read',
+          input: { file_path: `/s/${n}.ts` },
+          text: 'x'.repeat(50),
+        })),
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: many, expanded: new Set(['group:m0']) }, act)
+    expect(text(tree).length).toBeLessThan(100_000)
   })
 })
