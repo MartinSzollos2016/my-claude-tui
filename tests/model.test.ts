@@ -6,7 +6,6 @@ import { ICON_SETS } from '../hooks/icons'
 import {
   buildTurns,
   callInput,
-  chunkMarkdown,
   chunkText,
   clampDiff,
   clampText,
@@ -384,14 +383,6 @@ describe('formatters', () => {
     const chunks = chunkText(big, 8000)
     expect(chunks.every(c => c.length <= 8000)).toBe(true)
     expect(chunks.join('\n')).toBe(big)
-  })
-
-  test('chunkMarkdown closes and reopens a code fence cut by a chunk', () => {
-    const md = ['intro', '```ts', 'a()', 'b()', 'c()', '```', 'outro'].join('\n')
-    const chunks = chunkMarkdown(md, 16)
-    expect(chunks.every(c => c.length <= 16 + 4)).toBe(true)
-    for (const c of chunks) expect((c.match(/^```/gm) ?? []).length % 2).toBe(0)
-    expect(chunks.join('\n').replace(/\n```\n```ts/g, '')).toContain('a()')
   })
 
   test('parseGitHead reads the branch, or a short hash when detached', () => {

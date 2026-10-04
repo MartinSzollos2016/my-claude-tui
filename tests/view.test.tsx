@@ -186,7 +186,14 @@ describe('renderPane', () => {
     expect(calls).toContain('toggle:t0:thinking')
 
     const open = renderPane(el, { ...base, thinking, expanded: new Set(['t0:thinking']) }, act)
-    expect(nodes(open).some(n => n.type === 'Markdown' && n.props['text'] === 'Plan the fix')).toBe(true)
+    // Markdown is drawn in the terminal's own foreground, unreadable on the
+    // pane's theme background; prose goes through Code's markdown highlighting.
+    expect(
+      nodes(open).some(
+        n => n.type === 'Code' && n.props['language'] === 'markdown' && n.props['source'] === 'Plan the fix',
+      ),
+    ).toBe(true)
+    expect(nodes(open).some(n => n.type === 'Markdown')).toBe(false)
     expect(byKey(open, 'copy:t0:thinking')).toBeDefined()
   })
 

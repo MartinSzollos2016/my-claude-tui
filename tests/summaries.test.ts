@@ -2,7 +2,6 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { helpText } from '../hooks/commands'
 import {
-  chunkMarkdown,
   clampText,
   compactCall,
   formatClock,
@@ -153,12 +152,6 @@ describe('formatting edges', () => {
 
   test('clampText reports cut characters and lines together', () => {
     expect(clampText('ab\ncd\nef', 2, 1)).toEqual({ text: 'a', note: '… (4 chars hidden, 1 more line)' })
-  })
-
-  test('chunkMarkdown closes a tilde fence with tildes', () => {
-    const chunks = chunkMarkdown(['~~~', 'a', 'b', 'c', '~~~'].join('\n'), 12)
-    expect(chunks[0]?.endsWith('\n~~~')).toBe(true)
-    expect(chunks[1]?.startsWith('~~~')).toBe(true)
   })
 
   test('resultLine edge cases', () => {

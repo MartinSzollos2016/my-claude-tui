@@ -14,7 +14,6 @@ import type {
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
   cachedSections,
-  chunkMarkdown,
   chunkText,
   clampDiff,
   clampText,
@@ -74,7 +73,7 @@ type ThemedBoxProps = Omit<BoxProps, 'backgroundColor' | 'borderColor'> & {
   borderColor?: ThemeKey
 }
 
-export type El = Pick<Elements['terminal'], 'Button' | 'Markdown' | 'Code'> & {
+export type El = Pick<Elements['terminal'], 'Button' | 'Code'> & {
   Box: ElementConstructor<ThemedBoxProps>
   Text: ElementConstructor<ThemedTextProps>
   // Optional: the mobile surface draws no field.
@@ -744,7 +743,7 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
 }
 
 // The turn's thinking as one row above the items, when any of it is
-// readable; expanded, it reads as Markdown like the model's output.
+// readable; expanded, it reads as highlighted Markdown like the model's output.
 function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
   const trunc = cutter(data.icons)
   const { icons } = data
@@ -1214,7 +1213,7 @@ type LongSpec =
 // asks for all of it, cut into pieces under the per-element limit, and drawn
 // from the pane's text budget so the tree never crosses the engine's total.
 function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx, act: PaneActions) {
-  const { Box, Button, Code, Markdown, Text } = el
+  const { Box, Button, Code, Text } = el
   const isFull = data.full.has(id)
   const preview = PREVIEW[spec.kind]
   const limit = isFull ? { lines: Infinity, chars: Infinity } : preview
@@ -1232,13 +1231,11 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
   // A diff is cut only into pieces that are valid diffs; nothing drawn when
   // not even a header fits what is left of the budget.
   const pieces =
-    spec.kind === 'markdown'
-      ? chunkMarkdown(shown.text, TEXT_CHUNK)
-      : spec.kind === 'diff'
-        ? shown.text === ''
-          ? []
-          : splitDiff(shown.text, Infinity, TEXT_CHUNK)
-        : chunkText(shown.text, TEXT_CHUNK)
+    spec.kind === 'diff'
+      ? shown.text === ''
+        ? []
+        : splitDiff(shown.text, Infinity, TEXT_CHUNK)
+      : chunkText(shown.text, TEXT_CHUNK)
   const starts = spec.kind === 'code' && spec.startLine !== undefined ? pieceStarts(shown.text, pieces) : []
   data.budget.left -= spec.kind === 'diff' ? pieces.reduce((sum, p) => sum + p.length, 0) : shown.text.length
   const budgetNote = `${shown.note} ${data.icons.dash} pane text budget reached; collapse other rows to see more`
@@ -1252,7 +1249,10 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
     <Box flexDirection="column">
       {pieces.map((piece, i) =>
         spec.kind === 'markdown' ? (
-          <Markdown text={piece} />
+          // The engine draws Markdown prose in the terminal's own foreground,
+          // unreadable on the pane's theme background when the two disagree;
+          // Code's markdown highlighting takes every color from the theme.
+          <Code language="markdown" source={piece} />
         ) : spec.kind === 'diff' ? (
           <Code format="diff" source={piece} />
         ) : spec.kind === 'code' ? (
