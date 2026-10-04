@@ -574,6 +574,12 @@ describe('/tail theme', () => {
     expect(ran.text).toContain('"Tail Dark (colorblind-friendly)"')
   })
 
+  test('says the variants are missing when /theme does not offer them', async ($, on) => {
+    on('config.list', () => ({ value: [{ ...themeRow('dark'), options: ['dark', 'light', 'auto'] }] }))
+    const ran = await $.command.run(RUN_THEME)
+    expect(ran.text).toContain('not loaded')
+  })
+
   test('leaves auto to /theme without writing', async ($, on) => {
     let writes = 0
     on('config.list', () => ({ value: [themeRow('auto')] }))

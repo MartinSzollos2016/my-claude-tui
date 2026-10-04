@@ -127,14 +127,20 @@ const TAIL_THEME_PREFIX = 'custom:tail-view:'
 
 const isBuiltinTheme = (theme: string): theme is BuiltinTheme => Object.hasOwn(TAIL_THEMES, theme)
 
+const NOT_LOADED = 'Tail themes are not loaded in this session; run /reload-plugins or reinstall tail-view.'
+
 // What /tail theme says. Claude Code's config API only takes the built-in
 // themes, so the mod cannot switch to a custom one itself: it names the
 // variant matching the current theme for the person to pick in /theme.
-export function tailThemeAdvice(current: string): string {
+// `options` are the theme setting's choices (config.list); when they are
+// known and hold no tail-view variant, the themes did not load and naming
+// one would send the person looking for nothing.
+export function tailThemeAdvice(current: string, options?: readonly string[]): string {
   if (current.startsWith(TAIL_THEME_PREFIX)) {
     const base = current.slice(TAIL_THEME_PREFIX.length)
     if (isBuiltinTheme(base)) return `Already using "${TAIL_THEMES[base]}".`
   }
+  if (options !== undefined && !options.some(option => option.startsWith(TAIL_THEME_PREFIX))) return NOT_LOADED
   if (isBuiltinTheme(current)) {
     return `Pick "${TAIL_THEMES[current]}" in /theme: ${current} with a ${current.startsWith('dark') ? 'black' : 'white'} pane column and frame.`
   }

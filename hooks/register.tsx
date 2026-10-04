@@ -283,7 +283,7 @@ async function pickTurn($: EngineInterface, index: number, latest: number) {
 // person's, in /theme (the config API only accepts built-in themes).
 async function themeAdvice($: EngineInterface): Promise<string> {
   const row = (await $.config.list()).find(r => r.key === 'theme')
-  return tailThemeAdvice(sanitizeText(typeof row?.value === 'string' ? row.value : ''))
+  return tailThemeAdvice(sanitizeText(typeof row?.value === 'string' ? row.value : ''), row?.options)
 }
 
 // Persisted preferences ($.store, across sessions).
