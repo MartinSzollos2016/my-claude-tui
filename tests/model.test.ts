@@ -11,6 +11,8 @@ import {
   formatTokens,
   itemName,
   languageFor,
+  paneColumns,
+  resultLine,
   toolSections,
   type ToolItem,
   itemSummary,
@@ -157,6 +159,33 @@ describe('toolSections', () => {
     expect(languageFor('a/b.tsx')).toBe('tsx')
     expect(languageFor('Makefile')).toBe(undefined)
     expect(languageFor('x.YAML')).toBe('yaml')
+  })
+})
+
+describe('paneColumns', () => {
+  test('asks for the share of the terminal, keeping room for the transcript', () => {
+    expect(paneColumns(200, 60)).toBe(120)
+    expect(paneColumns(200, 80)).toBe(160)
+    expect(paneColumns(200, 95)).toBe(160)
+    expect(paneColumns(120, 30)).toBe(40)
+    expect(paneColumns(70, 60)).toBe(undefined)
+  })
+})
+
+describe('resultLine', () => {
+  test('summarizes a tool result as one line', () => {
+    expect(resultLine({ stdout: 'a\nb\nc', stderr: '' }, false)).toBe('3 lines')
+    expect(resultLine('one', false)).toBe('1 line')
+    expect(resultLine({ file: { content: 'x\ny' } }, false)).toBe('2 lines')
+    expect(resultLine({ filenames: ['a', 'b'] }, false)).toBe('2 items')
+    expect(resultLine(undefined, false)).toBe('done')
+    expect(resultLine({ stdout: '', stderr: '' }, false)).toBe('no output')
+  })
+
+  test('shows the first line of an error, sanitized and cut', () => {
+    expect(resultLine('Error: boom\nstack', true)).toBe('error: Error: boom')
+    expect(resultLine('x\u001b[31m'.repeat(50), true).length).toBeLessThanOrEqual(87)
+    expect(resultLine('x\u001b[31m', true)).toBe('error: x')
   })
 })
 
