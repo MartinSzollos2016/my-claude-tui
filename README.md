@@ -33,6 +33,8 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 
 ## Commands
 
+The commands run at once, even while Claude is answering.
+
 | Command                  | What it does                                                                    |
 | ------------------------ | ------------------------------------------------------------------------------- |
 | `/tail`                  | open the detail pane                                                            |

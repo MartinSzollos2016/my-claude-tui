@@ -720,8 +720,10 @@ describe('commands', () => {
 
   test('registers every subcommand as its own slash command', async ($, on) => {
     const names: string[] = []
+    const queued: string[] = []
     on('command.register', (_$, e) => {
       names.push(e.name)
+      if (e.immediate !== true) queued.push(e.name)
       return { value: { command: e.name } }
     })
     on('process.run', () => ({
@@ -742,6 +744,8 @@ describe('commands', () => {
       'tail-turns',
       'tail-width',
     ])
+    // They only steer the pane, so they run at once even mid-turn.
+    expect(queued).toEqual([])
   })
 
   test('/tail and /tail-turns answer in text where no pane is drawn', async ($, on) => {
