@@ -2154,3 +2154,24 @@ export function scrollToRow(frame: ScrollFrame, id: string | null): number {
   if (start === undefined) return frame.scrollTop
   return clampScroll(followCursor(frame.scrollTop, start, frame.windowRows), frame.total, frame.windowRows)
 }
+
+// One row of the cursor (`delta` -1 or 1) over `ids`. Without a cursor on the
+// list, j enters at the first row inside the window as drawn and k at the
+// last, so the content does not jump; with none inside, at the ends.
+export function stepCursor(
+  ids: readonly string[],
+  current: string | null,
+  delta: number,
+  frame: ScrollFrame,
+): string | null {
+  if (current !== null && ids.includes(current)) return moveCursor(ids, current, delta)
+  const margin = frame.windowRows > SCROLL_SLACK ? 1 : 0
+  const first = frame.scrollTop + margin
+  const last = frame.scrollTop + frame.windowRows - 1 - margin
+  const inside = ids.filter(id => {
+    const start = frame.starts[id]
+    return start !== undefined && start >= first && start <= last
+  })
+  const entry = delta < 0 ? inside.at(-1) : inside[0]
+  return entry ?? moveCursor(ids, null, delta)
+}

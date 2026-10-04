@@ -944,6 +944,15 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(0)
   })
 
+  test('after paging down, the first j or k lands inside the window and the view stays', async () => {
+    const { $ } = fakeEngine({ messages: long })
+    await pressSmall($, 'nav-pagedown')
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-8)
+    await pressSmall($, 'nav-down')
+    expect(await topOf($)).toBe(-8)
+  })
+
   test('a change of view, of turn or a new prompt scrolls back to the top', async () => {
     const { $ } = fakeEngine({ messages: [...long, ...long] })
     await pressSmall($, 'nav-pagedown')
