@@ -34,6 +34,14 @@ export type Icons = {
   prompt: string
   marker: string
   arrow: string
+  dash: string
+  // What a cut text ends in, the check marks of the task board and the
+  // frame style the engine draws a Box border with.
+  ellipsis: string
+  taskDone: string
+  taskActive: string
+  taskTodo: string
+  border: 'round' | 'classic'
 }
 
 const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -66,6 +74,12 @@ const nerd: Icons = {
   prompt: '❯',
   marker: '›',
   arrow: '→',
+  dash: '–',
+  ellipsis: '…',
+  taskDone: '☑',
+  taskActive: '◐',
+  taskTodo: '☐',
+  border: 'round',
 }
 
 const unicode: Icons = {
@@ -85,6 +99,8 @@ const unicode: Icons = {
   drill: '→',
   system: '▪',
   branch: '⑂',
+  // U+23F8 draws two cells wide on many terminals.
+  interrupted: '‖',
 }
 
 const ascii: Icons = {
@@ -107,7 +123,7 @@ const ascii: Icons = {
   dot: '.',
   done: '+',
   error: 'x',
-  idle: '-',
+  idle: '.',
   interrupted: '!',
   spinner: ['|', '/', '-', '\\'],
   bullet: '*',
@@ -115,6 +131,12 @@ const ascii: Icons = {
   prompt: '>',
   marker: '>',
   arrow: '>',
+  dash: '-',
+  ellipsis: '...',
+  taskDone: '[x]',
+  taskActive: '[~]',
+  taskTodo: '[ ]',
+  border: 'classic',
 }
 
 export const ICON_SETS: Record<IconSetName, Icons> = { nerd, unicode, ascii }

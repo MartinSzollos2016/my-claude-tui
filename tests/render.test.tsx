@@ -740,6 +740,7 @@ describe('commands', () => {
     expect(rows).toContain('+ ')
     expect(rows).not.toContain('\u{F167A}')
     expect(rows).not.toContain('✓')
+    expect(rows).toMatch(/^[\x20-\x7e\n]*$/)
     await ui.unmount()
   })
 

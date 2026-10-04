@@ -315,6 +315,131 @@ describe('renderPane', () => {
     expect(text(ok)).not.toContain('✗ error')
   })
 
+  test('the ascii set draws only ASCII: every string, every border, every truncation', () => {
+    const path = '/home/dev/project/src/server/auth/session.ts'
+    const many = buildTurns([
+      { role: 'user', text: `go ${'long prompt '.repeat(40)}`, toolUses: [] },
+      {
+        role: 'assistant',
+        text: 'Done.',
+        toolUses: [
+          { tool_use_id: 'x1', tool: 'Read', input: { file_path: path }, text: 'x' },
+          { tool_use_id: 'x2', tool: 'Write', input: { file_path: path, content: 'x' }, text: 'ok' },
+          {
+            tool_use_id: 'x3',
+            tool: 'Edit',
+            input: { file_path: path, old_string: 'a', new_string: 'b' },
+            text: 'bad: error',
+            isError: true,
+          },
+          {
+            tool_use_id: 'x4',
+            tool: 'Bash',
+            input: { command: 'seq 300', description: 'd'.repeat(200) },
+            text: Array.from({ length: 300 }, (_, n) => `line ${n}`).join('\n'),
+          },
+          {
+            tool_use_id: 'x5',
+            tool: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'a', status: 'completed' },
+                { content: 'b', status: 'in_progress' },
+                { content: 'c', status: 'pending' },
+              ],
+            },
+            text: 'ok',
+          },
+          { tool_use_id: 'x6', tool: 'Workflow', input: { name: 'review' } },
+          {
+            tool_use_id: 'x7',
+            tool: 'Agent',
+            input: { subagent_type: 'Explore', description: 'Find' },
+            agentId: 'ag',
+            text: 'r',
+          },
+        ],
+      },
+    ])
+    const trace = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: 'ok',
+          toolUses: [{ tool_use_id: 'g', tool: 'Grep', input: { pattern: 'x', path }, text: 'm' }],
+        },
+      ],
+      'ag/',
+    )
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    const tasks = [
+      { id: '1', subject: 'Write tests', status: 'in_progress', owner: 'alice' },
+      { id: '2', subject: 'Ship', status: 'completed' },
+      { id: '3', subject: 'Later', status: 'pending' },
+    ]
+    const open = new Set(['x1', 'x2', 'x3', 'x4', 'x5', 'x7', 't0:o0', 't0:thinking'])
+    const ascii = { ...base, turns: many, icons: ICON_SETS.ascii, columns: 70, agents: new Map() }
+    const trees = [
+      renderPane(
+        el,
+        {
+          ...ascii,
+          expanded: open,
+          thinking: { count: 1, text: 'Plan' },
+          traces: new Map([['ag', { items: trace[0]!.items }]]),
+          isLatest: true,
+          isWorking: true,
+          members,
+          tasks,
+        },
+        act,
+      ),
+      renderPane(el, { ...ascii, expanded: open, traces: new Map([['ag', { denied: 'gone' }]]) }, act),
+      renderPane(el, { ...ascii, expanded: new Set(['x7']) }, act),
+      renderPane(
+        el,
+        { ...ascii, turns: buildTurns([{ role: 'user', text: 'hi', toolUses: [] }]), isLatest: true, isWorking: true },
+        act,
+      ),
+      renderPane(el, { ...ascii, expanded: open, full: new Set(['x4:output']) }, act),
+      renderPane(
+        el,
+        {
+          ...ascii,
+          view: 'turns',
+          stats: [base.turnStat],
+          query: 'long',
+          matches: [{ index: 0, snippet: '...a long prompt ...' }],
+        },
+        act,
+      ),
+      renderPane(el, { ...ascii, view: 'turns', query: 'zzz', matches: [] }, act),
+      renderPane(el, { ...ascii, view: 'team', members, tasks }, act),
+      renderPane(el, { ...ascii, turns: [] }, act),
+      renderBar(el, {
+        project: 'tail',
+        git: { branch: 'main' },
+        mode: 'plan',
+        runningAgents: 1,
+        contextTokens: 5000,
+        contextPercent: 5,
+        costUsd: 1,
+        columns: 80,
+        icons: ICON_SETS.ascii,
+        workflow: { isRunning: true, agents: 2 },
+      }),
+    ]
+    for (const tree of trees) {
+      expect(text(tree)).toMatch(/^[\x20-\x7e\n]*$/)
+      for (const n of nodes(tree))
+        if (n.props['borderStyle'] !== undefined) expect(n.props['borderStyle']).toBe('classic')
+    }
+    expect(text(trees[0])).toContain('...')
+    expect(text(trees[3])).toContain('Working...')
+    for (const n of nodes(renderPane(el, base, act)))
+      if (n.props['borderStyle'] !== undefined) expect(n.props['borderStyle']).toBe('round')
+  })
+
   test('the trace of a subagent carries status glyphs too', () => {
     const trace = buildTurns(
       [

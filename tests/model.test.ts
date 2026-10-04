@@ -8,6 +8,7 @@ import {
   chunkMarkdown,
   chunkText,
   clampText,
+  compactCall,
   firstErrorLine,
   formatDuration,
   fitPath,
@@ -27,8 +28,11 @@ import {
   sanitizeText,
   shortModel,
   splitMatch,
+  taskMark,
   toolSummary,
   traceItems,
+  turnTail,
+  truncate,
   truncateMiddle,
 } from '../hooks/model'
 
@@ -410,6 +414,8 @@ describe('itemStatus', () => {
   })
 })
 
+const MULTI = ['ellipsis', 'border', 'taskDone', 'taskActive', 'taskTodo']
+
 describe('icon sets', () => {
   test('every set has the same keys', () => {
     const keys = Object.keys(ICON_SETS.nerd).sort()
@@ -424,13 +430,23 @@ describe('icon sets', () => {
     expect(all(ICON_SETS.nerd)).toMatch(/[\ue000-\uf8ff\u{f0000}-\u{ffffd}]/u)
   })
 
+  test('no set draws the paused mark as a spinner frame, and the unicode set avoids the wide U+23F8', () => {
+    for (const set of Object.values(ICON_SETS)) expect(set.spinner).not.toContain(set.idle)
+    expect(ICON_SETS.unicode.interrupted).not.toBe('\u23f8')
+    expect(ICON_SETS.nerd.interrupted).toBe('\u23f8')
+  })
+
   test('each glyph is one cell wide in the unicode and ascii sets, the spinner has frames', () => {
     for (const set of [ICON_SETS.unicode, ICON_SETS.ascii])
-      for (const [key, value] of Object.entries(set))
+      for (const [key, value] of Object.entries(set).filter(([k]) => !MULTI.includes(k)))
         for (const glyph of [value].flat()) expect([...glyph].length, key).toBe(1)
     expect(ICON_SETS.ascii.spinner).toEqual(['|', '/', '-', '\\'])
     expect(ICON_SETS.ascii.done).toBe('+')
     expect(ICON_SETS.ascii.error).toBe('x')
+    expect(ICON_SETS.ascii.ellipsis).toBe('...')
+    expect(ICON_SETS.ascii.border).toBe('classic')
+    expect(ICON_SETS.nerd.border).toBe('round')
+    expect(ICON_SETS.unicode.ellipsis).toBe('…')
   })
 })
 
@@ -557,5 +573,64 @@ describe('firstErrorLine', () => {
     const started = performance.now()
     expect(firstErrorLine('x'.repeat(2_000_000)).length).toBe(2_000_000)
     expect(performance.now() - started).toBeLessThan(200)
+  })
+})
+
+describe('a custom ellipsis (the ascii set)', () => {
+  test('truncate and truncateMiddle count the width of the ellipsis', () => {
+    expect(truncate('abcdefghij', 6, '...')).toBe('abc...')
+    expect(truncate('abcdef', 6, '...')).toBe('abcdef')
+    expect(truncate('abcdefghij', 2, '...')).toBe('ab')
+    expect(truncateMiddle('abcdefghij', 7, '...')).toBe('a...hij')
+    expect(truncateMiddle('abcdefghij', 2, '...')).toBe('..')
+    expect([...truncateMiddle('😀'.repeat(20), 9, '...')]).toHaveLength(9)
+  })
+
+  test('clampText, searchTurns and splitMatch use it', () => {
+    expect(clampText('a\nb\nc', 2, 100, '...').note).toBe('... (1 line hidden)')
+    expect(clampText('x'.repeat(10), 5, 4, '...').note).toBe('... (6 chars hidden)')
+    const long = `${'a'.repeat(60)} needle ${'b'.repeat(60)}`
+    const turns = buildTurns([
+      { role: 'user', text: long, toolUses: [] },
+      { role: 'assistant', text: 'ok', toolUses: [] },
+    ])
+    const [hit] = searchTurns(turns, 'needle', '...')
+    expect(hit!.snippet.startsWith('...')).toBe(true)
+    expect(hit!.snippet.endsWith('...')).toBe(true)
+    expect(hit!.snippet).not.toContain('…')
+    expect(splitMatch(hit!.snippet, 'needle', '...').match).toBe('needle')
+    // A query of dots finds no hit in the ellipsis itself.
+    expect(splitMatch('...abc', '.', '...')).toEqual({ before: '...abc', match: '', after: '' })
+  })
+
+  test('task marks follow the set', () => {
+    const marks = { taskDone: '[x]', taskActive: '[~]', taskTodo: '[ ]' }
+    expect(taskMark('completed', marks)).toBe('[x]')
+    expect(taskMark('in_progress', marks)).toBe('[~]')
+    expect(taskMark('pending', marks)).toBe('[ ]')
+  })
+
+  test('compactCall, turnTail and toolSections take their glyphs from the set', () => {
+    const glyphs = { ellipsis: '...', dot: '.', taskDone: '[x]', taskActive: '[~]', taskTodo: '[ ]' }
+    expect(compactCall('Bash', { command: 'x'.repeat(100) }, '...').summary).toBe(`${'x'.repeat(77)}...`)
+    expect(turnTail(buildTurns(transcript)[0]!, { durationMs: 2000 }, '.')).toContain(' . ')
+    const todo: ToolItem = {
+      kind: 'tool',
+      id: 't',
+      tool: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'a', status: 'completed' },
+          { content: 'b', status: 'pending' },
+        ],
+      },
+      summary: '',
+      resultText: 'ok',
+      isError: false,
+      isPending: false,
+    }
+    const sections = toolSections(todo, glyphs)
+    expect(sections[0]!.body).toBe('[x] a\n[ ] b')
+    expect(sections[1]!.meta).toBe('ok . 1 line')
   })
 })
