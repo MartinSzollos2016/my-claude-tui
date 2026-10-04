@@ -640,18 +640,16 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
 
   return (
     <Box key="nav" flexDirection="row" flexWrap="wrap" columnGap={2}>
-      {groups.flatMap((group, i) => [
-        ...(i > 0
-          ? [
-              <Text key={`nav-sep-${group.id}`} color={C.muted}>
-                {data.icons.groupSep}
-              </Text>,
-            ]
-          : []),
+      {groups.map((group, i) => (
         <Box key={`nav-group-${group.id}`} flexDirection="row" gap={2}>
+          {i > 0 && (
+            <Text key={`nav-sep-${group.id}`} color={C.muted}>
+              {data.icons.groupSep}
+            </Text>
+          )}
           {group.buttons}
-        </Box>,
-      ])}
+        </Box>
+      ))}
     </Box>
   )
 }
@@ -725,8 +723,10 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
   const name = itemName(item)
   const summary = withWorkflowNote(item, itemSummary(item), data)
   const guide = place === undefined ? '' : treePrefix(place.path, place.isLast, icons)
-  const indent = place === undefined ? 0 : TRACE_INDENT
-  const width = Math.max(20, data.columns - (place === undefined ? 0 : TRACE_INDENT * (place.path.length + 1)))
+  // Only the first level is moved in; deeper rows start in the same column
+  // and the tree prefix alone draws their indent.
+  const indent = place === undefined || place.path.length > 0 ? 0 : TRACE_INDENT
+  const width = Math.max(20, data.columns - (place === undefined ? 0 : TRACE_INDENT))
 
   const chevron = !canOpen
     ? icons.selected

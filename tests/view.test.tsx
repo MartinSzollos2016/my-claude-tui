@@ -974,6 +974,29 @@ describe('trace tree guides', () => {
       act,
     )
     expect(text(byKey(tree, 'guide-in/q'))).toBe('│  └─ ')
+
+    // Margins do not pile up: the continuation guide of the nested row sits in
+    // the column of its parent's branch glyph, the nested branch one level in.
+    const offsetOf = (key: string, from: unknown, acc = 0): number | undefined => {
+      if (Array.isArray(from)) {
+        for (const c of from) {
+          const found = offsetOf(key, c, acc)
+          if (found !== undefined) return found
+        }
+        return undefined
+      }
+      if (from === null || typeof from !== 'object' || !('type' in from)) return undefined
+      const n = from as Node
+      const here = acc + (typeof n.props['marginLeft'] === 'number' ? n.props['marginLeft'] : 0)
+      if (n.props['key'] === key) return here
+      return offsetOf(key, n.children, here)
+    }
+    const parent = offsetOf('item-ag/n', tree)
+    const child = offsetOf('item-in/q', tree)
+    expect(parent).toBeDefined()
+    expect(child).toBe(parent)
+    const sibling = offsetOf('item-ag/z', tree)
+    expect(sibling).toBe(parent)
   })
 })
 
@@ -999,6 +1022,9 @@ describe('navigation groups', () => {
       nodes(byKey(tree, `nav-group-${group}`))
         .filter(n => n.type === 'Button')
         .map(n => n.props['key'])
+    // A separator lives in the box of the group it leads, so a wrap never strands it.
+    expect(nodes(byKey(tree, 'nav-group-views')).some(n => n.props['key'] === 'nav-sep-views')).toBe(true)
+    expect(nodes(byKey(tree, 'nav-group-move')).some(n => String(n.props['key']).startsWith('nav-sep-'))).toBe(false)
     expect(inside('move')).toEqual(['nav-prev', 'nav-latest'])
     expect(inside('views')).toEqual(['nav-turns', 'nav-search', 'nav-team'])
     expect(inside('expand')).toEqual(['nav-expand', 'nav-collapse'])
