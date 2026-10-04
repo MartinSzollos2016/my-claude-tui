@@ -281,8 +281,9 @@ describe('formatters', () => {
   })
 
   test('clampText caps by lines and by characters', () => {
-    expect(clampText('a\nb', 5)).toEqual({ text: 'a\nb' })
-    expect(clampText('a\nb\nc', 2)).toEqual({ text: 'a\nb', note: '… (1 lines hidden)' })
+    expect(clampText('a\nb', 5, 100)).toEqual({ text: 'a\nb' })
+    expect(clampText('a\nb\nc', 2, 100)).toEqual({ text: 'a\nb', note: '… (1 line hidden)' })
+    expect(clampText('a\nb\nc\nd', 2, 100).note).toBe('… (2 lines hidden)')
     expect(clampText('x'.repeat(10), 5, 4)).toEqual({ text: 'xxxx', note: '… (6 chars hidden)' })
     expect(clampText('🚀🚀🚀', 5, 2).text).toBe('🚀🚀')
   })
