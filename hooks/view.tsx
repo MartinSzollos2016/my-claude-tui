@@ -195,13 +195,18 @@ type PaneData = {
 
 // The engine refuses a tree with a text over 10000 characters or over 100000
 // characters of text in total. Long blocks are cut into TEXT_CHUNK pieces,
-// and every block draws from one budget per pane, leaving room for the rows.
+// and every row, block and card draws from one budget per pane; what is left
+// over is room for the header, the nav and the footer.
 const TEXT_CHUNK = 8000
-const PANE_TEXT_BUDGET = 70_000
+const PANE_TEXT_BUDGET = 85_000
+// What a row is charged beyond its width: its fixed columns may carry a few
+// characters that take no cell.
+const ROW_SLACK = 8
 // What a hunk header the splitting of a long diff adds may take at most.
 const DIFF_HEADER_SLACK = 40
 
-// What all hover cards of a pane may carry together; rows after it have none.
+// What all hover cards of a pane may carry together, out of the pane's
+// budget; rows after it have none.
 const CARD_BUDGET = 20_000
 // A card sits this far in from the row's edge, and is this much narrower
 // than the row (its border and padding).
@@ -219,7 +224,7 @@ const PREVIEW = {
 type Ctx = PaneData & {
   icons: Icons
   budget: { left: number }
-  // The hover cards' own budget: they are drawn hidden, so the pane's does not pay for them.
+  // The most the hover cards may still take of `budget`.
   cardBudget: { left: number }
   // The longest measured call of the shown turn: what a bar is relative to.
   maxMs: number
@@ -918,27 +923,51 @@ function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined,
 }
 
 // The hover card of a collapsed tool row: the first lines of its input, while
-// the cards' budget lasts. The first card that does not fit spends it, so
-// the rows after it build none.
+// the cards' share of the pane's budget lasts. The first card that does not
+// fit spends it, so the rows after it build none.
 function cardFor(item: Item, data: Ctx, place: TreePlace | undefined): readonly string[] | undefined {
   if (item.kind !== 'tool' || data.cardBudget.left <= 0) return undefined
   const width = data.columns - CARD_SLACK - (place === undefined ? 0 : TRACE_INDENT)
   const lines = hoverCard(item, Math.max(8, width), data.icons)
   if (lines === undefined) return undefined
   const cost = lines.reduce((sum, line) => sum + line.length, 0)
-  if (cost > data.cardBudget.left) {
+  if (cost > Math.min(data.cardBudget.left, data.budget.left)) {
     data.cardBudget.left = 0
     return undefined
   }
   data.cardBudget.left -= cost
+  data.budget.left -= cost
   return lines
+}
+
+// Draws `rows` while the pane's budget holds a row more, each charged its
+// width; the rows that no longer fit are counted on one line instead.
+function fitRows<T>(el: El, rows: readonly T[], data: Ctx, key: string, draw: (row: T, i: number) => RenderElement) {
+  const cost = data.columns + ROW_SLACK
+  const drawn: RenderElement[] = []
+  for (const [i, row] of rows.entries()) {
+    if (data.budget.left < cost) break
+    data.budget.left -= cost
+    drawn.push(draw(row, i))
+  }
+  const hidden = rows.length - drawn.length
+  if (hidden === 0) return drawn
+  const note = `${hidden} more row${hidden === 1 ? '' : 's'} ${data.icons.dash} pane text budget reached; collapse rows to see them`
+  data.budget.left -= note.length
+  const { Text } = el
+  return [
+    ...drawn,
+    <Text key={`more-${key}`} color={C.muted}>
+      {note}
+    </Text>,
+  ]
 }
 
 // The rows of a turn (no `path`) or of a trace (the guides of its parent
 // levels): single items, and folded runs of calls.
 function renderRows(el: El, items: readonly Item[], data: Ctx, act: PaneActions, path?: readonly boolean[]) {
   const rows = groupRuns(items)
-  return rows.map((row, i) => {
+  return fitRows(el, rows, data, rows[0]?.id ?? 'rows', (row, i) => {
     const at = path === undefined ? undefined : { path, isLast: i === rows.length - 1 }
     return row.kind === 'group' ? renderGroup(el, row, data, act, at) : renderItem(el, row, data, act, at)
   })
@@ -961,7 +990,7 @@ function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, plac
   const status = groupStatus(group, data)
   const children = isOpen && (
     <Box flexDirection="column">
-      {group.items.map((child, i) =>
+      {fitRows(el, group.items, data, group.id, (child, i) =>
         renderItem(el, child, data, act, {
           path: place === undefined ? [] : [...place.path, !place.isLast],
           isLast: i === group.items.length - 1,
@@ -1136,6 +1165,12 @@ function renderFrame(
 ) {
   const { Box, Button, Text } = el
   const trunc = cutter(data.icons)
+  const metaText =
+    meta === undefined || meta === ''
+      ? ''
+      : `  ${isPathMeta ? truncateMiddle(meta, isUnicodeCut(data.icons) ? 300 : Math.max(8, data.columns - 30), data.icons.ellipsis) : trunc(meta, 300)}`
+  // The frame's own line draws from the pane's budget like its body.
+  data.budget.left -= title.length + metaText.length + 'copy'.length
   return (
     <Box
       key={`frame-${blockId}`}
@@ -1149,9 +1184,9 @@ function renderFrame(
           <Text bold color={tone}>
             {title}
           </Text>
-          {meta !== undefined && meta !== '' && (
+          {metaText !== '' && (
             <Text color={C.muted} wrap={isPathMeta ? middleWrap(data.icons) : endWrap(data.icons)}>
-              {`  ${isPathMeta ? truncateMiddle(meta, isUnicodeCut(data.icons) ? 300 : Math.max(8, data.columns - 30), data.icons.ellipsis) : trunc(meta, 300)}`}
+              {metaText}
             </Text>
           )}
         </Box>
@@ -1206,6 +1241,12 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
         : chunkText(shown.text, TEXT_CHUNK)
   const starts = spec.kind === 'code' && spec.startLine !== undefined ? pieceStarts(shown.text, pieces) : []
   data.budget.left -= spec.kind === 'diff' ? pieces.reduce((sum, p) => sum + p.length, 0) : shown.text.length
+  const budgetNote = `${shown.note} ${data.icons.dash} pane text budget reached; collapse other rows to see more`
+  const fullLabel = `${shown.note} ${data.icons.dash} show all`
+  data.budget.left -=
+    (isBudgetCut ? budgetNote.length : 0) +
+    (isPreviewed ? fullLabel.length : 0) +
+    (canShrink && !isBudgetCut ? 'show less'.length : 0)
 
   return (
     <Box flexDirection="column">
@@ -1225,18 +1266,14 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
           <Text color={spec.isError ? C.error : C.muted}>{piece}</Text>
         ),
       )}
-      {isBudgetCut && (
-        <Text
-          color={C.muted}
-        >{`${shown.note} ${data.icons.dash} pane text budget reached; collapse other rows to see more`}</Text>
-      )}
+      {isBudgetCut && <Text color={C.muted}>{budgetNote}</Text>}
       {isPreviewed && (
         <Button
           key={`full:${id}`}
           plain
           dimColor
           hover={buttonHover(scopeOf('btn:full:', id))}
-          label={`${shown.note} ${data.icons.dash} show all`}
+          label={fullLabel}
           onPress={() => act.toggleFull(id)}
         />
       )}
@@ -1261,6 +1298,8 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
   const trace = data.traces.get(item.agentId)
   const model = data.agentStats[item.agentId]?.model
 
+  // The line above the trace draws from the pane's budget like a row.
+  data.budget.left -= data.columns + ROW_SLACK
   if (!trace) {
     return (
       <Box marginLeft={4}>
@@ -1269,9 +1308,11 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
     )
   }
   if ('denied' in trace) {
+    const denied = `Trace unavailable: ${trunc(trace.denied, 300)}`
+    data.budget.left -= denied.length
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-        <Text color={C.muted}>{`Trace unavailable: ${trunc(trace.denied, 300)}`}</Text>
+        <Text color={C.muted}>{denied}</Text>
         {renderSections(el, item, data, act)}
       </Box>
     )

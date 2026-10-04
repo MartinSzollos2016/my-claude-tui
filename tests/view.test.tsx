@@ -1440,7 +1440,7 @@ describe('diff blocks', () => {
     expect(code.length).toBeGreaterThan(1)
     expect(code.some(n => n.props['source'] === '')).toBe(false)
     expect(text(tree)).toContain('pane text budget reached')
-    expect(code.reduce((sum, n) => sum + (n.props['source'] as string).length, 0)).toBeLessThanOrEqual(70_000)
+    expect(code.reduce((sum, n) => sum + (n.props['source'] as string).length, 0)).toBeLessThanOrEqual(85_000)
   })
 })
 
@@ -1952,6 +1952,119 @@ describe('keyboard cursor', () => {
   })
 })
 
+describe('pane budget with everything on', () => {
+  // Every text a node carries: its own string children, joined, and the
+  // text-like props.
+  const own = (children: unknown): string =>
+    typeof children === 'string' || typeof children === 'number'
+      ? String(children)
+      : Array.isArray(children)
+        ? children.map(own).join('')
+        : ''
+  const pieces = (tree: unknown) =>
+    nodes(tree).flatMap(n => [
+      own(n.children),
+      ...['label', 'text', 'source'].flatMap(key => (typeof n.props[key] === 'string' ? [n.props[key] as string] : [])),
+    ])
+
+  const everything = (outputs: number) => {
+    const output = Array.from({ length: 300 }, (_, n) => `line ${n} ${'x'.repeat(30)}`).join('\n')
+    const table = ['| a | b |', '|---|---|', ...Array.from({ length: 200 }, (_, n) => `| ${n} | ${'t'.repeat(40)} |`)]
+    const turn = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: table.join('\n'),
+        toolUses: [
+          ...Array.from({ length: outputs }, (_, n) => ({
+            tool_use_id: `o${n}`,
+            tool: 'Bash',
+            input: { command: `cat big${n}` },
+            text: output,
+          })),
+          ...Array.from({ length: 1500 }, (_, n) => ({
+            tool_use_id: `k${n}`,
+            tool: n % 2 === 0 ? 'Bash' : 'Edit',
+            input:
+              n % 2 === 0
+                ? { command: `echo ${n} ${'q'.repeat(300)}` }
+                : { file_path: `/src/f${n}.go`, old_string: 'a\nb\nc', new_string: 'd\ne\nf' },
+            text: 'ok',
+          })),
+        ],
+      },
+    ])
+    const open = turn[0]!.items.filter(item => item.kind === 'output' || item.id.startsWith('o')).map(item => item.id)
+    return renderPane(
+      el,
+      {
+        ...base,
+        turns: turn,
+        expanded: new Set(open),
+        full: new Set(open.flatMap(id => [`${id}:output`, `${id}:command`, id])),
+        cursor: 'k3',
+        columns: 100,
+      },
+      act,
+    )
+  }
+
+  test('rows, show-all outputs, cards, a table and the cursor stay under the engine limits', () => {
+    for (const outputs of [3, 9]) {
+      const tree = everything(outputs)
+      const all = pieces(tree)
+      expect(all.join('').length).toBeLessThan(100_000)
+      for (const piece of all) expect(piece.length).toBeLessThan(10_000)
+      expect(nodes(tree).length).toBeLessThan(20_000)
+      expect(text(tree)).toMatch(/\d+ more rows/)
+    }
+    expect(byKey(everything(3), 'card-k0')).toBeDefined()
+  })
+
+  test('the frames of 300 open rows are charged too: titles, paths and notes', () => {
+    const turn = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: Array.from({ length: 300 }, (_, n) => ({
+          tool_use_id: `w${n}`,
+          tool: 'Write',
+          input: { file_path: `/${'p'.repeat(400)}/f${n}.go`, content: 'x' },
+          text: 'y',
+        })),
+      },
+    ])
+    const ids = turn[0]!.items.map(item => item.id)
+    for (const icons of [ICON_SETS.nerd, ICON_SETS.unicode, ICON_SETS.ascii]) {
+      const tree = renderPane(el, { ...base, turns: turn, expanded: new Set(ids), columns: 40, icons }, act)
+      expect(pieces(tree).join('').length).toBeLessThan(100_000)
+    }
+  })
+
+  test('a row that does not fit is counted, not drawn, and the cards draw from what is left', () => {
+    const turn = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: Array.from({ length: 2000 }, (_, n) => ({
+          tool_use_id: `r${n}`,
+          tool: 'Bash',
+          input: { command: `echo ${n} ${'q'.repeat(590)}` },
+          text: 'ok',
+        })),
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: turn, columns: 300 }, act)
+    expect(text(tree).length).toBeLessThan(100_000)
+    expect(byKey(tree, 'item-r0')).toBeDefined()
+    expect(byKey(tree, 'item-r1999')).toBeUndefined()
+    const shown = nodes(tree).filter(n => String(n.props['key']).startsWith('item-r')).length
+    expect(text(tree)).toContain(`${2000 - shown} more rows`)
+  })
+})
+
 describe('hover preview card', () => {
   const cardOf = (tree: unknown, id: string) => byKey(tree, `card-${id}`)
   const bashTurn = (command: string, extra: Record<string, unknown> = {}) =>
@@ -2018,7 +2131,7 @@ describe('hover preview card', () => {
     expect(text(card)).toMatch(/^[\x20-\x7e]+$/)
   })
 
-  test('cards leave the pane text budget alone and stop at their own budget', () => {
+  test('cards draw from the pane text budget and stop at their own share of it', () => {
     const many = buildTurns([
       { role: 'user', text: 'go', toolUses: [] },
       {
