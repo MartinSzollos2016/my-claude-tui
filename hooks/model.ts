@@ -943,13 +943,19 @@ export function taskBoard(turns: readonly Turn[]): TaskEntry[] {
   let created = 0
   for (const turn of turns) {
     for (const item of turn.items) {
-      if (item.kind !== 'tool' || item.isError) continue
+      if (item.kind !== 'tool' || item.isError || item.isPending) continue
       if (item.tool === 'TaskCreate') {
         created += 1
-        const id = taskIdIn(item.resultText ?? '') ?? String(created)
+        let id = taskIdIn(item.resultText ?? '')
+        if (id === undefined) {
+          let next = created
+          while (tasks.has(String(next))) next += 1
+          id = String(next)
+        }
         tasks.set(id, { id, subject: str(item.input, 'subject') || 'Untitled task', status: 'pending' })
       } else if (item.tool === 'TaskUpdate') {
-        const id = str(item.input, 'taskId')
+        const raw = item.input['taskId']
+        const id = typeof raw === 'number' ? String(raw) : str(item.input, 'taskId')
         if (id === '') continue
         const status = str(item.input, 'status')
         if (status === 'deleted') {
@@ -989,7 +995,7 @@ export function teamMembers(agents: readonly AgentInfo[]): TeamMember[] {
       ? []
       : [
           {
-            name: sanitizeText(agent.teammateId.split('@')[0] ?? agent.teammateId),
+            name: sanitizeText(agent.teammateId.split('@')[0] || agent.teammateId),
             type: sanitizeText(agent.type),
             status: agent.status,
           },

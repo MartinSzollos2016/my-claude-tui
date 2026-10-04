@@ -337,6 +337,24 @@ describe('renderPane', () => {
     expect(text(all)).not.toContain('refine the search')
   })
 
+  test('the team board stays within the pane text budget', () => {
+    const tasks = Array.from({ length: 2000 }, (_, i) => ({
+      id: String(i + 1),
+      subject: 'y'.repeat(150),
+      status: 'pending',
+    }))
+    const huge = [{ id: '0', subject: 'z'.repeat(20_000), status: 'pending', owner: 'o'.repeat(20_000) }]
+    const members = Array.from({ length: 3 }, () => ({ name: 'alice', type: 'teammate', status: 'idle' as const }))
+    const tree = renderPane(el, { ...base, view: 'team', members, tasks }, act)
+    expect(text(tree).length).toBeLessThan(100_000)
+    expect(text(tree)).toMatch(/\d+ more tasks/)
+    const one = renderPane(el, { ...base, view: 'team', tasks: huge }, act)
+    expect(nodes(one).every(n => typeof n.children !== 'string' || n.children.length < 10_000)).toBe(true)
+    expect(text(one).length).toBeLessThan(1000)
+    const keys = nodes(tree).map(n => n.props['key'])
+    expect(new Set(keys.filter(k => String(k).startsWith('member-'))).size).toBe(3)
+  })
+
   test('row buttons call their actions', () => {
     const tree = renderPane(el, base, act)
     for (const key of [

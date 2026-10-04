@@ -360,7 +360,8 @@ describe('taskBoard', () => {
           text: '',
           toolUses: [
             { ...use('c1', 'TaskCreate', { subject: 'Nope' }, 'error'), isError: true },
-            use('c2', 'TaskCreate', {}),
+            use('c2', 'TaskCreate', {}, 'ok'),
+            use('c3', 'TaskCreate', { subject: 'Waiting' }),
           ],
         },
       ]),
@@ -373,6 +374,61 @@ describe('taskBoard', () => {
     expect(taskMark('pending')).toBe('☐')
     expect(taskMark('in_progress')).toBe('◐')
     expect(taskMark('completed')).toBe('☑')
+  })
+})
+
+describe('taskBoard edge cases', () => {
+  const use = (id: string, tool: string, input: Record<string, unknown>, text?: string): ToolUseSummary => ({
+    tool_use_id: id,
+    tool,
+    input,
+    ...(text === undefined ? {} : { text }),
+  })
+
+  test('a fallback id never overwrites a real one, and a pending create does not shift numbering', () => {
+    const board = taskBoard(
+      buildTurns([
+        prompt('Plan'),
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            use('u1', 'TaskUpdate', { taskId: '2', status: 'in_progress' }, 'ok'),
+            use('c0', 'TaskCreate', { subject: 'Pending' }),
+            use('c1', 'TaskCreate', { subject: 'First' }, 'ok'),
+            use('c2', 'TaskCreate', { subject: 'Second' }, 'ok'),
+          ],
+        },
+      ]),
+    )
+    expect(board.map(t => [t.id, t.subject])).toEqual([
+      ['2', 'Task #2'],
+      ['1', 'First'],
+      ['3', 'Second'],
+    ])
+  })
+
+  test('accepts a numeric taskId', () => {
+    const board = taskBoard(
+      buildTurns([
+        prompt('Plan'),
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            use('c1', 'TaskCreate', { subject: 'A' }, 'Task #5 created'),
+            use('u1', 'TaskUpdate', { taskId: 5, status: 'completed' }, 'ok'),
+          ],
+        },
+      ]),
+    )
+    expect(board).toEqual([{ id: '5', subject: 'A', status: 'completed' }])
+  })
+
+  test('an empty name falls back to the whole teammate id', () => {
+    expect(teamMembers([{ id: 'a', description: 'd', type: 'x', status: 'idle', teammateId: '@crew' }])[0]?.name).toBe(
+      '@crew',
+    )
   })
 })
 
