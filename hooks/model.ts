@@ -911,27 +911,6 @@ export function chunkText(text: string, size: number): string[] {
   return chunks
 }
 
-const FENCE = /^\s*(```|~~~)/
-
-// chunkText for Markdown: a piece cut inside a code fence closes it, and the
-// next piece reopens it with the same opening line, so each piece renders
-// on its own. Pieces may run `fence` characters over `size`.
-export function chunkMarkdown(text: string, size: number): string[] {
-  const chunks: string[] = []
-  let reopen = ''
-  for (const raw of chunkText(text, Math.max(1, size - 8))) {
-    const piece = reopen ? `${reopen}\n${raw}` : raw
-    let open = ''
-    for (const line of piece.split('\n')) {
-      if (FENCE.test(line)) open = open ? '' : line.trim()
-    }
-    const closer = open.startsWith('~~~') ? '~~~' : '```'
-    chunks.push(open ? `${piece}\n${closer}` : piece)
-    reopen = open
-  }
-  return chunks
-}
-
 // -- Unified diffs ------------------------------------------------------------
 //
 // An Edit becomes a unified diff the engine's <Code format="diff"> draws with
