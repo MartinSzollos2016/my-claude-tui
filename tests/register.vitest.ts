@@ -908,7 +908,7 @@ describe('own scroll', () => {
     expect(world.focused).toEqual([])
   })
 
-  test('the wheel, the arrows and the page keys of the engine move the own scroll, never the engine window', async () => {
+  test('the wheel and the page keys of the engine move the own scroll by a step or a page, never the engine window', async () => {
     const { $ } = fakeEngine({ messages: long })
     await drawSmall($)
     const nexts: unknown[] = []
@@ -931,8 +931,14 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(-3)
     expect(await wheel(-1)).toEqual({})
     expect(await topOf($)).toBe(-2)
+    // A page key arrives as the whole pane body: one page of the own window (6 - 2).
     await wheel(12)
-    expect(await topOf($)).toBe(-14)
+    expect(await topOf($)).toBe(-6)
+    await wheel(-12)
+    expect(await topOf($)).toBe(-2)
+    await wheel(12)
+    expect(await topOf($)).toBe(-6)
+    // Home and End, beyond the body: the top and the end.
     await wheel(100)
     expect(await topOf($)).toBe(-18)
     await wheel(-100)

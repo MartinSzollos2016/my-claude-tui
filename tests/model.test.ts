@@ -22,6 +22,7 @@ import {
   overflowRows,
   pageScroll,
   scrollToRow,
+  engineScroll,
   stepCursor,
   formatDuration,
   fitPath,
@@ -1818,5 +1819,25 @@ describe('stepCursor', () => {
     expect(stepCursor(ids, 'b', 1, frame)).toBe('c')
     expect(stepCursor(ids, 'a', -1, frame)).toBe('a')
     expect(stepCursor([], null, 1, frame)).toBe(null)
+  })
+})
+
+describe('engineScroll', () => {
+  const frame = { scrollTop: 0, windowRows: 34, total: 200, starts: {} }
+  const move = (by: number) => ({ by, bodyRows: 40, contentRows: 40 })
+
+  test('a wheel step moves its rows, clamped to the content', () => {
+    expect(engineScroll(10, move(3), frame)).toBe(13)
+    expect(engineScroll(1, move(-3), frame)).toBe(0)
+  })
+
+  test('a page key, the whole body, moves one page of the own window', () => {
+    expect(engineScroll(10, move(40), frame)).toBe(42)
+    expect(engineScroll(42, move(-40), frame)).toBe(10)
+  })
+
+  test('Home and End beyond the body go to the top and the end', () => {
+    expect(engineScroll(50, move(-500), frame)).toBe(0)
+    expect(engineScroll(50, move(500), frame)).toBe(168)
   })
 })

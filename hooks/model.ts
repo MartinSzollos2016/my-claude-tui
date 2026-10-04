@@ -2213,3 +2213,25 @@ export function stepCursor(
   const entry = delta < 0 ? inside.at(-1) : inside[0]
   return entry ?? moveCursor(ids, null, delta)
 }
+
+// A move the engine asks of the pane's window: `by` rows, out of a body of
+// `bodyRows` over a tree of `contentRows`.
+export type EngineScroll = { by: number; bodyRows: number; contentRows: number }
+
+// Where the engine's move takes the own scroll: a page key arrives as the
+// whole body (header and footer included), so it moves one page of the own
+// window as f and b do; Home and End, beyond the tree, go to the top and the
+// end; a wheel step moves its rows.
+export function engineScroll(scrollTop: number, move: EngineScroll, frame: ScrollFrame): number {
+  const base = clampScroll(scrollTop, frame.total, frame.windowRows)
+  const size = Math.abs(move.by)
+  const next =
+    size > Math.max(move.bodyRows, move.contentRows)
+      ? move.by < 0
+        ? 0
+        : Infinity
+      : size >= move.bodyRows
+        ? pageScroll(base, Math.sign(move.by), frame.windowRows)
+        : base + move.by
+  return clampScroll(next, frame.total, frame.windowRows)
+}
