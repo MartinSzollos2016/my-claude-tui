@@ -173,6 +173,68 @@ describe('detail pane', () => {
     }
   })
 
+  test('previews a long result and shows it in full on demand', async ($, on) => {
+    const lines = Array.from({ length: 500 }, (_, i) => `line ${i}`).join('\n')
+    const long: SessionMessage[] = [
+      { role: 'user', text: 'run it', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: { command: 'seq 500' }, text: lines }] },
+    ]
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: long }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    await ui.press({ key: 'b1' })
+    expect(await ui.find({ text: /line 99\b/ })).toBeDefined()
+    expect(await ui.find({ text: /line 499/ })).toBeUndefined()
+    expect(await ui.find({ key: 'full:b1:result' })).toBeDefined()
+
+    await ui.press({ key: 'full:b1:result' })
+    expect(await ui.find({ text: /line 499/ })).toBeDefined()
+
+    await ui.press({ key: 'full:b1:result' })
+    expect(await ui.find({ text: /line 499/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('keeps the whole pane under the engine text budget', async ($, on) => {
+    const uses = Array.from({ length: 6 }, (_, i) => ({
+      tool_use_id: `h${i}`,
+      tool: 'Bash',
+      input: { command: 'cat big' },
+      text: `${i}`.repeat(40_000),
+    }))
+    const heavy: SessionMessage[] = [
+      { role: 'user', text: 'big', toolUses: [] },
+      { role: 'assistant', text: 'word '.repeat(5_000), toolUses: uses },
+    ]
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: heavy }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    await ui.press({ key: 'nav-expand' })
+    let pressed = 0
+    for (const use of uses) {
+      const key = `full:${use.tool_use_id}:result`
+      if (await ui.find({ key })) {
+        await ui.press({ key })
+        pressed += 1
+      }
+    }
+    expect(pressed).toBeGreaterThan(0)
+
+    const texts = textsOf(await ui.drawn())
+    expect(Math.max(...texts.map(t => t.length))).toBeLessThan(10_000)
+    expect(texts.reduce((n, t) => n + t.length, 0)).toBeLessThan(100_000)
+    expect(await ui.find({ text: /text budget/ })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('shows an empty state before the first prompt', async ($, on) => {
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.messages', () => ({ value: [] }))

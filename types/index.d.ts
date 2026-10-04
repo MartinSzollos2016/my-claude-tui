@@ -26,6 +26,8 @@ declare module 'claude-code' {
       turn: number | null
       // Expanded row ids (tool_use_id, output id, agentId/child id).
       expanded: string[]
+      // Blocks shown whole instead of previewed (output, input, result ids).
+      full: string[]
       timings: Record<string, ToolTiming>
       turnStats: TurnStat[]
       agentStats: Record<string, AgentStat>

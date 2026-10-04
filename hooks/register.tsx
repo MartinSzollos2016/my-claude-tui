@@ -23,6 +23,7 @@ const TICK_MS = 500
 const tick = atom({ plugin: 'tail-view', key: 'tick' } as const, 0)
 const selectedTurn = atom({ plugin: 'tail-view', key: 'turn' } as const, null)
 const expanded = atom({ plugin: 'tail-view', key: 'expanded' } as const, [])
+const fullBlocks = atom({ plugin: 'tail-view', key: 'full' } as const, [])
 const timings = atom({ plugin: 'tail-view', key: 'timings' } as const, {})
 const turnStats = atom({ plugin: 'tail-view', key: 'turnStats' } as const, [])
 const agentStats = atom({ plugin: 'tail-view', key: 'agentStats' } as const, {})
@@ -297,6 +298,7 @@ export const register: Register = on => {
         traces,
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
+        full: new Set(await read($, fullBlocks)),
       },
       {
         toggle: id =>
@@ -306,7 +308,12 @@ export const register: Register = on => {
         latest: () => void setTurn(() => null),
         expandAll: () =>
           void update($, expanded, ids => [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED)),
-        collapseAll: () => void update($, expanded, () => []),
+        collapseAll: () => {
+          void update($, expanded, () => [])
+          void update($, fullBlocks, () => [])
+        },
+        toggleFull: id =>
+          void update($, fullBlocks, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED))),
       },
     )
   })

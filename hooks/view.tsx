@@ -4,6 +4,8 @@ import type { AgentStatus, BoxProps, RenderChildren, ElementConstructor, Element
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
+  chunkMarkdown,
+  chunkText,
   clampText,
   formatClock,
   formatDuration,
@@ -93,7 +95,24 @@ export type PaneData = {
   traces: ReadonlyMap<string, Trace>
   columns: number
   rows: number
+  // Blocks shown whole instead of previewed, by block id.
+  full: ReadonlySet<string>
 }
+
+// The engine refuses a tree with a text over 10000 characters or over 100000
+// characters of text in total. Long blocks are cut into TEXT_CHUNK pieces,
+// and every block draws from one budget per pane, leaving room for the rows.
+export const TEXT_CHUNK = 8000
+export const PANE_TEXT_BUDGET = 70_000
+
+const PREVIEW = {
+  text: { lines: 100, chars: TEXT_CHUNK },
+  code: { lines: 60, chars: TEXT_CHUNK },
+  markdown: { lines: Infinity, chars: 30_000 },
+} as const
+
+// Render-time state: what is left of the pane's text budget.
+type Ctx = PaneData & { budget: { left: number } }
 
 export type PaneActions = {
   toggle: (id: string) => void
@@ -102,12 +121,13 @@ export type PaneActions = {
   latest: () => void
   expandAll: () => void
   collapseAll: () => void
+  toggleFull: (id: string) => void
 }
 
 const isAgentRunning = (status: AgentStatus | undefined) =>
   status === 'running' || status === 'pending' || status === 'waiting'
 
-function itemDuration(item: Item, data: PaneData): number | undefined {
+function itemDuration(item: Item, data: Ctx): number | undefined {
   if (item.kind !== 'tool') return undefined
   if (item.agentId !== undefined) {
     const d = item.durationMs ?? data.agentStats[item.agentId]?.durationMs
@@ -124,8 +144,9 @@ function hasExpandedContent(item: Item): boolean {
   return isSubagent(item) || Object.keys(item.input).length > 0 || (item.resultText ?? '') !== ''
 }
 
-export function renderPane(el: El, data: PaneData, act: PaneActions) {
+export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const { Box, Text } = el
+  const data: Ctx = { ...input, budget: { left: PANE_TEXT_BUDGET } }
   const turn = data.turns[data.selected]
 
   if (!turn) {
@@ -159,7 +180,7 @@ export function renderPane(el: El, data: PaneData, act: PaneActions) {
 }
 
 // The pane body, painted edge to edge in the theme's background.
-function paneBody(el: El, data: PaneData, children: RenderChildren) {
+function paneBody(el: El, data: Ctx, children: RenderChildren) {
   const { Box } = el
   return (
     <Box flexDirection="column" width={data.columns} minHeight={data.rows} backgroundColor={C.paneBackground}>
@@ -168,7 +189,7 @@ function paneBody(el: El, data: PaneData, children: RenderChildren) {
   )
 }
 
-function renderHeader(el: El, turn: Turn, data: PaneData) {
+function renderHeader(el: El, turn: Turn, data: Ctx) {
   const { Box, Text } = el
   const stat = data.turnStat
   const model = shortModel(stat?.model ?? data.sessionModel)
@@ -205,7 +226,7 @@ function renderHeader(el: El, turn: Turn, data: PaneData) {
   )
 }
 
-function renderNav(el: El, data: PaneData, act: PaneActions) {
+function renderNav(el: El, data: Ctx, act: PaneActions) {
   const { Box, Button, Text } = el
   const total = data.turns.length
 
@@ -221,7 +242,7 @@ function renderNav(el: El, data: PaneData, act: PaneActions) {
   )
 }
 
-function renderItem(el: El, item: Item, data: PaneData, act: PaneActions, depth: number) {
+function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: number) {
   const { Box, Button, Text } = el
   const isOpen = data.expanded.has(item.id)
   const canOpen = hasExpandedContent(item)
@@ -265,13 +286,13 @@ function renderItem(el: El, item: Item, data: PaneData, act: PaneActions, depth:
   )
 }
 
-function renderExpanded(el: El, item: Item, data: PaneData, act: PaneActions, depth: number) {
+function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: number) {
   const { Box } = el
 
   if (item.kind === 'output') {
     return (
       <Box marginLeft={4} marginBottom={1}>
-        {renderMarkdown(el, item.text)}
+        {renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act)}
       </Box>
     )
   }
@@ -282,13 +303,13 @@ function renderExpanded(el: El, item: Item, data: PaneData, act: PaneActions, de
 
   return (
     <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-      {renderToolInput(el, item)}
-      {item.resultText !== undefined && item.resultText !== '' && renderBlock(el, item.isError ? 'Error' : 'Result', item.resultText, 20, item.isError)}
+      {renderToolInput(el, item, data, act)}
+      {item.resultText !== undefined && item.resultText !== '' && renderBlock(el, item, data, act)}
     </Box>
   )
 }
 
-function renderToolInput(el: El, item: ToolItem) {
+function renderToolInput(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
   const { Box, Text } = el
   const input = item.input
   const s = (k: string) => (typeof input[k] === 'string' ? (input[k] as string) : '')
@@ -297,7 +318,7 @@ function renderToolInput(el: El, item: ToolItem) {
     return (
       <Box flexDirection="column">
         <Text dimColor>Command</Text>
-        {renderCode(el, 'bash', s('command'), 15)}
+        {renderLong(el, `${item.id}:input`, s('command'), { kind: 'code', language: 'bash' }, data, act)}
       </Box>
     )
   }
@@ -309,7 +330,7 @@ function renderToolInput(el: El, item: ToolItem) {
     return (
       <Box flexDirection="column">
         <Text dimColor>{truncate(s('file_path'), 300)}</Text>
-        {renderCode(el, 'diff', diff, 30)}
+        {renderLong(el, `${item.id}:input`, diff, { kind: 'code', language: 'diff' }, data, act)}
       </Box>
     )
   }
@@ -317,48 +338,64 @@ function renderToolInput(el: El, item: ToolItem) {
   return (
     <Box flexDirection="column">
       <Text dimColor>Input</Text>
-      {renderCode(el, 'json', JSON.stringify(input, null, 2), 20)}
+      {renderLong(el, `${item.id}:input`, JSON.stringify(input, null, 2), { kind: 'code', language: 'json' }, data, act)}
     </Box>
   )
 }
 
-function renderBlock(el: El, label: string, text: string, maxLines: number, isError: boolean) {
+function renderBlock(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
   const { Box, Text } = el
-  const shown = clampText(text.trimEnd(), maxLines)
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text dimColor>{label}</Text>
-      <Text color={isError ? C.error : undefined} dimColor={!isError}>
-        {shown.text}
-      </Text>
-      {shown.note !== undefined && <Text color={C.muted}>{shown.note}</Text>}
+      <Text dimColor>{item.isError ? 'Error' : 'Result'}</Text>
+      {renderLong(el, `${item.id}:result`, (item.resultText ?? '').trimEnd(), { kind: 'text', isError: item.isError }, data, act)}
     </Box>
   )
 }
 
-function renderCode(el: El, language: string, source: string, maxLines: number) {
-  const { Box, Code, Text } = el
-  const shown = clampText(source, maxLines)
+type LongSpec = { kind: 'text'; isError: boolean } | { kind: 'code'; language: string } | { kind: 'markdown' }
+
+// A block of any length: previewed by lines and characters until the person
+// asks for all of it, cut into pieces under the per-element limit, and drawn
+// from the pane's text budget so the tree never crosses the engine's total.
+function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx, act: PaneActions) {
+  const { Box, Button, Code, Markdown, Text } = el
+  const isFull = data.full.has(id)
+  const preview = PREVIEW[spec.kind]
+  const limit = isFull ? { lines: Infinity, chars: Infinity } : preview
+  const allowed = Math.min(limit.chars, data.budget.left)
+  const shown = clampText(text, limit.lines, allowed)
+  data.budget.left -= shown.text.length
+
+  const isBudgetCut = shown.note !== undefined && allowed < limit.chars
+  const isPreviewed = !isFull && shown.note !== undefined && !isBudgetCut
+  const canShrink = isFull && clampText(text, preview.lines, preview.chars).note !== undefined
+
+  const pieces = spec.kind === 'markdown' ? chunkMarkdown(shown.text, TEXT_CHUNK) : chunkText(shown.text, TEXT_CHUNK)
+
   return (
     <Box flexDirection="column">
-      <Code language={language} source={shown.text} />
-      {shown.note !== undefined && <Text color={C.muted}>{shown.note}</Text>}
+      {pieces.map(piece =>
+        spec.kind === 'markdown' ? (
+          <Markdown text={piece} />
+        ) : spec.kind === 'code' ? (
+          <Code language={spec.language} source={piece} />
+        ) : (
+          <Text color={spec.isError ? C.error : undefined} dimColor={!spec.isError}>
+            {piece}
+          </Text>
+        ),
+      )}
+      {isBudgetCut && <Text color={C.muted}>{`${shown.note} – pane text budget reached; collapse other rows to see more`}</Text>}
+      {isPreviewed && (
+        <Button key={`full:${id}`} plain dimColor label={`${shown.note} – show all`} onPress={() => act.toggleFull(id)} />
+      )}
+      {canShrink && !isBudgetCut && <Button key={`full:${id}`} plain dimColor label="show less" onPress={() => act.toggleFull(id)} />}
     </Box>
   )
 }
 
-function renderMarkdown(el: El, text: string) {
-  const { Box, Markdown, Text } = el
-  const shown = clampText(text, 200)
-  return (
-    <Box flexDirection="column">
-      <Markdown text={shown.text} />
-      {shown.note !== undefined && <Text color={C.muted}>{shown.note}</Text>}
-    </Box>
-  )
-}
-
-function renderTrace(el: El, item: ToolItem & { agentId: string }, data: PaneData, act: PaneActions, depth: number) {
+function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, depth: number) {
   const { Box, Text } = el
   const trace = data.traces.get(item.agentId)
   const model = data.agentStats[item.agentId]?.model
@@ -374,7 +411,7 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: PaneDat
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
         <Text dimColor>{`Trace unavailable: ${truncate(trace.denied, 300)}`}</Text>
-        {item.resultText !== undefined && renderBlock(el, 'Result', item.resultText, 20, item.isError)}
+        {item.resultText !== undefined && renderBlock(el, item, data, act)}
       </Box>
     )
   }
