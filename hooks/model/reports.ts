@@ -1,4 +1,5 @@
 // Text reports for surfaces that draw no pane (VS Code, claude -p).
+import type { TurnStat } from '../../types'
 import { clampText } from './clamp'
 import { formatDuration, shortModel } from './format'
 import { itemName, itemSummary } from './summaries'
@@ -6,7 +7,6 @@ import { turnTail } from './transcript'
 import { EMPTY_TURN_TEXT } from './turn-table'
 import type { Turn } from './types'
 import { padEndDisplay, truncate, truncateDisplay } from './width'
-import type { TurnStat } from '../../types'
 
 //
 // VS Code and `claude -p` draw no pane, so /tail and /tail-turns answer with

@@ -1,9 +1,9 @@
 // The turn list as a table: number, prompt, tools, time, tokens and a bar.
 import type { Icons } from '../icons'
+import type { TurnStat } from '../../types'
 import { formatDuration, formatTokens } from './format'
 import type { Turn } from './types'
 import { displayWidth, durationBar, padEndDisplay, truncateDisplay } from './width'
-import type { TurnStat } from '../../types'
 
 type TurnCells = { number: string; prompt: string; tools: string; time: string; tokens: string; bar: string }
 type TurnTableRow = { index: number; cells: TurnCells; label: string }
