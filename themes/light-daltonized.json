@@ -1,0 +1,7 @@
+{
+  "name": "Tail Light (colorblind-friendly)",
+  "base": "light-daltonized",
+  "overrides": {
+    "composerSidebarBackground": "rgb(255,255,255)"
+  }
+}
