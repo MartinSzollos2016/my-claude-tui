@@ -581,12 +581,16 @@ async function setSwitch(
   return `${setting.label}: ${arg}.`
 }
 
+// /tail-status: also redraws the transcript once when the switch moved, so
+// the turn duration lines already drawn take or drop their counts.
 async function setStatus($: EngineInterface, arg: string): Promise<string> {
+  const wasOn = await isStatusOn($)
   const text = await setSwitch(
     $,
     { command: 'tail-status', key: STATUS_KEY, label: 'Status line', fallback: true },
     arg,
   )
+  if ((await isStatusOn($)) !== wasOn) $.ui.invalidate('ui.render')
   await syncStatus($)
   return text
 }
