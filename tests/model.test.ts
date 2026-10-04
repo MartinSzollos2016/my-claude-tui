@@ -12,6 +12,7 @@ import {
   gitDirFrom,
   parseGitHead,
   itemName,
+  itemStatus,
   languageFor,
   paneColumns,
   resultLine,
@@ -358,5 +359,43 @@ describe('untrusted input stays linear', () => {
     ).toBe('Task notification: Agent done')
     expect(sanitizePrompt('a<system-reminder>x</system-reminder>b<system-reminder>y</system-reminder>c')).toBe('abc')
     expect(sanitizePrompt('<command-name>a<b</command-name>')).toBe('a')
+  })
+})
+
+describe('itemStatus', () => {
+  const tool = (over: Partial<ToolItem>): ToolItem => ({
+    kind: 'tool',
+    id: 'x',
+    tool: 'Bash',
+    input: {},
+    summary: '',
+    isError: false,
+    isPending: false,
+    ...over,
+  })
+  const live = { isLatest: true, isWorking: true }
+  const quiet = { isLatest: true, isWorking: false }
+
+  test('a finished call is done, a failed one error', () => {
+    expect(itemStatus(tool({ resultText: 'ok' }), quiet)).toBe('done')
+    expect(itemStatus(tool({ isError: true, resultText: 'boom' }), quiet)).toBe('error')
+  })
+
+  test('a pending call runs only on the latest turn while the session works (P6)', () => {
+    const pending = tool({ isPending: true })
+    expect(itemStatus(pending, live)).toBe('running')
+    expect(itemStatus(pending, quiet)).toBe('idle')
+    expect(itemStatus(pending, { isLatest: false, isWorking: true })).toBe('idle')
+  })
+
+  test('a running subagent runs whatever the turn', () => {
+    expect(itemStatus(tool({ isPending: false }), { isLatest: false, isWorking: false, isAgentRunning: true })).toBe(
+      'running',
+    )
+  })
+
+  test('a call ended by the user is interrupted, not an error', () => {
+    const stopped = tool({ isError: true, resultText: '[Request interrupted by user for tool use]' })
+    expect(itemStatus(stopped, quiet)).toBe('interrupted')
   })
 })

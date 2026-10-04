@@ -186,6 +186,65 @@ describe('renderPane', () => {
     expect(byKey(last, 'nav-latest')).toBeUndefined()
   })
 
+  test('every tool row starts with a status glyph, outputs and thinking keep the column blank', () => {
+    const glyph = (tree: unknown, id: string) => text(byKey(tree, `status-${id}`))
+    const color = (tree: unknown, id: string) => byKey(tree, `status-${id}`)?.props['color']
+    const quiet = renderPane(el, base, act)
+    expect(glyph(quiet, 'b1')).toBe('✓ ')
+    expect(color(quiet, 'b1')).toBe('success')
+    expect(glyph(quiet, 'e1')).toBe('✗ ')
+    expect(color(quiet, 'e1')).toBe('error')
+    expect(glyph(quiet, 'p1')).toBe('· ')
+    expect(color(quiet, 'p1')).toBe('inactive')
+    expect(glyph(quiet, 'a1')).toBe('⠋ ')
+
+    const live = renderPane(el, { ...base, isLatest: true, isWorking: true, frame: 1 }, act)
+    expect(glyph(live, 'p1')).toBe('⠙ ')
+    expect(color(live, 'p1')).toBe('success')
+
+    const stopped = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: 'o',
+        toolUses: [
+          {
+            tool_use_id: 's1',
+            tool: 'Bash',
+            input: {},
+            text: '[Request interrupted by user for tool use]',
+            isError: true,
+          },
+        ],
+      },
+    ])
+    const paused = renderPane(el, { ...base, turns: stopped, agents: new Map() }, act)
+    expect(glyph(paused, 's1')).toBe('⏸ ')
+    expect(color(paused, 's1')).toBe('warning')
+
+    // Output rows draw a blank of the same width, so the columns line up.
+    expect(glyph(quiet, 't0:o0')).toBe('  ')
+  })
+
+  test('the trace of a subagent carries status glyphs too', () => {
+    const trace = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: 'g', tool: 'Grep', input: { pattern: 'x' }, text: 'm' }],
+        },
+      ],
+      'ag/',
+    )
+    const tree = renderPane(
+      el,
+      { ...base, expanded: new Set(['a1']), traces: new Map([['ag', { items: trace[0]!.items }]]) },
+      act,
+    )
+    expect(text(byKey(tree, 'status-ag/g'))).toBe('✓ ')
+  })
+
   test('hover scopes stay within 64 characters and are not shared between buttons', () => {
     const id = 'toolu_vrtx_0123456789abcdefghijklmnopqr'
     const agentId = 'a0123456789abcdef'
