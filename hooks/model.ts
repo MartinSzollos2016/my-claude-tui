@@ -2045,3 +2045,28 @@ export function gitDirFrom(root: string, dotGitFile: string): string | null {
   const dir = line.slice('gitdir: '.length).trim()
   return dir.startsWith('/') ? dir : `${root}/${dir}`
 }
+
+// -- Pinned footer ------------------------------------------------------------
+
+export type FooterLayout = {
+  // Rows the footer takes: the rule, the groups and the status line.
+  rows: number
+  // Groups side by side in two rows, or one group per row.
+  columns: 'two' | 'stacked'
+  // Whether the buttons carry their labels; without, only key and glyph.
+  labels: boolean
+}
+
+const FOOTER_TWO_COLUMNS_FROM = 64
+const FOOTER_LABELS_FROM = 40
+
+export function footerLayout(columns: number): FooterLayout {
+  if (columns >= FOOTER_TWO_COLUMNS_FROM) return { rows: 4, columns: 'two', labels: true }
+  return { rows: 6, columns: 'stacked', labels: columns >= FOOTER_LABELS_FROM }
+}
+
+// The row the footer starts on: the last `footerRows` rows of the window that
+// starts `offset` rows into the body.
+export function footerTop(offset: number, bodyRows: number, footerRows: number): number {
+  return Math.max(0, offset + bodyRows - footerRows)
+}
