@@ -5,13 +5,6 @@ import { sanitizePrompt, sanitizeText, sanitizeValue } from './sanitize'
 import { toolSummary } from './summaries'
 import { SUBAGENT_TOOLS, type Item, type ToolItem, type Turn } from './types'
 
-//
-// Tool results, model output and tool inputs are untrusted: a fetched page or
-// a file can carry terminal escape sequences (OSC 52 writes the clipboard,
-// OSC 8 spoofs links, CSI moves the cursor over other rows) or bidi controls
-// that make code read differently than it runs (Trojan Source). Everything
-// from the transcript passes through sanitizeText before it is drawn.
-
 export const isSubagent = (item: Item): item is ToolItem & { agentId: string } =>
   item.kind === 'tool' && SUBAGENT_TOOLS.has(item.tool) && item.agentId !== undefined
 
