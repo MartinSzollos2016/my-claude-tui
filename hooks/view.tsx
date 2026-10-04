@@ -94,6 +94,7 @@ const middleWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-middle' : 
 // The context meter's length, and the info bar width it needs to show.
 const METER_CELLS = 10
 const BAR_METER_COLUMNS = 100
+const HEADER_METER_COLUMNS = 80
 
 // A trace's rows sit this far in from its subagent's row.
 const TRACE_INDENT = 4
@@ -524,37 +525,41 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
 
   return (
     <Box flexDirection="row" justifyContent="space-between" width={data.columns}>
-      <Box flexDirection="row" flexShrink={1}>
+      <Box flexDirection="row" flexShrink={1} columnGap={1}>
         <Text key="brand-mark" bold={data.isFocused === true} color={data.isFocused === true ? C.brand : C.muted}>
-          {icons.robot}{' '}
+          {icons.robot}
         </Text>
         <Text bold color={C.text}>
-          Claude{' '}
+          Claude
         </Text>
         <Text color={modelColor(model) ?? C.text}>{model}</Text>
-        {(turn.toolCount > 0 || turn.outputCount > 0) && <Text color={C.muted}> {icons.dot} </Text>}
-        {turn.toolCount > 0 && <Text color={C.muted}>{`${icons.wrench} ${turn.toolCount}  `}</Text>}
-        {turn.outputCount > 0 && <Text color={C.accent}>{icons.output} </Text>}
-        {turn.outputCount > 0 && <Text color={C.muted}>{`${turn.outputCount}  `}</Text>}
+        {(turn.toolCount > 0 || turn.outputCount > 0) && <Text color={C.muted}>{icons.dot}</Text>}
+        {turn.toolCount > 0 && <Text color={C.muted}>{`${icons.wrench} ${turn.toolCount}`}</Text>}
+        {turn.outputCount > 0 && (
+          <Box flexDirection="row" columnGap={1}>
+            <Text color={C.accent}>{icons.output}</Text>
+            <Text color={C.muted}>{`${turn.outputCount}`}</Text>
+          </Box>
+        )}
         {data.thinking !== undefined && data.thinking.count > 0 && (
-          <Text color={C.muted}>{`${icons.thinking} ${data.thinking.count}  `}</Text>
+          <Text color={C.muted}>{`${icons.thinking} ${data.thinking.count}`}</Text>
         )}
         {subagents.map(item => (
-          <Text color={isAgentRunning(data.agents.get(item.agentId)) ? C.ongoing : C.accent}>{`${icons.robot} `}</Text>
+          <Text color={isAgentRunning(data.agents.get(item.agentId)) ? C.ongoing : C.accent}>{icons.robot}</Text>
         ))}
       </Box>
-      <Box flexDirection="row" flexShrink={0}>
+      <Box flexDirection="row" flexShrink={0} columnGap={2}>
         {stat?.outputTokens !== undefined && (
-          <Text color={C.muted}>{`${icons.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}  `}</Text>
+          <Text color={C.muted}>{`${icons.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}`}</Text>
         )}
         {data.isLatest && data.contextPercent !== undefined && (
-          <Text
-            color={contextColor(data.contextPercent)}
-          >{`ctx ${contextMeter(data.contextPercent, METER_CELLS, icons)} ${Math.round(data.contextPercent)}%  `}</Text>
+          <Text color={contextColor(data.contextPercent)}>
+            {`${data.columns >= HEADER_METER_COLUMNS ? `${contextMeter(data.contextPercent, METER_CELLS, icons)} ` : ''}${Math.round(data.contextPercent)}%`}
+          </Text>
         )}
-        {stat && <Text color={C.muted}>{`${icons.clock} ${formatDuration(stat.durationMs)}  `}</Text>}
+        {stat && <Text color={C.muted}>{`${icons.clock} ${formatDuration(stat.durationMs)}`}</Text>}
         {data.isLatest && data.isWorking && (
-          <Text color={C.ongoing}>{`${icons.spinner[data.frame % icons.spinner.length]} `}</Text>
+          <Text color={C.ongoing}>{icons.spinner[data.frame % icons.spinner.length]}</Text>
         )}
         {stat && <Text color={C.muted}>{formatClock(stat.endedAt)}</Text>}
       </Box>
