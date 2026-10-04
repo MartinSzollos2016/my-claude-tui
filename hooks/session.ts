@@ -4,7 +4,7 @@
 import type { RenderSurface, TurnUsage } from 'claude-code'
 
 import type { ToolTiming, TurnStat } from '../types'
-import type { Turn } from './model'
+import type { Turn } from './model/types'
 
 export const MAX_TIMINGS = 500
 
