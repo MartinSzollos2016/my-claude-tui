@@ -1,0 +1,20 @@
+{
+  "name": "tail-view",
+  "version": "0.1.0",
+  "private": true,
+  "description": "tail-claude's detail view (tool calls, subagent traces) and info bar inside Claude Code",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -p .",
+    "test": "claude plugin test .",
+    "validate": "claude plugin validate .",
+    "check": "npm run format:check && npm run typecheck && npm run validate && npm test"
+  },
+  "devDependencies": {
+    "prettier": "3.9.9",
+    "typescript": "5.9.3"
+  }
+}
