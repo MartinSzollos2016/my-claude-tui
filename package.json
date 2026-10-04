@@ -6,15 +6,23 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "prepare": "husky",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -p .",
+    "lint": "knip",
+    "typecheck": "node scripts/typecheck.mjs",
     "test": "claude plugin test .",
-    "validate": "claude plugin validate .",
-    "check": "npm run format:check && npm run typecheck && npm run validate && npm test"
+    "validate": "claude plugin validate . --strict",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run validate && npm test",
+    "audit": "npm audit --audit-level=moderate"
   },
   "devDependencies": {
+    "husky": "9.1.7",
+    "knip": "6.39.0",
     "prettier": "3.9.9",
     "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
