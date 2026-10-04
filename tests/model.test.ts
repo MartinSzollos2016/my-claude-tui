@@ -4,6 +4,8 @@ import { describe, expect, test } from 'claude-code/testing'
 import { GIT_STATUS_ARGV, parseGitStatus, statFor } from '../hooks/register'
 import {
   buildTurns,
+  chunkMarkdown,
+  chunkText,
   clampText,
   formatDuration,
   formatTokens,
@@ -115,6 +117,24 @@ describe('formatters', () => {
     expect(clampText('a\nb\nc', 2)).toEqual({ text: 'a\nb', note: '… (1 lines hidden)' })
     expect(clampText('x'.repeat(10), 5, 4)).toEqual({ text: 'xxxx', note: '… (6 chars hidden)' })
     expect(clampText('🚀🚀🚀', 5, 2).text).toBe('🚀🚀')
+  })
+
+  test('chunkText splits under the size, at newlines when it can', () => {
+    expect(chunkText('abc', 10)).toEqual(['abc'])
+    expect(chunkText('aaaa\nbbbb\ncccc', 10)).toEqual(['aaaa\nbbbb', 'cccc'])
+    expect(chunkText('x'.repeat(25), 10)).toEqual(['x'.repeat(10), 'x'.repeat(10), 'x'.repeat(5)])
+    const big = Array.from({ length: 3000 }, (_, i) => `line ${i}`).join('\n')
+    const chunks = chunkText(big, 8000)
+    expect(chunks.every(c => c.length <= 8000)).toBe(true)
+    expect(chunks.join('\n')).toBe(big)
+  })
+
+  test('chunkMarkdown closes and reopens a code fence cut by a chunk', () => {
+    const md = ['intro', '```ts', 'a()', 'b()', 'c()', '```', 'outro'].join('\n')
+    const chunks = chunkMarkdown(md, 16)
+    expect(chunks.every(c => c.length <= 16 + 4)).toBe(true)
+    for (const c of chunks) expect((c.match(/^```/gm) ?? []).length % 2).toBe(0)
+    expect(chunks.join('\n').replace(/\n```\n```ts/g, '')).toContain('a()')
   })
 
   test('parseGitStatus', () => {
