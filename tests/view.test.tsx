@@ -127,6 +127,23 @@ const act = {
 }
 
 describe('renderPane', () => {
+  test('Workflow row says running, done or no result', () => {
+    const wf = (text?: string) =>
+      buildTurns([
+        { role: 'user', text: 'go', toolUses: [] },
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: 'w1', tool: 'Workflow', input: { name: 'review' }, ...(text ? { text } : {}) }],
+        },
+      ])
+    const label = (turns: ReturnType<typeof wf>, isWorking: boolean) =>
+      String(byKey(renderPane(el, { ...base, turns, isLatest: true, isWorking }, act), 'w1')?.props['label'])
+    expect(label(wf(), true)).toContain('review · running')
+    expect(label(wf(), false)).toContain('review · no result')
+    expect(label(wf('ok'), false)).toContain('review · done')
+  })
+
   test('the header counts thinking blocks and the Thinking row opens its text', () => {
     const quiet = renderPane(el, { ...base, thinking: { count: 3, text: '' } }, act)
     expect(text(quiet)).toContain('\u{F09D1} 3')
@@ -349,6 +366,17 @@ describe('renderPane', () => {
 })
 
 describe('renderBar', () => {
+  test('a running Workflow shows as a badge', () => {
+    const bar = (workflow: { isRunning: true; agents: number } | { isRunning: false }) =>
+      renderBar(el, { project: 'tail', git: null, mode: null, runningAgents: 0, columns: 80, workflow })
+    const running = bar({ isRunning: true, agents: 2 })
+    expect(text(running)).toBe('tail · workflow running · 2 agents')
+    expect(nodes(running).some(n => n.props['color'] === 'success' && text(n).includes('workflow running'))).toBe(true)
+    expect(text(bar({ isRunning: true, agents: 1 }))).toBe('tail · workflow running · 1 agent')
+    expect(text(bar({ isRunning: true, agents: 0 }))).toBe('tail · workflow running')
+    expect(text(bar({ isRunning: false }))).toBe('tail')
+  })
+
   test('project, branch, mode, agents, context and cost', () => {
     const tree = renderBar(el, {
       project: 'tail',

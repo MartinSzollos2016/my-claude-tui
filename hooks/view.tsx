@@ -38,6 +38,7 @@ import {
   type Turn,
   type TurnMatch,
   type TurnThinking,
+  type WorkflowState,
 } from './model'
 import { C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 
@@ -397,13 +398,21 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
   )
 }
 
+// A Workflow row says where it stands: running while the latest turn works,
+// done once it answered, no result when its turn ended without one.
+function withWorkflowNote(item: Item, summary: string, data: Ctx): string {
+  if (item.kind !== 'tool' || item.tool !== 'Workflow') return summary
+  const note = !item.isPending ? 'done' : data.isLatest && data.isWorking ? 'running' : 'no result'
+  return summary === '' ? note : `${summary} ${G.dot} ${note}`
+}
+
 function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: number) {
   const { Box, Button, Text } = el
   const isOpen = data.expanded.has(item.id)
   const canOpen = hasExpandedContent(item)
   const icon = itemIcon(item)
   const name = itemName(item)
-  const summary = itemSummary(item)
+  const summary = withWorkflowNote(item, itemSummary(item), data)
   const width = Math.max(20, data.columns - depth * 4)
 
   const chevron = !canOpen
@@ -417,7 +426,8 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
         : G.collapsed
 
   const status = item.kind === 'tool' && item.agentId ? data.agents.get(item.agentId) : undefined
-  const isRunning = isAgentRunning(status) || (item.kind === 'tool' && item.isPending && data.isLatest)
+  const isRunning =
+    isAgentRunning(status) || (item.kind === 'tool' && item.isPending && data.isLatest && data.isWorking)
   const spinner = isRunning ? `${SPINNER[data.frame % SPINNER.length]} ` : '  '
 
   const duration = itemDuration(item, data)
@@ -650,6 +660,7 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
 // -- Info bar -----------------------------------------------------------------
 
 type BarData = {
+  workflow?: WorkflowState
   project: string
   git: GitInfo | null
   mode: string | null
@@ -660,11 +671,18 @@ type BarData = {
   columns: number
 }
 
+function workflowBadge(state: WorkflowState | undefined): string {
+  if (state === undefined || !state.isRunning) return ''
+  if (state.agents === 0) return 'workflow running'
+  return `workflow running ${G.dot} ${state.agents} agent${state.agents === 1 ? '' : 's'}`
+}
+
 export function renderBar(el: El, data: BarData) {
   const { Box, Text } = el
   const sep = <Text color={C.muted}>{` ${G.dot} `}</Text>
   const mode = data.mode ? shortMode(data.mode) : ''
   const modeKey = modeColor(data.mode)
+  const workflow = workflowBadge(data.workflow)
 
   return (
     <Box flexDirection="row" justifyContent="space-between" width={data.columns}>
@@ -681,6 +699,8 @@ export function renderBar(el: El, data: BarData) {
         )}
         {data.runningAgents > 0 && sep}
         {data.runningAgents > 0 && <Text color={C.ongoing}>{`agents running ${G.dot} ${data.runningAgents}`}</Text>}
+        {workflow !== '' && sep}
+        {workflow !== '' && <Text color={C.ongoing}>{workflow}</Text>}
       </Box>
       <Box flexDirection="row" flexShrink={0}>
         {data.contextTokens !== undefined && <Text dimColor>{`${formatTokens(data.contextTokens)} ctx `}</Text>}

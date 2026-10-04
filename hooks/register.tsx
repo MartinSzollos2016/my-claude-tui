@@ -34,6 +34,7 @@ import {
   turnListText,
   turnsKey,
   turnText,
+  workflowState,
   type Item,
   type Turn,
   type TurnMatch,
@@ -47,6 +48,7 @@ import {
   isTextOnly,
   memo,
   nextSelectedTurn,
+  noteWorkflowAgent,
   recordToolEnd,
   recordToolStart,
   remember,
@@ -188,6 +190,18 @@ let pendingTurns: number[] = []
 // bounded in case a turn never completes.
 const turnIndexes = new Map<string, number>()
 const MAX_OPEN_TURNS = 50
+
+// Agents a running Workflow started, as far as the hooks see them.
+let workflowAgents: readonly string[] = []
+
+async function trackWorkflow($: EngineInterface, tool: string, agentId: string | undefined): Promise<void> {
+  if (agentId === undefined) {
+    if (tool === 'Workflow') workflowAgents = []
+    return
+  }
+  const agents = await $.agent.list()
+  workflowAgents = noteWorkflowAgent(workflowAgents, agentId, new Set(agents.map(a => a.id)))
+}
 
 // The index of the last main-loop turn that completed with a known index.
 let lastDoneIndex = -1
@@ -430,6 +444,7 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const id = e.tool_use_id
     const start = await $.clock.now()
+    trackWorkflow($, e.tool, e.agentId).catch(ignore)
     await update($, timings, all => recordToolStart(all, id, start))
     await bump($)
     startTicker($)
@@ -449,6 +464,7 @@ export const register: Register = on => {
       const agentId = e.agentId
       const stat: AgentStat = { model: e.usage?.model, durationMs: e.durationMs }
       await update($, agentStats, all => ({ ...all, [agentId]: stat }))
+      trackWorkflow($, '', agentId).catch(ignore)
     } else {
       const index = turnIndexes.get(e.turnId)
       turnIndexes.delete(e.turnId)
@@ -590,6 +606,8 @@ export const register: Register = on => {
     const el = $.ui.resolve(e) as unknown as El
     const usage = await $.session.usage()
     const agents = await $.agent.list()
+    const latestTurn = (await currentTurns($)).value.at(-1)
+    const working = await read($, isWorking)
 
     return renderBar(el, {
       project: sanitizeText(shortPath(await $.session.root(), 1)),
@@ -600,6 +618,7 @@ export const register: Register = on => {
       contextPercent: usage.context.percent,
       costUsd: usage.cost?.usd,
       columns: e.props.bodyColumns,
+      workflow: workflowState(latestTurn, workflowAgents.length, working),
     })
   })
 }

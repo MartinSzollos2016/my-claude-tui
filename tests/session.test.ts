@@ -12,6 +12,7 @@ import {
   recordToolStart,
   remember,
   statFor,
+  noteWorkflowAgent,
   takeTurnIndex,
   toggleId,
   turnIndexAtStart,
@@ -200,5 +201,16 @@ describe('isTextOnly', () => {
     expect(isTextOnly(['vscode', 'terminal'])).toBe(false)
     expect(isTextOnly(['terminal'])).toBe(false)
     expect(isTextOnly(['desktop'])).toBe(false)
+  })
+})
+
+describe('noteWorkflowAgent', () => {
+  test('counts each agent the list does not know, once', () => {
+    const known = new Set(['sub-1'])
+    let seen = noteWorkflowAgent([], 'wf-1', known)
+    seen = noteWorkflowAgent(seen, 'wf-1', known)
+    seen = noteWorkflowAgent(seen, 'sub-1', known)
+    seen = noteWorkflowAgent(seen, undefined, known)
+    expect(seen).toEqual(['wf-1'])
   })
 })

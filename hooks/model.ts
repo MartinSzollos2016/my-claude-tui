@@ -898,6 +898,18 @@ export function alignFromEnd<T>(items: readonly T[], total: number, index: numbe
   return at >= 0 ? items[at] : undefined
 }
 
+// -- Workflow -----------------------------------------------------------------
+
+export type WorkflowState = { isRunning: false } | { isRunning: true; agents: number }
+
+// A Workflow call of the latest turn still waiting for its result runs only
+// while the session works: an interrupted turn leaves it pending for good.
+export function workflowState(turn: Turn | undefined, unknownAgents: number, isWorking: boolean): WorkflowState {
+  const isPending =
+    turn?.items.some(item => item.kind === 'tool' && item.tool === 'Workflow' && item.isPending) ?? false
+  return isPending && isWorking ? { isRunning: true, agents: unknownAgents } : { isRunning: false }
+}
+
 // The one line a tool call gets in the compact transcript: its name and the
 // shortest useful summary (a Bash call's description, else its first line).
 export function compactCall(tool: string, rawInput: unknown): { name: string; summary: string } {

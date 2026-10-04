@@ -147,6 +147,41 @@ describe('commands', () => {
 })
 
 describe('live data', () => {
+  test('the bar shows a running Workflow and the agents it started', async () => {
+    const { $ } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'Run review', toolUses: [] },
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: 'w1', tool: 'Workflow', input: { name: 'review' } }],
+        },
+      ],
+    })
+    await run('prompt.submit', $, { text: 'Run review' }, async e => e)
+    await run('turn.start', $, { text: 'Run review', turnId: 'wf' }, async e => e)
+    let release = () => undefined as unknown
+    const workflow = run(
+      'tool.call',
+      $,
+      { tool_use_id: 'w1', tool: 'Workflow', input: { name: 'review' } },
+      () => new Promise(resolve => (release = () => resolve({}))),
+    )
+    await settle()
+    await run('tool.call', $, { tool_use_id: 'x1', tool: 'Read', input: {}, agentId: 'wf-agent-1' }, async () => ({}))
+    await run(
+      'turn.complete',
+      $,
+      { answer: '', isAborted: false, reason: 'answer', turnId: 't', agentId: 'wf-agent-2', durationMs: 1 },
+      async () => ({ text: '' }),
+    )
+    await settle()
+    expect(text(await run('ui.render', $, BAR_EVENT))).toContain('workflow running · 2 agents')
+    release()
+    await workflow
+    await finish('wf', 1, $)
+  })
+
   const done = { answer: '', isAborted: false, reason: 'answer' }
   const finish = (turnId: string, durationMs: number, $: Parameters<typeof run>[1]) =>
     run('turn.complete', $, { ...done, turnId, durationMs }, async () => ({ text: '' }))
