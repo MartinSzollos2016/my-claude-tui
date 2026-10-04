@@ -5,7 +5,7 @@
 import { atom, read, update } from 'claude-code'
 import type { AgentStatus, CommandRunInput, CommandRunResult, EngineInterface, Register, Timer } from 'claude-code'
 
-import type { AgentStat, ToolTiming, TurnStat } from '../types'
+import type { AgentStat } from '../types'
 import {
   buildTurns,
   compactCall,
@@ -19,14 +19,13 @@ import {
   shortPath,
   traceItems,
   type Item,
-  type Turn,
 } from './model'
 import { COMMANDS, helpText, parseCommand } from './commands'
+import { nextSelectedTurn, recordToolEnd, recordToolStart, statFor, toggleId, turnStatFrom } from './session'
 import { C, tailThemeAdvice } from './theme'
 import { renderBar, renderPane, type El, type Trace } from './view'
 
 const PANE = 'tail'
-const MAX_TIMINGS = 500
 const MAX_STATS = 200
 const MAX_EXPANDED = 300
 const TICK_MS = 500
@@ -61,16 +60,6 @@ async function refreshGit($: EngineInterface): Promise<void> {
   const gitDir = stat.kind === 'dir' ? dotGit : gitDirFrom(repo.root, await $.fs.read(dotGit))
   const info = gitDir === null ? null : parseGitHead(await $.fs.read(`${gitDir}/HEAD`))
   await update($, git, () => info)
-}
-
-// Prefer the stat recorded for this turn's prompt; the latest turn of a
-// fresh session may have none yet.
-export function statFor(stats: readonly TurnStat[], turn: Turn | undefined): TurnStat | undefined {
-  if (!turn) return undefined
-  for (let i = stats.length - 1; i >= 0; i--) {
-    if (stats[i]!.prompt === turn.prompt) return stats[i]
-  }
-  return undefined
 }
 
 // Loads the trace of every expanded subagent, nested ones included.
@@ -279,42 +268,27 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const id = e.tool_use_id
     const start = await $.clock.now()
-    await update($, timings, all => {
-      const keys = Object.keys(all)
-      const kept =
-        keys.length >= MAX_TIMINGS ? Object.fromEntries(keys.slice(-MAX_TIMINGS / 2).map(k => [k, all[k]!])) : all
-      return { ...kept, [id]: { start } satisfies ToolTiming }
-    })
+    await update($, timings, all => recordToolStart(all, id, start))
     await bump($)
     startTicker($)
 
     const ran = await next(e)
 
     const end = await $.clock.now()
-    await update($, timings, all => ({ ...all, [id]: { start: all[id]?.start ?? start, end } }))
+    await update($, timings, all => recordToolEnd(all, id, end, start))
     await bump($)
     return ran
   })
 
   on('turn.complete', async ($, e, next) => {
     const endedAt = await $.clock.now()
-    const usage = e.usage
 
     if (e.agentId !== undefined) {
       const agentId = e.agentId
-      const stat: AgentStat = { model: usage?.model, durationMs: e.durationMs }
+      const stat: AgentStat = { model: e.usage?.model, durationMs: e.durationMs }
       await update($, agentStats, all => ({ ...all, [agentId]: stat }))
     } else {
-      const stat: TurnStat = {
-        prompt: lastPrompt,
-        durationMs: e.durationMs,
-        endedAt,
-        model: usage?.model,
-        inputTokens: usage
-          ? usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
-          : undefined,
-        outputTokens: usage?.output_tokens,
-      }
+      const stat = turnStatFrom(e, lastPrompt, endedAt)
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
       refreshGit($).catch(ignore)
@@ -338,11 +312,7 @@ export const register: Register = on => {
     const usage = await $.session.usage()
     const allStats = await read($, turnStats)
 
-    const setTurn = (fn: (cur: number) => number | null) =>
-      update($, selectedTurn, cur => {
-        const n = fn(cur === null || cur > latest ? latest : cur)
-        return n === null || n >= latest ? null : Math.max(0, n)
-      })
+    const step = (delta: number | null) => update($, selectedTurn, cur => nextSelectedTurn(cur, latest, delta))
 
     return renderPane(
       el,
@@ -368,13 +338,10 @@ export const register: Register = on => {
         stats: turns.map(t => statFor(allStats, t)),
       },
       {
-        toggle: id =>
-          update($, expanded, ids =>
-            ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED),
-          ).catch(ignore),
-        prev: () => setTurn(cur => cur - 1).catch(ignore),
-        next: () => setTurn(cur => cur + 1).catch(ignore),
-        latest: () => setTurn(() => null).catch(ignore),
+        toggle: id => update($, expanded, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
+        prev: () => step(-1).catch(ignore),
+        next: () => step(1).catch(ignore),
+        latest: () => step(null).catch(ignore),
         expandAll: () =>
           update($, expanded, ids =>
             [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED),
@@ -386,10 +353,7 @@ export const register: Register = on => {
         showTurns: () => update($, paneView, () => 'turns' as const).catch(ignore),
         showDetail: () => update($, paneView, () => 'detail' as const).catch(ignore),
         pickTurn: index => pickTurn($, index, latest).catch(ignore),
-        toggleFull: id =>
-          update($, fullBlocks, ids =>
-            ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED),
-          ).catch(ignore),
+        toggleFull: id => update($, fullBlocks, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
       },
     )
   })
