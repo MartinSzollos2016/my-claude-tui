@@ -16,7 +16,12 @@ import {
   cachedSections,
   firstErrorLine,
   footerLayout,
-  footerTop,
+  clampScroll,
+  contentRows,
+  followCursor,
+  overflowRows,
+  pageScroll,
+  scrollToRow,
   formatDuration,
   fitPath,
   formatTokens,
@@ -1627,14 +1632,120 @@ describe('footerLayout', () => {
   })
 })
 
-describe('footerTop', () => {
-  test('is the last rows of the visible window', () => {
-    expect(footerTop(0, 30, 4)).toBe(26)
-    expect(footerTop(14, 30, 4)).toBe(40)
+describe('contentRows', () => {
+  test('an item row is one row and its start is where it begins', () => {
+    const rows = contentRows([{ kind: 'line' }, { kind: 'line', id: 'a' }, { kind: 'line', id: 'b' }])
+    expect(rows.total).toBe(3)
+    expect(rows.starts).toEqual({ a: 1, b: 2 })
   })
 
-  test('never goes above the body when the window is smaller than the footer', () => {
-    expect(footerTop(0, 3, 6)).toBe(0)
-    expect(footerTop(0, 0, 4)).toBe(0)
+  test('a frame is two borders, a header and one row per line of each piece', () => {
+    const rows = contentRows([
+      { kind: 'line', id: 'a' },
+      { kind: 'frame', body: ['one\ntwo', 'three'], notes: 0 },
+      { kind: 'line', id: 'b' },
+    ])
+    expect(rows.total).toBe(1 + 2 + 1 + 3 + 1)
+    expect(rows.starts['b']).toBe(7)
+    expect(contentRows([{ kind: 'frame', body: [], notes: 0 }]).total).toBe(3)
+  })
+
+  test('a show all line under the body counts as a note', () => {
+    expect(contentRows([{ kind: 'frame', body: ['x'], notes: 1 }]).total).toBe(5)
+    expect(contentRows([{ kind: 'frame', body: ['x'], notes: 2 }]).total).toBe(6)
+  })
+
+  test('a turn of the list is one row, two with a search snippet', () => {
+    const rows = contentRows([
+      { kind: 'turn', hasSnippet: false },
+      { kind: 'turn', hasSnippet: true },
+    ])
+    expect(rows.total).toBe(3)
+  })
+
+  test('the team board counts its headings, members and tasks', () => {
+    const lines = ['Tasks (2)', 'alice', 'bob', '', 'Tasks', 'one', 'two'].map(() => ({ kind: 'line' as const }))
+    expect(contentRows(lines).total).toBe(7)
+  })
+
+  test('no blocks is no rows', () => {
+    expect(contentRows([])).toEqual({ total: 0, starts: {} })
+  })
+})
+
+describe('clampScroll', () => {
+  test('content that fits the window does not scroll', () => {
+    expect(clampScroll(5, 8, 10)).toBe(0)
+    expect(clampScroll(5, 10, 10)).toBe(0)
+  })
+
+  test('longer content scrolls to two rows past its end, never above the top', () => {
+    expect(clampScroll(100, 30, 10)).toBe(22)
+    expect(clampScroll(7, 30, 10)).toBe(7)
+    expect(clampScroll(-3, 30, 10)).toBe(0)
+  })
+})
+
+describe('pageScroll', () => {
+  test('moves a window less two rows down or up, never above the top', () => {
+    expect(pageScroll(0, 1, 10)).toBe(8)
+    expect(pageScroll(8, -1, 10)).toBe(0)
+    expect(pageScroll(3, -1, 10)).toBe(0)
+  })
+
+  test('a window of two rows or less still moves by one', () => {
+    expect(pageScroll(0, 1, 2)).toBe(1)
+    expect(pageScroll(0, 1, 0)).toBe(1)
+  })
+})
+
+describe('followCursor', () => {
+  test('a row already inside the window keeps the scroll', () => {
+    expect(followCursor(5, 6, 10)).toBe(5)
+    expect(followCursor(5, 13, 10)).toBe(5)
+  })
+
+  test('a row below the window scrolls it to one row above the bottom edge', () => {
+    expect(followCursor(0, 9, 10)).toBe(1)
+    expect(followCursor(5, 30, 10)).toBe(22)
+  })
+
+  test('a row above the window scrolls it to one row below the top edge', () => {
+    expect(followCursor(10, 10, 10)).toBe(9)
+    expect(followCursor(10, 2, 10)).toBe(1)
+    expect(followCursor(10, 0, 10)).toBe(0)
+  })
+
+  test('a window of two rows or less has no margin', () => {
+    expect(followCursor(0, 5, 2)).toBe(4)
+    expect(followCursor(5, 3, 2)).toBe(3)
+  })
+})
+
+describe('overflowRows', () => {
+  test('nothing more above or below while the content fits', () => {
+    expect(overflowRows(0, 10, 10)).toEqual({ above: 0, below: 0 })
+  })
+
+  test('counts the rows out of the window and under the indicator rows', () => {
+    expect(overflowRows(0, 30, 10)).toEqual({ above: 0, below: 21 })
+    expect(overflowRows(5, 30, 10)).toEqual({ above: 6, below: 16 })
+    expect(overflowRows(21, 30, 10)).toEqual({ above: 22, below: 0 })
+    expect(overflowRows(22, 30, 10)).toEqual({ above: 23, below: 0 })
+  })
+})
+
+describe('scrollToRow', () => {
+  const frame = { scrollTop: 0, windowRows: 10, total: 30, starts: { a: 2, z: 29 } }
+
+  test('scrolls so the row stays visible, clamped to the content', () => {
+    expect(scrollToRow(frame, 'a')).toBe(0)
+    expect(scrollToRow(frame, 'z')).toBe(21)
+    expect(scrollToRow({ ...frame, scrollTop: 20 }, 'a')).toBe(1)
+  })
+
+  test('a row with no known start, or no row, keeps the scroll', () => {
+    expect(scrollToRow({ ...frame, scrollTop: 4 }, 'nope')).toBe(4)
+    expect(scrollToRow({ ...frame, scrollTop: 4 }, null)).toBe(4)
   })
 })

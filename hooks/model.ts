@@ -2065,6 +2065,96 @@ export function footerLayout(columns: number): FooterLayout {
   return { rows: 6, columns: 'stacked', labels: columns >= FOOTER_LABELS_FROM }
 }
 
+// -- Own scroll ---------------------------------------------------------------
+//
+// The pane is exactly as tall as its window, so the engine has nothing to
+// scroll: the content sits in a clipped window of its own and moves by
+// `scrollTop` rows. Its height is estimated from what the view draws.
+
+// One block of the content in drawing order: a row (an item row carries its
+// id), a frame with the pieces of its body and its note rows (show all, a
+// budget note, an error line), or a row of the turn list with its snippet.
+export type RowBlock =
+  | { kind: 'line'; id?: string }
+  | { kind: 'frame'; body: readonly string[]; notes: number }
+  | { kind: 'turn'; hasSnippet: boolean }
+
+export type ContentRows = { total: number; starts: Readonly<Record<string, number>> }
+
+// Two borders and the header row around a frame's body.
+const FRAME_ROWS = 3
+
+function blockRows(block: RowBlock): number {
+  switch (block.kind) {
+    case 'line':
+      return 1
+    case 'turn':
+      return block.hasSnippet ? 2 : 1
+    case 'frame':
+      return FRAME_ROWS + block.notes + block.body.reduce((sum, piece) => sum + piece.split('\n').length, 0)
+  }
+}
+
+// The rows of the content and the row each item row starts on. A long line
+// the terminal wraps counts once, so the estimate may fall short.
+export function contentRows(blocks: readonly RowBlock[]): ContentRows {
+  const starts: Record<string, number> = {}
+  let total = 0
+  for (const block of blocks) {
+    if (block.kind === 'line' && block.id !== undefined) starts[block.id] = total
+    total += blockRows(block)
+  }
+  return { total, starts }
+}
+
+// How far past its end the content may scroll: the estimate can fall short,
+// so the last rows always come into view.
+const SCROLL_SLACK = 2
+
+// The scroll kept between the top and two rows past the end; none while the
+// content fits the window.
+export function clampScroll(scrollTop: number, contentRows: number, windowRows: number): number {
+  const max = contentRows > windowRows ? contentRows - windowRows + SCROLL_SLACK : 0
+  return Math.min(Math.max(0, scrollTop), max)
+}
+
+// One page down (`delta` 1) or up (-1): the window less its two indicator rows.
+export function pageScroll(scrollTop: number, delta: number, windowRows: number): number {
+  return Math.max(0, scrollTop + delta * Math.max(1, windowRows - SCROLL_SLACK))
+}
+
+// The scroll that shows the row starting at `rowStart`, one row in from the
+// edge it left by (the indicator rows cover the edges); unchanged when it shows.
+export function followCursor(scrollTop: number, rowStart: number, windowRows: number): number {
+  const margin = windowRows > SCROLL_SLACK ? 1 : 0
+  if (rowStart < scrollTop + margin) return Math.max(0, rowStart - margin)
+  if (rowStart > scrollTop + windowRows - 1 - margin) return rowStart - windowRows + 1 + margin
+  return scrollTop
+}
+
+// The rows out of view above and below the window, the rows under the
+// indicators included; none while the content fits.
+export function overflowRows(scrollTop: number, total: number, windowRows: number): { above: number; below: number } {
+  if (total <= windowRows) return { above: 0, below: 0 }
+  return { above: scrollTop > 0 ? scrollTop + 1 : 0, below: Math.max(0, total - scrollTop - windowRows + 1) }
+}
+
+// Where the window stands as drawn: what a key that moves the cursor needs to
+// keep the cursor's row in view.
+export type ScrollFrame = {
+  scrollTop: number
+  windowRows: number
+  total: number
+  starts: Readonly<Record<string, number>>
+}
+
+// The scroll that keeps row `id` in view; unchanged for a row not drawn.
+export function scrollToRow(frame: ScrollFrame, id: string | null): number {
+  const start = id === null ? undefined : frame.starts[id]
+  if (start === undefined) return frame.scrollTop
+  return clampScroll(followCursor(frame.scrollTop, start, frame.windowRows), frame.total, frame.windowRows)
+}
+
 // The row the footer starts on: the last `footerRows` rows of the window that
 // starts `offset` rows into the body.
 export function footerTop(offset: number, bodyRows: number, footerRows: number): number {
