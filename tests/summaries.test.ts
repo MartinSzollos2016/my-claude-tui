@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { helpText } from '../hooks/commands'
-import { clampText, compactCall, resultLine, traceStats } from '../hooks/model'
+import { clampText, compactCall, resultLine } from '../hooks/model'
 import { formatClock, shortMode } from '../hooks/model/format'
 import { itemName, itemSummary, toolCategory, toolSummary } from '../hooks/model/summaries'
+import { traceStats } from '../hooks/model/turns'
 import type { Item } from '../hooks/model/types'
 
 const cases: [string, Record<string, unknown>, string][] = [

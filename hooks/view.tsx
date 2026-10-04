@@ -26,11 +26,7 @@ import {
   footerLayout,
   footerPads,
   groupLabel,
-  groupRuns,
   hoverCard,
-  isAgentRunning,
-  isSubagent,
-  itemStatus,
   overflowRows,
   pageScroll,
   pieceStarts,
@@ -38,11 +34,8 @@ import {
   splitDiff,
   splitMatch,
   taskMark,
-  traceStats,
   turnTable,
   type FooterLayout,
-  type GroupItem,
-  type ItemStatus,
   type RowBlock,
   type ScrollFrame,
   type Section,
@@ -61,8 +54,10 @@ import {
   shortModel,
   treePrefix,
 } from './model/format'
+import { groupRuns, type GroupItem } from './model/groups'
 import { sanitizeText } from './model/sanitize'
 import { itemName, itemSummary, toolCategory } from './model/summaries'
+import { isAgentRunning, isSubagent, itemStatus, traceStats, type ItemStatus } from './model/turns'
 import type { Item, ToolItem, Turn } from './model/types'
 import {
   displayWidth,
