@@ -1,6 +1,6 @@
 import type { SessionMessage } from 'claude-code'
 import type { ToolItem } from '../../hooks/model/types'
-const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
+export const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
 
 export const transcript: SessionMessage[] = [
   prompt('Fix the bug'),
