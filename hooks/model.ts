@@ -1125,8 +1125,8 @@ export function clampDiff(diff: string, maxLines: number, maxChars: number, elli
   const pieces = splitDiff(diff, maxLines, maxChars)
   const first = pieces[0] ?? ''
   if (pieces.length === 1 && first === diff) return { text: diff }
-  const total = hunks.reduce((sum, h) => sum + h.lines.length, 0)
-  const shown = parseHunks(first)?.reduce((sum, h) => sum + h.lines.length, 0) ?? 0
+  const total = hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0)
+  const shown = parseHunks(first)?.reduce((sum, hunk) => sum + hunk.lines.length, 0) ?? 0
   const hidden = total - shown
   return { text: first, note: `${ellipsis} (${hidden} line${hidden === 1 ? '' : 's'} hidden)` }
 }
@@ -1269,7 +1269,7 @@ function diffSection(
   startLine: number,
 ): Section {
   const hunks = edits.map(e => unifiedDiff(sanitizeText(e.old), sanitizeText(e.new), { startLine }))
-  const isDiffed = hunks.length > 0 && hunks.every(h => h !== null && h !== '')
+  const isDiffed = hunks.length > 0 && hunks.every(hunk => hunk !== null && hunk !== '')
   const plain = edits
     .flatMap(e => [
       ...sanitizeText(e.old)
