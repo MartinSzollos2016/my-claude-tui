@@ -21,6 +21,8 @@ import {
   itemStatus,
   languageFor,
   paneColumns,
+  parseNumbered,
+  pieceStarts,
   resultLine,
   searchTurns,
   toolSections,
@@ -172,7 +174,7 @@ describe('toolSections', () => {
     expect(file?.kind).toBe('file')
     expect(file?.body).toBe('/src/app/main.go')
     expect(file?.meta).toBe('lines 10-14')
-    expect(out?.format).toEqual({ kind: 'code', language: 'go' })
+    expect(out?.format).toEqual({ kind: 'code', path: '/src/app/main.go' })
   })
 
   test('Edit is a unified diff of the file', () => {
@@ -247,7 +249,7 @@ describe('toolSections', () => {
       meta: '/x/y.py',
       isPathMeta: true,
       body: 'print(1)',
-      format: { kind: 'code', language: 'python' },
+      format: { kind: 'code', path: '/x/y.py' },
     })
   })
 
@@ -866,5 +868,78 @@ describe('splitDiff and clampDiff', () => {
     expect(clamped.note).toBe('… (5 lines hidden)')
     expect(clampDiff(diff, 100, 1000)).toEqual({ text: diff })
     expect(clampDiff(diff, 100, 3, '...')).toEqual({ text: '', note: '... (10 lines hidden)' })
+  })
+})
+
+describe('parseNumbered', () => {
+  test('reads the arrow form and returns the first number with the bare lines', () => {
+    expect(parseNumbered('     3→const a = 1\n     4→\n     5→  return a')).toEqual({
+      startLine: 3,
+      body: 'const a = 1\n\n  return a',
+    })
+  })
+
+  test('reads the tab form and keeps tabs inside a line', () => {
+    expect(parseNumbered('12\tone\n13\ttwo\tcols')).toEqual({ startLine: 12, body: 'one\ntwo\tcols' })
+  })
+
+  test('numbers that skip, repeat or run backwards leave the text alone', () => {
+    expect(parseNumbered('1→a\n3→b')).toBeNull()
+    expect(parseNumbered('1→a\n1→b')).toBeNull()
+    expect(parseNumbered('2→a\n1→b')).toBeNull()
+  })
+
+  test('plain text, a partly numbered text and nothing are not numbered', () => {
+    expect(parseNumbered('package main\nfunc main() {}')).toBeNull()
+    expect(parseNumbered('1→a\nnote')).toBeNull()
+    expect(parseNumbered('1→a\n\n2→b')).toBeNull()
+    expect(parseNumbered('')).toBeNull()
+  })
+})
+
+describe('pieceStarts', () => {
+  test('gives the line each chunkText piece starts at', () => {
+    const text = ['aaaa', 'bbbb', 'cccc', 'dddd'].join('\n')
+    const pieces = chunkText(text, 9)
+    expect(pieces).toEqual(['aaaa\nbbbb', 'cccc\ndddd'])
+    expect(pieceStarts(text, pieces)).toEqual([0, 2])
+  })
+
+  test('a hard cut inside a line continues on that line', () => {
+    const text = 'abcdefghij\nxyz'
+    const pieces = chunkText(text, 4)
+    expect(pieceStarts(text, pieces)[1]).toBe(0)
+  })
+})
+
+describe('Read sections', () => {
+  test('numbered output loses its numbers, gains startLine and the path', () => {
+    const [, out] = toolSections(
+      tool({
+        tool: 'Read',
+        input: { file_path: '/src/a.rs' },
+        resultText: '    10→fn main() {\n    11→}',
+      }),
+    )
+    expect(out).toMatchObject({
+      body: 'fn main() {\n}',
+      meta: 'ok · 2 lines',
+      format: { kind: 'code', path: '/src/a.rs', startLine: 10 },
+    })
+  })
+
+  test('numbers that do not run on stay in the text, with no startLine', () => {
+    const [, out] = toolSections(tool({ tool: 'Read', input: { file_path: '/src/a.go' }, resultText: '1→a\n5→b' }))
+    expect(out?.body).toBe('1→a\n5→b')
+    expect(out?.format).toEqual({ kind: 'code', path: '/src/a.go' })
+  })
+
+  test('an unknown extension without numbers stays text, an error stays text', () => {
+    expect(
+      toolSections(tool({ tool: 'Read', input: { file_path: '/x/LICENSE' }, resultText: 'MIT' }))[1]?.format,
+    ).toEqual({ kind: 'text' })
+    expect(
+      toolSections(tool({ tool: 'Read', input: { file_path: '/a.go' }, resultText: '1→x', isError: true }))[1]?.format,
+    ).toEqual({ kind: 'text' })
   })
 })

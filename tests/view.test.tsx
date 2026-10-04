@@ -1300,3 +1300,58 @@ describe('diff blocks', () => {
     expect(code.reduce((sum, n) => sum + (n.props['source'] as string).length, 0)).toBeLessThanOrEqual(70_000)
   })
 })
+
+describe('code blocks', () => {
+  const readTurn = (path: string, result: string, tool = 'Read') =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'c1', tool, input: { file_path: path, content: result }, text: result }],
+      },
+    ])
+  const codes = (turns: ReturnType<typeof buildTurns>, extra: Record<string, unknown> = {}) =>
+    nodes(renderPane(el, { ...base, turns, selected: 0, expanded: new Set(['c1']), ...extra }, act)).filter(
+      n => n.type === 'Code',
+    )
+
+  test('a numbered Read draws the bare lines with startLine and infers the language from the path', () => {
+    const [code] = codes(readTurn('/a/b.go', '    12→package a\n    13→func b() {}'))
+    expect(code?.props['source']).toBe('package a\nfunc b() {}')
+    expect(code?.props['startLine']).toBe(12)
+    expect(code?.props['path']).toBe('/a/b.go')
+    expect(code?.props).not.toHaveProperty('language')
+    expect(code?.props).not.toHaveProperty('format')
+  })
+
+  test('numbers that do not run on stay in the text and no gutter is asked for', () => {
+    const [code] = codes(readTurn('/a/b.go', '1→x\n9→y'))
+    expect(code?.props['source']).toBe('1→x\n9→y')
+    expect(code?.props).not.toHaveProperty('startLine')
+  })
+
+  test('a Write draws its content by path, and a language-less shell block keeps its language', () => {
+    const [write] = codes(readTurn('/a/s.py', 'print(1)', 'Write'))
+    expect(write?.props['path']).toBe('/a/s.py')
+    expect(write?.props).not.toHaveProperty('startLine')
+    const bash = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'c1', tool: 'Bash', input: { command: 'ls' } }] },
+    ])
+    expect(codes(bash)[0]?.props['language']).toBe('bash')
+  })
+
+  test('the gutter continues over the pieces of a long block shown whole', () => {
+    const rows = Array.from({ length: 1500 }, (_, i) => `${i + 5}→${'x'.repeat(20)}`).join('\n')
+    const turns = readTurn('/a/b.go', rows)
+    const all = codes(turns, { full: new Set(['c1:output']) })
+    expect(all.length).toBeGreaterThan(1)
+    let at = 5
+    for (const piece of all) {
+      expect(piece.props['startLine']).toBe(at)
+      at += (piece.props['source'] as string).split('\n').length
+    }
+    expect(at).toBe(1505)
+  })
+})

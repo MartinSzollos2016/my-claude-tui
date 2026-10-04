@@ -842,7 +842,9 @@ export type SectionKind = 'command' | 'input' | 'file' | 'diff' | 'query' | 'out
 
 type SectionFormat =
   | { kind: 'text' }
-  | { kind: 'code'; language: string }
+  // Source drawn by language, or by the language its path says; startLine
+  // numbers its first line.
+  | { kind: 'code'; language?: string; path?: string; startLine?: number }
   | { kind: 'markdown' }
   // A unified diff, drawn by the engine's <Code format="diff">.
   | { kind: 'diff' }
@@ -895,14 +897,48 @@ export function languageFor(path: string): string | undefined {
   return dot > 0 ? LANGUAGES[name.slice(dot + 1).toLowerCase()] : undefined
 }
 
-const codeOrText = (path: string): SectionFormat => {
-  const language = languageFor(path)
-  return language ? { kind: 'code', language } : { kind: 'text' }
-}
+// Code the engine infers the language of from the path, when the path names a
+// language the plugin knows; plain text otherwise.
+const codeOrText = (path: string): SectionFormat =>
+  languageFor(path) ? { kind: 'code', path: sanitizeText(path) } : { kind: 'text' }
 
 // A line of Read's output or of an Edit's cat -n snippet: "   12→text" or
 // "12<tab>text".
 const NUMBERED_LINE = /^\s*(\d+)(?:→|\t)(.*)$/
+
+// Text whose every line is numbered, the numbers running on by one: the
+// first number and the lines without theirs. null for anything else, which
+// is then drawn as it is.
+export function parseNumbered(text: string): { startLine: number; body: string } | null {
+  if (text === '') return null
+  const body: string[] = []
+  let startLine = 0
+  for (const [i, line] of text.split('\n').entries()) {
+    const found = NUMBERED_LINE.exec(line)
+    if (!found) return null
+    const n = Number(found[1])
+    if (i === 0) startLine = n
+    else if (n !== startLine + i) return null
+    body.push(found[2]!)
+  }
+  return { startLine, body: body.join('\n') }
+}
+
+// The line (0-based) each piece of chunkText(text) starts at, so a piece
+// drawn on its own can be numbered on from the one before.
+export function pieceStarts(text: string, pieces: readonly string[]): number[] {
+  const starts: number[] = []
+  let at = 0
+  let line = 0
+  for (const piece of pieces) {
+    starts.push(line)
+    const end = at + piece.length
+    line += piece.split('\n').length - 1
+    if (text[end] === '\n') line += 1
+    at = text[end] === '\n' ? end + 1 : end
+  }
+  return starts
+}
 
 // The number the edited text starts at in the file: its first line as the
 // result's cat -n snippet shows it; 1 when the result carries no snippet.
@@ -1057,14 +1093,19 @@ export function toolSections(item: ToolItem, glyphs: Glyphs = DEFAULT_GLYPHS): S
   const sections = inputSections(item, glyphs)
   const result = item.resultText?.trimEnd()
   if (result === undefined || result === '') return sections
+  // A Read's cat -n numbers become the gutter of its code block.
+  const numbered = item.tool === 'Read' && !item.isError ? parseNumbered(result) : null
+  const path = sanitizeText(str(item.input, 'file_path'))
   const lines = result.split('\n').length
   const status = item.isError ? 'error' : 'ok'
   sections.push({
     kind: item.isError ? 'error' : 'output',
     title: item.isError ? 'error' : 'output',
     meta: `${status} ${glyphs.dot} ${lines} line${lines === 1 ? '' : 's'}`,
-    body: result,
-    format: outputFormat(item),
+    body: numbered?.body ?? result,
+    format: numbered
+      ? { kind: 'code', ...(path === '' ? {} : { path }), startLine: numbered.startLine }
+      : outputFormat(item),
   })
   return sections
 }
