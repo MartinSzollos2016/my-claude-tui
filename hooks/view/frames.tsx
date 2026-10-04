@@ -1,12 +1,12 @@
 // The frames an expanded row opens: one per section (input, code, diff, output),
 // with a preview of long blocks, show all / show less and copy.
 import type { RenderElement } from 'claude-code'
+import { C, TONE, type ThemeKey } from '../theme'
 import { chunkText, clampText } from '../model/clamp'
 import { clampDiff, splitDiff } from '../model/diff'
 import { cachedSections, firstErrorLine, pieceStarts, type Section } from '../model/sections'
 import type { ToolItem } from '../model/types'
 import { displayWidth, truncateMiddle } from '../model/width'
-import { C, TONE, type ThemeKey } from '../theme'
 import {
   CODE_GUTTER,
   DIFF_HEADER_SLACK,
