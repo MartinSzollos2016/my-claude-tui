@@ -70,11 +70,16 @@ one in `/theme`; `/tail-theme` tells you which.
 npm install       # dev tools, and the husky pre-push hook
 npm run format    # Prettier
 npm run check     # format check, knip, typecheck, plugin validate, tests
+npm run coverage  # Istanbul coverage of the unit-tested logic (coverage/index.html)
 ```
 
 `npm run typecheck` needs the plugin API types Claude Code writes to `.claude-plugin/types/`
 when it loads the plugin. The pre-push hook runs `npm run check` and `npm audit`; CI runs the
-same checks plus gitleaks.
+same checks plus coverage and gitleaks.
+
+Coverage covers what the unit tests import directly (Vitest with Istanbul). The render tests
+run inside Claude Code's sandboxed test runner, which cannot be instrumented, so the pane and
+hook wiring they exercise count as uncovered.
 
 Commits use [Conventional Commits](https://www.conventionalcommits.org/) with a
 [gitmoji](https://gitmoji.dev/), e.g. `✨ feat(view): add turn list`.
