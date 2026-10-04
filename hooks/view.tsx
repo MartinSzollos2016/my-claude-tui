@@ -203,7 +203,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       {renderNav(el, data, act)}
       <Box flexDirection="column" marginTop={1}>
         {renderThinking(el, turn, data, act)}
-        {turn.items.length === 0 && (
+        {turn.items.length === 0 && (data.thinking?.text ?? '') === '' && (
           <Text dimColor>{data.isWorking && data.isLatest ? 'Working…' : EMPTY_TURN_TEXT}</Text>
         )}
         {turn.items.map(item => renderItem(el, item, data, act, 0))}
