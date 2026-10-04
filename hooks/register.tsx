@@ -65,7 +65,9 @@ import { durationSuffix, paneColumns, resultLine } from './model/transcript'
 import { buildTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
 import type { Item, Turn } from './model/types'
 import { shortPath, truncate } from './model/width'
-import { renderBar, renderPane, turnRowId, type El, type Trace } from './view'
+import { renderBar, renderPane, turnRowId } from './view'
+import type { Trace } from './view/context'
+import type { El } from './view/kit'
 
 const PANE = 'tail'
 const MAX_STATS = 200
