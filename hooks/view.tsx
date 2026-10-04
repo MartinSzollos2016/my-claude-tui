@@ -42,7 +42,6 @@ import {
   pathOf,
   pieceStarts,
   reserveSections,
-  sanitizeText,
   splitDiff,
   splitMatch,
   taskMark,
@@ -72,6 +71,7 @@ import {
   shortModel,
   treePrefix,
 } from './model/format'
+import { sanitizeText } from './model/sanitize'
 import type { Item, ToolItem, Turn } from './model/types'
 
 // Text narrowed to theme keys: tsc rejects a raw color (hex, rgb, ansi)

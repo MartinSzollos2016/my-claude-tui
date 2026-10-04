@@ -60,8 +60,6 @@ import {
   resultLine,
   rowText,
   runningTool,
-  sanitizePrompt,
-  sanitizeText,
   scrollToRow,
   searchTurns,
   shortPath,
@@ -85,6 +83,7 @@ import {
   type TurnThinking,
 } from './model'
 import { engineDuration } from './model/format'
+import { sanitizePrompt, sanitizeText } from './model/sanitize'
 import type { Item, Turn } from './model/types'
 import { renderBar, renderPane, turnRowId, type El, type Trace } from './view'
 
