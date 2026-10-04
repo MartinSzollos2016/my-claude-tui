@@ -1,6 +1,6 @@
 // Rendering: the detail view (pane) and the info bar (band). Takes plain
 // data plus callbacks and returns element trees; no engine calls here.
-import type { AgentStatus, ElementConstructor, Elements, TextProps } from 'claude-code'
+import type { AgentStatus, BoxProps, RenderChildren, ElementConstructor, Elements, TextProps } from 'claude-code'
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
@@ -24,9 +24,11 @@ import { C, contextColor, modeColor, modelColor, type ThemeKey } from './theme'
 
 // Text narrowed to theme keys: tsc rejects a raw color (hex, rgb, ansi)
 // anywhere in the views, so everything follows the person's /theme.
-type ThemedTextProps = Omit<TextProps, 'color' | 'backgroundColor'> & { color?: ThemeKey }
+type ThemedTextProps = Omit<TextProps, 'color' | 'backgroundColor'> & { color?: ThemeKey; backgroundColor?: ThemeKey }
+type ThemedBoxProps = Omit<BoxProps, 'backgroundColor' | 'borderColor'> & { backgroundColor?: ThemeKey; borderColor?: ThemeKey }
 
-export type El = Pick<Elements['terminal'], 'Box' | 'Button' | 'Markdown' | 'Code'> & {
+export type El = Pick<Elements['terminal'], 'Button' | 'Markdown' | 'Code'> & {
+  Box: ElementConstructor<ThemedBoxProps>
   Text: ElementConstructor<ThemedTextProps>
 }
 
@@ -90,6 +92,7 @@ export type PaneData = {
   agentStats: Record<string, AgentStat>
   traces: ReadonlyMap<string, Trace>
   columns: number
+  rows: number
 }
 
 export type PaneActions = {
@@ -126,15 +129,17 @@ export function renderPane(el: El, data: PaneData, act: PaneActions) {
   const turn = data.turns[data.selected]
 
   if (!turn) {
-    return (
-      <Box flexDirection="column">
-        <Text dimColor>No turns yet. Send a prompt and the detail view fills in.</Text>
-      </Box>
+    return paneBody(
+      el,
+      data,
+      <Text dimColor>No turns yet. Send a prompt and the detail view fills in.</Text>,
     )
   }
 
-  return (
-    <Box flexDirection="column" width={data.columns}>
+  return paneBody(
+    el,
+    data,
+    <Box flexDirection="column">
       {renderHeader(el, turn, data)}
       {turn.prompt !== '' && (
         <Text dimColor wrap="truncate-end">
@@ -149,6 +154,16 @@ export function renderPane(el: El, data: PaneData, act: PaneActions) {
         )}
         {turn.items.map(item => renderItem(el, item, data, act, 0))}
       </Box>
+    </Box>,
+  )
+}
+
+// The pane body, painted edge to edge in the theme's background.
+function paneBody(el: El, data: PaneData, children: RenderChildren) {
+  const { Box } = el
+  return (
+    <Box flexDirection="column" width={data.columns} minHeight={data.rows} backgroundColor={C.paneBackground}>
+      {children}
     </Box>
   )
 }

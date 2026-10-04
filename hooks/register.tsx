@@ -276,6 +276,7 @@ export const register: Register = on => {
         agentStats: await read($, agentStats),
         traces,
         columns: e.props.bodyColumns,
+        rows: e.props.scroll.bodyRows,
       },
       {
         toggle: id =>
