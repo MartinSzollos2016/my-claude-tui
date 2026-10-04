@@ -401,3 +401,66 @@ describe('/tail theme', () => {
     expect(ran.text).toContain('/theme')
   })
 })
+
+describe('compact transcript', () => {
+  const RESULT = {
+    component: 'ToolResult',
+    requestId: 'b1',
+    props: { tool_use_id: 'b1', tool: 'Bash', output: { stdout: 'a\nb\nc', stderr: '', interrupted: false }, isErrored: false },
+  } as const
+  const RUN = (args: string) =>
+    ({ command: 'tail', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } }) as CommandRunInput
+
+  test('draws a tool result as one line and restores it on /tail compact', async ($, on) => {
+    mock.store(on)
+    on('ui.render', { component: 'ToolResult' }, ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return <Text>engine result</Text>
+    })
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...RESULT })
+    expect(await ui.find({ text: /⎿ 3 lines/ })).toBeDefined()
+    expect(await ui.find({ text: /engine result/ })).toBeUndefined()
+    await ui.unmount()
+
+    expect((await $.command.run(RUN('compact'))).text).toContain('off')
+    const full = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...RESULT })
+    expect(await full.find({ text: /engine result/ })).toBeDefined()
+    await full.unmount()
+  })
+
+  test('keeps an error visible in red', async ($, on) => {
+    mock.store(on)
+    const ui = await $.ui.mount({
+      plugin: 'tail-view',
+      surface: 'terminal',
+      ...RESULT,
+      props: { ...RESULT.props, output: 'Error: boom\nstack', isErrored: true },
+    })
+    const line = await ui.find({ text: /error: Error: boom/ })
+    expect(line?.props['color']).toBe('error')
+    await ui.unmount()
+  })
+
+  test('/tail opens the pane at the stored width share', async ($, on) => {
+    mock.store(on)
+    const opened: (number | undefined)[] = []
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.open', (_$, e) => {
+      opened.push(e.columns)
+      return { value: { isPlaced: true as const } }
+    })
+
+    await $.command.run(RUN(''))
+    expect(opened.at(-1)).toBe(120)
+
+    expect((await $.command.run(RUN('width 70'))).text).toContain('70%')
+    await $.command.run(RUN(''))
+    expect(opened.at(-1)).toBe(140)
+
+    expect((await $.command.run(RUN('width 99'))).text).toContain('between 30 and 80')
+    await $.command.run(RUN(''))
+    expect(opened.at(-1)).toBe(140)
+  })
+
+})
