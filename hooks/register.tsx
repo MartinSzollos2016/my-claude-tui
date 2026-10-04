@@ -12,6 +12,7 @@ import type {
   Register,
   RenderSurface,
   Timer,
+  UiScrollResult,
 } from 'claude-code'
 
 import type { AgentStat, IconSetName } from '../types'
@@ -26,6 +27,7 @@ import {
   moveCursor,
   rowText,
   scrollToRow,
+  clampScroll,
   finishedSince,
   finishedWorkflows,
   gitDirFrom,
@@ -481,6 +483,26 @@ async function stepCursor($: EngineInterface, ids: readonly string[], delta: num
   await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
 }
 
+// Where each view's window stood at its last drawing; a reload starts over
+// and the next drawing clamps whatever the wheel did meanwhile.
+const drawnFrames: Partial<Record<'detail' | 'turns' | 'team', ScrollFrame>> = {}
+
+// The engine's wheel, arrows and page keys over the pane: the pane is as tall
+// as its window, so the engine has nothing to move. The shown view's own
+// scroll moves by `by` rows instead, clamped like f and b, and the engine's
+// window stays (no `next`); the state change draws the pane again.
+async function scrollPane($: EngineInterface, by: number): Promise<UiScrollResult> {
+  const view = await read($, paneView)
+  const frame = drawnFrames[view]
+  await update($, paneScroll, all => {
+    const top = frame === undefined ? Math.max(0, all[view] + by) : clampAt(frame, clampAt(frame, all[view]) + by)
+    return { ...all, [view]: top }
+  })
+  return {}
+}
+
+const clampAt = (frame: ScrollFrame, top: number) => clampScroll(top, frame.total, frame.windowRows)
+
 // Every view's content back to the top: the shown turn or the view changed.
 async function scrollToTop($: EngineInterface): Promise<void> {
   await update($, paneScroll, () => TOP)
@@ -854,6 +876,9 @@ export const register: Register = on => {
         cursorDown: at => stepCursor($, rowIds, 1, at).catch(ignore),
         cursorUp: at => stepCursor($, rowIds, -1, at).catch(ignore),
         scroll: top => update($, paneScroll, all => ({ ...all, [view]: top })).catch(ignore),
+        measure: at => {
+          drawnFrames[view] = at
+        },
         cursorOpen: () =>
           cursorId === null || cursorText === undefined || cursorText === ''
             ? undefined
@@ -863,6 +888,8 @@ export const register: Register = on => {
       },
     )
   })
+
+  on('ui.scroll', { requestId: PANE }, ($, e) => scrollPane($, e.by))
 
   // The transcript stays a conversation; tool detail lives in the pane.
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {

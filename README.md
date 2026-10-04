@@ -68,7 +68,7 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 
 The keys are pinned to the bottom of the pane in a footer: moving, cursor, views and expand, then the position of the turn and whether the pane has the keyboard. Every key keeps its hotkey: one that cannot act right now (`p` on the first turn, `o`/`y` without a cursor, `f` at the end) does nothing, so the pane keeps the keyboard. Under 64 columns each group takes its own row, under 40 only the keys and arrows stay.
 
-The pane is exactly as tall as its window and scrolls its content itself: the header (metrics and prompt) stays on top, the footer at the bottom, and the rows between them move with `f` / `b` (a page each) or follow the `j` / `k` cursor. The mouse wheel and PgUp / PgDn no longer scroll inside the pane. `▲ N more above` and `▼ N more below` say how much is out of view, and the status row says `top` or `end` while the content is longer than the window. Each view starts at the top again when the turn or the view changes.
+The pane is exactly as tall as its window and scrolls its content itself: the header (metrics and prompt) stays on top, the footer at the bottom, and the rows between them move with `f` / `b` (a page each) or follow the `j` / `k` cursor; the mouse wheel and PgUp / PgDn scroll the same rows, so the header and footer never move. `▲ N more above` and `▼ N more below` say how much is out of view, and the status row says `top` or `end` while the content is longer than the window. Each view starts at the top again when the turn or the view changes.
 
 Hovering a collapsed row previews its input in a card. Long blocks show a preview with **show all** / **show less**; **copy** in a section's frame copies the whole block.
 

@@ -908,6 +908,42 @@ describe('own scroll', () => {
     expect(world.focused).toEqual([])
   })
 
+  test('the wheel, the arrows and the page keys of the engine move the own scroll, never the engine window', async () => {
+    const { $ } = fakeEngine({ messages: long })
+    await drawSmall($)
+    const nexts: unknown[] = []
+    const wheel = (by: number) =>
+      run(
+        'ui.scroll',
+        $,
+        {
+          component: 'Pane',
+          requestId: 'tail',
+          offset: 0,
+          by,
+          bodyRows: 12,
+          contentRows: 12,
+          origin: { kind: 'person' },
+        },
+        async e => (nexts.push(e), {}),
+      )
+    expect(await wheel(3)).toEqual({})
+    expect(await topOf($)).toBe(-3)
+    expect(await wheel(-1)).toEqual({})
+    expect(await topOf($)).toBe(-2)
+    await wheel(12)
+    expect(await topOf($)).toBe(-14)
+    await wheel(100)
+    expect(await topOf($)).toBe(-18)
+    await wheel(-100)
+    expect(await topOf($)).toBe(0)
+    expect(nexts).toEqual([])
+    // The turn list keeps its own: it fits, so a tick there moves nothing.
+    await pressSmall($, 'nav-turns')
+    await wheel(5)
+    expect(await topOf($)).toBe(0)
+  })
+
   test('a change of view, of turn or a new prompt scrolls back to the top', async () => {
     const { $ } = fakeEngine({ messages: [...long, ...long] })
     await pressSmall($, 'nav-pagedown')

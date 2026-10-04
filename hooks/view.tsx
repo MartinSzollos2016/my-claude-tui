@@ -271,6 +271,9 @@ type PaneActions = {
   cursorUp: (at: ScrollFrame) => void
   // Scrolls the shown view's content to `scrollTop` rows.
   scroll: (scrollTop: number) => void
+  // Told where the window stands at each drawing: the engine's wheel and
+  // scroll keys move the content from there.
+  measure: (at: ScrollFrame) => void
   // Expands or collapses the row under the cursor.
   cursorOpen: () => void
   // Copies the whole text of the row under the cursor.
@@ -638,6 +641,7 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   const scrollTop = clampScroll(data.scrollTop ?? 0, rows.total, windowRows)
   const frame: ScrollFrame = { scrollTop, windowRows, total: rows.total, starts: rows.starts }
   const more = overflowRows(scrollTop, rows.total, windowRows)
+  act.measure(frame)
   // A row over the window's top or bottom edge: part of the window, so
   // nothing moves when it shows.
   const edge = (key: string, top: number, text: string) => (
