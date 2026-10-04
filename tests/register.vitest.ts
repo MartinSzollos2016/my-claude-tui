@@ -959,6 +959,20 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(-8)
   })
 
+  test('a new latest turn that no prompt of this session started opens at the top, and keeps its scroll as it grows', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-4)
+    world.messages = [...long, ...long]
+    expect(await topOf($)).toBe(0)
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-4)
+    const grown = structuredClone(long)
+    grown[1]!.toolUses.push({ tool_use_id: 'b99', tool: 'Bash', input: { command: 'echo more' }, text: 'more' })
+    world.messages = [...long, ...grown]
+    expect(await topOf($)).toBe(-4)
+  })
+
   test('a change of view, of turn or a new prompt scrolls back to the top', async () => {
     const { $ } = fakeEngine({ messages: [...long, ...long] })
     await pressSmall($, 'nav-pagedown')
