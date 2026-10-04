@@ -4,9 +4,21 @@ A Claude Code mod that brings [tail-claude](https://github.com/kylesnowschwartz/
 **info bar** into Claude Code itself.
 
 - **Detail pane** (`/tail`): the current turn as rows (outputs, tool calls with
-  one-line summaries, durations), expandable to the input/result, and subagent
-  rows that drill into the agent's **Execution Trace** (nested, expandable).
-  Header: model, tool/output counts, subagent icons, tokens, ctx %, duration.
+  one-line summaries, durations). Click a row (or Enter on it) to expand it.
+  An expanded tool call shows **what went in apart from what came out**, each
+  in a rounded frame colored by the theme:
+
+  | Frame | Shows | Color (theme key) |
+  |---|---|---|
+  | `$ command` / query | Bash command, Grep/Glob pattern, Web URL or query | `permission` |
+  | read / write / input / todos | file path, written file (highlighted by extension), JSON input, todo list | `suggestion` |
+  | diff | Edit as `-`/`+` diff | `autoAccept` |
+  | output | result, with `ok · N lines` | `success` |
+  | error | failed result | `error` |
+
+  Subagent rows drill into the agent's **Execution Trace** (nested,
+  expandable). Header: model, tool/output counts, subagent icons, tokens,
+  ctx %, duration.
 - **Long output**: results, inputs and outputs are previewed (100 lines /
   8k chars for results, 60 lines for code) with a **show all** / **show less**
   toggle per block. Claude Code refuses a pane with a text over 10k
@@ -41,11 +53,8 @@ only that key (black on dark themes, white on light ones):
 | `dark`, `dark-daltonized`, `dark-ansi` | `Tail Dark …` (`custom:tail-view:dark…`) |
 | `light`, `light-daltonized`, `light-ansi` | `Tail Light …` (`custom:tail-view:light…`) |
 
-Switch with `/tail theme` (toggles between the current built-in theme and its
-variant) or pick a `Tail …` theme in `/theme`. `auto` and other custom themes
-are left to `/theme`. The engine does not validate
-keys, so `Text` in the views is typed to accept only `ThemeKey` and a render
-test checks every color in the drawn tree.
+Claude Code only lets plugins set the built-in themes, so pick the variant
+in `/theme`; `/tail theme` names the one matching your current theme.
 
 ## Security
 
@@ -61,7 +70,7 @@ test checks every color in the drawn tree.
 | Key | Action |
 |-----|--------|
 | Tab / shift+Tab | move between rows |
-| Enter | expand / collapse row, drill into subagent |
+| Enter / click on a row | expand / collapse row, drill into subagent |
 | `p` / `n` / `l` | previous / next / latest turn |
 | `e` / `c` | expand all / collapse all |
 | Esc | back to the prompt |
