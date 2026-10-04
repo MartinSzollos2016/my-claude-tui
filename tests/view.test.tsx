@@ -1339,7 +1339,8 @@ describe('pinned footer', () => {
       ['nav-pageup', 'b', '▲ page'],
       ['nav-pagedown', 'f', '▼ page'],
     ] as const) {
-      expect(byKey(first, key)?.props).toMatchObject({ hotkey, label, plain: true, dimColor: true })
+      expect(byKey(first, key)?.props).toMatchObject({ hotkey, plain: true, dimColor: true })
+      expect(String(byKey(first, key)?.props['label']).trimEnd()).toBe(label)
       expect(byKey(first, `${key}-off`)).toBeUndefined()
       expect(acts(first, key)).toBe(false)
     }
@@ -1352,9 +1353,49 @@ describe('pinned footer', () => {
 
   test('a button keeps the label and hotkey and is plain and dim', () => {
     const button = byKey(footerOf(), 'nav-prev')!
-    expect(button.props).toMatchObject({ plain: true, dimColor: true, hotkey: 'p', label: '‹ prev' })
-    expect(byKey(footerOf({ selected: 0, isLatest: false }), 'nav-next')?.props['label']).toBe('next ›')
+    expect(button.props).toMatchObject({ plain: true, dimColor: true, hotkey: 'p' })
+    expect(String(button.props['label']).trimEnd()).toBe('‹ prev')
+    expect(String(byKey(footerOf({ selected: 0, isLatest: false }), 'nav-next')?.props['label']).trimEnd()).toBe(
+      'next ›',
+    )
     expect((button.props['hover'] as { color?: string }).color).toBe('text')
+  })
+
+  // The boxes in the footer that lay out buttons side by side.
+  const buttonRows = (footer: Node) =>
+    nodes(footer).filter(n => n.type === 'Box' && kids(n).some(c => c.type === 'Button'))
+
+  test('a click between two keys lands on a key: the gap is in the label, not the row', () => {
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    for (const columns of [100, 60, 36])
+      for (const extra of [{}, { members }, { icons: ICON_SETS.ascii }, { view: 'turns' as const }]) {
+        const footer = footerOf({ columns, rows: 10, ...extra })
+        const rows = buttonRows(footer)
+        expect(rows.length, `${columns}`).toBeGreaterThan(0)
+        for (const row of rows) {
+          expect(row.props['gap'] ?? 0, `${columns} ${String(row.props['key'])}`).toBe(0)
+          const keys = kids(row).filter(c => c.type === 'Button')
+          for (const k of keys.slice(0, -1))
+            expect(String(k.props['label']), `${columns} ${String(k.props['key'])}`).toMatch(/\S {2}$/)
+        }
+      }
+  })
+
+  test('the last key of the left column reaches the separator', () => {
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    for (const extra of [{}, { members }, { icons: ICON_SETS.ascii }, { view: 'turns' as const }]) {
+      const footer = footerOf(extra)
+      for (const n of [1, 2]) {
+        const row = byKey(footer, `footer-row-${n}`)!
+        const left = byKey(row, `footer-left-${n}`)!
+        const sep = byKey(row, `footer-sep-${n}`)!
+        expect(row.props['gap'] ?? 0).toBe(0)
+        // The left keys, padded, end where the separator starts.
+        expect(displayWidth(line(left))).toBe(left.props['width'])
+        expect(kids(row)[1]?.props['key']).toBe(`footer-divider-${n}`)
+        expect(text(sep)).not.toMatch(/^\s/)
+      }
+    }
   })
 
   test('stacks every group on its own row under 64 columns and drops the separator', () => {
@@ -1378,7 +1419,7 @@ describe('pinned footer', () => {
     expect(line(rowsOf(footer)[1])).toBe('j: ↓  k: ↑  o: +  y: ⧉')
     expect(line(rowsOf(footer)[2])).toBe('t: ≡  s: ⌕  m: ☺')
     expect(line(rowsOf(footer)[3])).toBe('e: ⊞  c: ⊟  b: ▲  f: ▼')
-    expect(byKey(footer, 'nav-prev')?.props['label']).toBe('‹')
+    expect(String(byKey(footer, 'nav-prev')?.props['label']).trimEnd()).toBe('‹')
   })
 
   test('under 40 columns no key has an empty label, enabled or not, in every view and set', () => {
@@ -1573,7 +1614,8 @@ describe('own scroll', () => {
     expect(byKey(top, 'nav-pageup')?.props['hotkey']).toBe('b')
     expect(acts(top, 'nav-pageup')).toBe(false)
     const f = byKey(top, 'nav-pagedown')!
-    expect(f.props).toMatchObject({ hotkey: 'f', label: '▼ page', plain: true, dimColor: true })
+    expect(f.props).toMatchObject({ hotkey: 'f', plain: true, dimColor: true })
+    expect(String(f.props['label']).trimEnd()).toBe('▼ page')
     expect((f.props['hover'] as { scope?: string }).scope).toBe('btn:nav-pagedown')
     calls.length = 0
     press(f)
@@ -1589,7 +1631,9 @@ describe('own scroll', () => {
       expect(acts(fits, 'nav-pageup')).toBe(false)
       expect(acts(fits, 'nav-pagedown')).toBe(false)
     }
-    expect(byKey(pane({ rows: 10, icons: ICON_SETS.ascii }), 'nav-pagedown')?.props['label']).toBe('v page')
+    expect(String(byKey(pane({ rows: 10, icons: ICON_SETS.ascii }), 'nav-pagedown')?.props['label']).trimEnd()).toBe(
+      'v page',
+    )
   })
 
   test('long prose and one-line JSON count the rows they wrap to, at 80 and 40 columns', () => {
@@ -2405,7 +2449,7 @@ describe('keyboard cursor', () => {
     const tree = renderPane(el, { ...base, cursor: 'b1' }, act)
     const keys = nodes(byKey(tree, 'footer-row-1'))
       .filter(n => n.type === 'Button' && ['j', 'k', 'o', 'y'].includes(String(n.props['hotkey'])))
-      .map(n => [n.props['key'], n.props['hotkey'], n.props['label']])
+      .map(n => [n.props['key'], n.props['hotkey'], String(n.props['label']).trimEnd()])
     expect(keys).toEqual([
       ['nav-down', 'j', '↓'],
       ['nav-up', 'k', '↑'],

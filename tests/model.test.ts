@@ -16,6 +16,7 @@ import {
   cachedSections,
   firstErrorLine,
   footerLayout,
+  footerPads,
   clampScroll,
   contentRows,
   followCursor,
@@ -1640,6 +1641,20 @@ describe('footerLayout', () => {
   test('stacked groups without labels under 40 columns', () => {
     expect(footerLayout(39)).toEqual({ rows: 6, columns: 'stacked', labels: false })
     expect(footerLayout(0)).toEqual({ rows: 6, columns: 'stacked', labels: false })
+  })
+})
+
+describe('footerPads', () => {
+  test('every key but the last takes the gap after it', () => {
+    expect(footerPads([9, 9, 9], 2)).toEqual([2, 2, 0])
+    expect(footerPads([4], 2)).toEqual([0])
+    expect(footerPads([], 2)).toEqual([])
+  })
+
+  test('with a width the last key fills the row up to it, never below zero', () => {
+    expect(footerPads([9, 9, 9], 2, 35)).toEqual([2, 2, 4])
+    expect(footerPads([9, 9, 9], 2, 31)).toEqual([2, 2, 0])
+    expect(footerPads([9, 9, 9], 2, 20)).toEqual([2, 2, 0])
   })
 })
 
