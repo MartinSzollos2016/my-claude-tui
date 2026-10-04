@@ -6,6 +6,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { buildTurns } from '../hooks/model'
 import { renderBar, renderPane, type El } from '../hooks/view'
+import { C, modelColor } from '../hooks/theme'
 
 type Node = { type: string; props: Record<string, unknown>; children: unknown }
 
@@ -185,6 +186,66 @@ describe('renderPane', () => {
     expect(byKey(last, 'nav-latest')).toBeUndefined()
   })
 
+  test('hover scopes stay within 64 characters and are not shared between buttons', () => {
+    const id = 'toolu_vrtx_0123456789abcdefghijklmnopqr'
+    const agentId = 'a0123456789abcdef'
+    const items = buildTurns(
+      [
+        { role: 'user', text: 'go', toolUses: [] },
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: id, tool: 'Agent', input: { description: 'd' }, agentId, text: 'r' }],
+        },
+      ],
+      '',
+    )
+    const inner = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: id, tool: 'Bash', input: { command: 'ls' }, text: 'o' }],
+        },
+      ],
+      `${agentId}/`,
+    )
+    const child = inner[0]!.items[0]!.id
+    const tree = renderPane(
+      el,
+      {
+        ...base,
+        turns: items,
+        expanded: new Set([items[0]!.items[0]!.id, child]),
+        agents: new Map(),
+        agentStats: {},
+        traces: new Map([[agentId, { items: inner[0]!.items }]]),
+      },
+      act,
+    )
+    const scopes: { key: string; scope: string }[] = []
+    for (const n of nodes(tree)) {
+      const scope = (n.props['hover'] as { scope?: string } | undefined)?.scope
+      if (scope !== undefined && n.type === 'Button') scopes.push({ key: String(n.props['key']), scope })
+    }
+    expect(scopes.some(s => s.key.startsWith('copy:'))).toBe(true)
+    for (const { scope } of scopes) {
+      expect(scope.length).toBeGreaterThanOrEqual(1)
+      expect(scope.length).toBeLessThanOrEqual(64)
+    }
+    expect(new Set(scopes.map(s => s.scope)).size).toBe(scopes.length)
+  })
+
+  test('the selected turn is bold full-contrast text, not a button', () => {
+    const list = renderPane(el, { ...base, view: 'turns', selected: 1 }, act)
+    const row = byKey(list, 'turn-1')
+    expect(row?.type).toBe('Text')
+    expect(row?.props['color']).toBe('text')
+    expect(row?.props['bold']).toBe(true)
+    expect(text(row)).toContain('reply')
+    expect(byKey(list, 'turn-0')?.type).toBe('Button')
+  })
+
   test('every Text carries a theme color and every Button the theme grey with a full-contrast hover', () => {
     const thinking = { count: 1, text: 'Plan the fix' }
     const trace = buildTurns(
@@ -231,13 +292,14 @@ describe('renderPane', () => {
       renderPane(el, { ...base, view: 'team', members, tasks }, act),
       renderPane(el, { ...base, view: 'team', turns: [] }, act),
     ]
+    const allowed: unknown[] = [...Object.values(C), ...['fable', 'opus', 'sonnet', 'haiku'].map(m => modelColor(m))]
     let texts = 0
     let buttons = 0
     for (const tree of trees)
       for (const n of nodes(tree)) {
         if (n.type === 'Text') {
           texts++
-          expect(typeof n.props['color'], text(n)).toBe('string')
+          expect(allowed, text(n)).toContain(n.props['color'])
         }
         if (n.type === 'Button') {
           buttons++
@@ -332,8 +394,8 @@ describe('renderPane', () => {
   test('turn list and empty state', () => {
     const list = renderPane(el, { ...base, view: 'turns', stats: [base.turnStat, undefined] }, act)
     expect(text(list)).toContain('Turns (2)')
-    expect(byKey(list, 'turn-0')?.props['label']).toContain('1m 5s')
-    expect(byKey(list, 'turn-1')?.props['label']).toContain('reply')
+    expect(text(byKey(list, 'turn-0'))).toContain('1m 5s')
+    expect(text(byKey(list, 'turn-1'))).toContain('reply')
     ;(byKey(list, 'turn-1')?.props['onPress'] as () => void)()
     expect(calls).toContain('pick:1')
     expect(text(renderPane(el, { ...base, turns: [] }, act))).toContain('No turns yet')
@@ -387,7 +449,7 @@ describe('renderPane', () => {
       { ...base, view: 'turns', stats: [base.turnStat, undefined], query: 'c', matches: [{ index: 0, snippet: 's' }] },
       act,
     )
-    expect(byKey(tree, 'turn-0')?.props['label']).toContain('1m 5s')
+    expect(text(byKey(tree, 'turn-0'))).toContain('1m 5s')
   })
 
   test('a long turn list stays within the pane text budget', () => {
