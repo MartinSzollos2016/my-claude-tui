@@ -44,7 +44,6 @@ import {
   alignFromEnd,
   callInput,
   compactCall,
-  cursorRows,
   durationSuffix,
   engineScroll,
   finishedSince,
@@ -53,7 +52,6 @@ import {
   paneColumns,
   parseGitHead,
   resultLine,
-  rowText,
   runningTool,
   scrollToRow,
   searchTurns,
@@ -70,6 +68,7 @@ import {
   type TurnMatch,
   type TurnThinking,
 } from './model'
+import { cursorRows, rowText } from './model/cursor'
 import { engineDuration } from './model/format'
 import { groupRuns } from './model/groups'
 import { sanitizePrompt, sanitizeText } from './model/sanitize'

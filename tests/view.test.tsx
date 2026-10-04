@@ -6,7 +6,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { ICON_SETS } from '../hooks/icons'
 import { C, modelColor } from '../hooks/theme'
-import { rowText } from '../hooks/model'
+import { rowText } from '../hooks/model/cursor'
 import { resetSectionCache, sectionCacheSize } from '../hooks/model/sections'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
