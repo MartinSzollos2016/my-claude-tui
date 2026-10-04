@@ -353,6 +353,7 @@ export function pathOf(item: ToolItem): string {
     case 'Read':
     case 'Write':
     case 'Edit':
+    case 'MultiEdit':
       return str(f, 'file_path')
     case 'NotebookEdit':
       return str(f, 'notebook_path')
@@ -524,6 +525,7 @@ export function toolCategory(name: string): ToolCategory {
     case 'Read':
       return 'read'
     case 'Edit':
+    case 'MultiEdit':
     case 'Write':
     case 'NotebookEdit':
       return 'edit'
@@ -618,6 +620,218 @@ export function chunkMarkdown(text: string, size: number): string[] {
   return chunks
 }
 
+// -- Unified diffs ------------------------------------------------------------
+//
+// An Edit becomes a unified diff the engine's <Code format="diff"> draws with
+// gutters and colors. The diff is a pure function of the two texts; long ones
+// are cut only at line boundaries, each piece a valid diff of its own.
+
+const MAX_DIFF_LINES = 2000
+
+type DiffOp = { op: ' ' | '-' | '+'; text: string }
+
+const linesOf = (text: string) => (text === '' ? [] : text.split('\n'))
+
+// Line by line LCS of the changed middle, after the common head and tail.
+function diffOps(before: readonly string[], after: readonly string[]): DiffOp[] {
+  let head = 0
+  while (head < before.length && head < after.length && before[head] === after[head]) head++
+  let tail = 0
+  while (
+    tail < before.length - head &&
+    tail < after.length - head &&
+    before[before.length - 1 - tail] === after[after.length - 1 - tail]
+  )
+    tail++
+  const a = before.slice(head, before.length - tail)
+  const b = after.slice(head, after.length - tail)
+  const width = b.length + 1
+  const table = new Uint32Array((a.length + 1) * width)
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      table[i * width + j] =
+        a[i] === b[j]
+          ? table[(i + 1) * width + j + 1]! + 1
+          : Math.max(table[(i + 1) * width + j]!, table[i * width + j + 1]!)
+    }
+  }
+  const ops: DiffOp[] = before.slice(0, head).map(text => ({ op: ' ', text }))
+  let i = 0
+  let j = 0
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      ops.push({ op: ' ', text: a[i]! })
+      i++
+      j++
+    } else if (j >= b.length || (i < a.length && table[(i + 1) * width + j]! >= table[i * width + j + 1]!)) {
+      ops.push({ op: '-', text: a[i]! })
+      i++
+    } else {
+      ops.push({ op: '+', text: b[j]! })
+      j++
+    }
+  }
+  return ops.concat(after.slice(after.length - tail).map(text => ({ op: ' ', text })))
+}
+
+// The header of a hunk whose first old and new lines are numbered `oldNo`
+// and `newNo`; an empty side counts from the line before, as diff does.
+function hunkHeader(oldNo: number, newNo: number, lines: readonly string[]): string {
+  const oldCount = lines.filter(l => l[0] === ' ' || l[0] === '-').length
+  const newCount = lines.filter(l => l[0] === ' ' || l[0] === '+').length
+  return `@@ -${oldCount === 0 ? oldNo - 1 : oldNo},${oldCount} +${newCount === 0 ? newNo - 1 : newNo},${newCount} @@`
+}
+
+// Unified-diff hunks turning `oldText` into `newText`, `context` unchanged
+// lines around each change (hunks closer than twice that share one), the first
+// line numbered `startLine`. '' when the texts are equal; null past 2000 lines
+// on a side, where the caller draws its own plain view.
+export function unifiedDiff(
+  oldText: string,
+  newText: string,
+  options: { context?: number; startLine?: number } = {},
+): string | null {
+  const { context = 3, startLine = 1 } = options
+  const before = linesOf(oldText)
+  const after = linesOf(newText)
+  if (before.length > MAX_DIFF_LINES || after.length > MAX_DIFF_LINES) return null
+  const ops = diffOps(before, after)
+  const changed = ops.flatMap((o, i) => (o.op === ' ' ? [] : [i]))
+  if (changed.length === 0) return ''
+
+  // Runs of changes whose gap is within 2 * context become one hunk.
+  const spans: [number, number][] = []
+  for (const at of changed) {
+    const last = spans.at(-1)
+    if (last !== undefined && at - last[1] <= 2 * context + 1) last[1] = at
+    else spans.push([at, at])
+  }
+  const numbers = (upTo: number) => {
+    let oldNo = startLine
+    let newNo = startLine
+    for (const o of ops.slice(0, upTo)) {
+      if (o.op !== '+') oldNo++
+      if (o.op !== '-') newNo++
+    }
+    return { oldNo, newNo }
+  }
+  return spans
+    .map(([first, last]) => {
+      const from = Math.max(0, first - context)
+      const lines = ops.slice(from, Math.min(ops.length, last + context + 1)).map(o => `${o.op}${o.text}`)
+      const { oldNo, newNo } = numbers(from)
+      return [hunkHeader(oldNo, newNo, lines), ...lines].join('\n')
+    })
+    .join('\n')
+}
+
+type Hunk = { oldNo: number; newNo: number; lines: string[] }
+
+const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
+
+// The hunks of a unified diff; null when the text is not one. Lines before
+// the first hunk (a ---/+++ pair) are read past.
+function parseHunks(diff: string): Hunk[] | null {
+  const hunks: Hunk[] = []
+  for (const line of diff.split('\n')) {
+    const header = HUNK_HEADER.exec(line)
+    if (header) {
+      const [, a, b, c, d] = header
+      hunks.push({
+        oldNo: b === '0' ? Number(a) + 1 : Number(a),
+        newNo: d === '0' ? Number(c) + 1 : Number(c),
+        lines: [],
+      })
+    } else if (hunks.length > 0) {
+      const op = line[0]
+      if (op !== ' ' && op !== '+' && op !== '-' && op !== '\\') return null
+      hunks.at(-1)!.lines.push(line)
+    }
+  }
+  return hunks.length > 0 ? hunks : null
+}
+
+// Cuts a unified diff into pieces of at most `maxLines` lines and `maxChars`
+// characters, each a valid diff: a hunk cut in the middle continues under a
+// header that counts its own lines and carries on the numbers. A text that is
+// no diff is returned whole; [] when not even a header and one line fit.
+export function splitDiff(diff: string, maxLines: number, maxChars: number): string[] {
+  const hunks = parseHunks(diff)
+  if (hunks === null) return [diff]
+  const pieces: string[] = []
+  let done: string[] = []
+  let doneChars = 0
+
+  const finishPiece = () => {
+    if (done.length > 0) pieces.push(done.join('\n'))
+    done = []
+    doneChars = 0
+  }
+
+  for (const hunk of hunks) {
+    let oldNo = hunk.oldNo
+    let newNo = hunk.newNo
+    let startOld = oldNo
+    let startNew = newNo
+    let body: string[] = []
+    let bodyChars = 0
+
+    const size = (extra: string) => {
+      const header = hunkHeader(startOld, startNew, [...body, extra]).length
+      return {
+        lines: done.length + 1 + body.length + 1,
+        chars: doneChars + header + 1 + bodyChars + extra.length + 1,
+      }
+    }
+    const commit = () => {
+      if (body.length === 0) return
+      const text = [hunkHeader(startOld, startNew, body), ...body]
+      done.push(...text)
+      doneChars += text.reduce((sum, l) => sum + l.length + 1, 0)
+      body = []
+      bodyChars = 0
+      startOld = oldNo
+      startNew = newNo
+    }
+
+    for (let line of hunk.lines) {
+      let fit = size(line)
+      if (fit.lines > maxLines || fit.chars > maxChars) {
+        commit()
+        finishPiece()
+        fit = size(line)
+        if (fit.lines > maxLines || fit.chars > maxChars) {
+          // A line alone over the limit is cut so the piece stays valid.
+          const room = maxChars - (fit.chars - line.length - 1) - 1
+          if (room < 1 || maxLines < 2) return []
+          line = line.slice(0, room)
+        }
+      }
+      body.push(line)
+      bodyChars += line.length + 1
+      if (line[0] !== '+' && line[0] !== '\\') oldNo++
+      if (line[0] !== '-' && line[0] !== '\\') newNo++
+    }
+    commit()
+  }
+  finishPiece()
+  return pieces
+}
+
+// clampText for a diff: the first piece splitDiff gives, with a note of the
+// lines left out. '' text when not even a header and a line fit.
+export function clampDiff(diff: string, maxLines: number, maxChars: number, ellipsis = '…'): Clamped {
+  const hunks = parseHunks(diff)
+  if (hunks === null) return clampText(diff, maxLines, maxChars, ellipsis)
+  const pieces = splitDiff(diff, maxLines, maxChars)
+  const first = pieces[0] ?? ''
+  if (pieces.length === 1 && first === diff) return { text: diff }
+  const total = hunks.reduce((sum, h) => sum + h.lines.length, 0)
+  const shown = parseHunks(first)?.reduce((sum, h) => sum + h.lines.length, 0) ?? 0
+  const hidden = total - shown
+  return { text: first, note: `${ellipsis} (${hidden} line${hidden === 1 ? '' : 's'} hidden)` }
+}
+
 // -- Expanded view sections ---------------------------------------------------
 //
 // An expanded tool call reads as framed sections: what went in (the command,
@@ -626,7 +840,12 @@ export function chunkMarkdown(text: string, size: number): string[] {
 
 export type SectionKind = 'command' | 'input' | 'file' | 'diff' | 'query' | 'output' | 'error'
 
-type SectionFormat = { kind: 'text' } | { kind: 'code'; language: string } | { kind: 'markdown' }
+type SectionFormat =
+  | { kind: 'text' }
+  | { kind: 'code'; language: string }
+  | { kind: 'markdown' }
+  // A unified diff, drawn by the engine's <Code format="diff">.
+  | { kind: 'diff' }
 
 export type Section = {
   kind: SectionKind
@@ -681,6 +900,52 @@ const codeOrText = (path: string): SectionFormat => {
   return language ? { kind: 'code', language } : { kind: 'text' }
 }
 
+// A line of Read's output or of an Edit's cat -n snippet: "   12→text" or
+// "12<tab>text".
+const NUMBERED_LINE = /^\s*(\d+)(?:→|\t)(.*)$/
+
+// The number the edited text starts at in the file: its first line as the
+// result's cat -n snippet shows it; 1 when the result carries no snippet.
+function editStartLine(result: string | undefined, newText: string): number {
+  const first = newText.split('\n')[0] ?? ''
+  if (result === undefined || first.trim() === '') return 1
+  for (const line of result.split('\n')) {
+    const found = NUMBERED_LINE.exec(line)
+    if (found && found[2] === first) return Number(found[1])
+  }
+  return 1
+}
+
+// The diff section of an Edit or MultiEdit: one hunk per edit. Past what
+// unifiedDiff takes (or when an edit changes nothing) the plain - and +
+// lines stand in.
+function diffSection(
+  f: Record<string, unknown>,
+  edits: readonly { old: string; new: string }[],
+  startLine: number,
+): Section {
+  const hunks = edits.map(e => unifiedDiff(sanitizeText(e.old), sanitizeText(e.new), { startLine }))
+  const isDiffed = hunks.length > 0 && hunks.every(h => h !== null && h !== '')
+  const plain = edits
+    .flatMap(e => [
+      ...sanitizeText(e.old)
+        .split('\n')
+        .map(l => `-${l}`),
+      ...sanitizeText(e.new)
+        .split('\n')
+        .map(l => `+${l}`),
+    ])
+    .join('\n')
+  return {
+    kind: 'diff',
+    title: 'diff',
+    meta: str(f, 'file_path'),
+    isPathMeta: true,
+    body: isDiffed ? hunks.join('\n') : plain,
+    format: isDiffed ? { kind: 'diff' } : { kind: 'code', language: 'diff' },
+  }
+}
+
 function inputSections(item: ToolItem, glyphs: Glyphs): Section[] {
   const f = item.input
   switch (item.tool) {
@@ -704,25 +969,21 @@ function inputSections(item: ToolItem, glyphs: Glyphs): Section[] {
         { kind: 'file', title: 'read', ...(meta ? { meta } : {}), body: str(f, 'file_path'), format: { kind: 'text' } },
       ]
     }
-    case 'Edit': {
-      const diff = [
-        ...str(f, 'old_string')
-          .split('\n')
-          .map(l => `-${l}`),
-        ...str(f, 'new_string')
-          .split('\n')
-          .map(l => `+${l}`),
-      ].join('\n')
+    case 'Edit':
       return [
-        {
-          kind: 'diff',
-          title: 'diff',
-          meta: str(f, 'file_path'),
-          isPathMeta: true,
-          body: diff,
-          format: { kind: 'code', language: 'diff' },
-        },
+        diffSection(
+          f,
+          [{ old: str(f, 'old_string'), new: str(f, 'new_string') }],
+          editStartLine(item.resultText, str(f, 'new_string')),
+        ),
       ]
+    case 'MultiEdit': {
+      const edits = Array.isArray(f['edits']) ? (f['edits'] as unknown[]) : []
+      const pairs = edits.map(e => {
+        const edit = e !== null && typeof e === 'object' ? (e as Record<string, unknown>) : {}
+        return { old: str(edit, 'old_string'), new: str(edit, 'new_string') }
+      })
+      return [diffSection(f, pairs, 1)]
     }
     case 'Write':
       return [
