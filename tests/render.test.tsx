@@ -654,3 +654,53 @@ describe('commands', () => {
     expect((await $.command.run(run('tail-theme'))).text).toContain('"Tail Light"')
   })
 })
+
+describe('compact tool calls', () => {
+  const USE = {
+    component: 'ToolUse',
+    requestId: 'b9',
+    props: {
+      tool_use_id: 'b9',
+      tool: 'Bash',
+      input: { command: "python3 - <<'EOF'\nprint(1)\nprint(2)\nEOF", description: 'Run the script' },
+      isRunning: false,
+      isErrored: false,
+      isInterrupted: false,
+    },
+  } as const
+
+  test('draws a tool call as one line with its summary', async ($, on) => {
+    mock.store(on)
+    on('ui.render', { component: 'ToolUse' }, ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return <Text>engine row</Text>
+    })
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...USE })
+    const texts = textsOf(await ui.drawn()).join('')
+    expect(texts).toContain('Bash')
+    expect(texts).toContain('Run the script')
+    expect(texts).not.toContain('print(2)')
+    expect(texts).not.toContain('\n')
+    expect(await ui.find({ text: /engine row/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('marks running, failed and interrupted calls', async ($, on) => {
+    mock.store(on)
+    for (const [state, color] of [
+      [{ isRunning: true }, 'success'],
+      [{ isErrored: true }, 'error'],
+      [{ isInterrupted: true }, 'warning'],
+    ] as const) {
+      const ui = await $.ui.mount({
+        plugin: 'tail-view',
+        surface: 'terminal',
+        ...USE,
+        props: { ...USE.props, ...state },
+      })
+      expect(colorsOf(await ui.drawn())).toContain(color)
+      await ui.unmount()
+    }
+  })
+})

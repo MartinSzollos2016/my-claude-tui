@@ -12,6 +12,7 @@ import type { AgentStatus, EngineInterface, Register, Timer } from 'claude-code'
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
   buildTurns,
+  compactCall,
   isSubagent,
   paneColumns,
   resultLine,
@@ -440,6 +441,31 @@ export const register: Register = on => {
       <Text color={e.props.isErrored ? C.error : undefined} dimColor={!e.props.isErrored}>
         {`⎿ ${line}`}
       </Text>
+    )
+  })
+
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    if (!(await isCompact($))) return next(e)
+    const { Box, Text } = $.ui.resolve(e) as unknown as El
+    const { name, summary } = compactCall(e.props.tool, e.props.input)
+    const mark = e.props.isInterrupted
+      ? C.interrupted
+      : e.props.isErrored
+        ? C.error
+        : e.props.isRunning
+          ? C.ongoing
+          : undefined
+    return (
+      <Box flexDirection="row">
+        <Text color={mark} dimColor={mark === undefined}>
+          {'● '}
+        </Text>
+        <Text bold>{name}</Text>
+        <Text dimColor wrap="truncate-end">
+          {summary ? `  ${summary}` : ''}
+        </Text>
+        {e.props.isInterrupted && <Text color={C.interrupted}> · interrupted</Text>}
+      </Box>
     )
   })
 

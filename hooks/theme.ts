@@ -53,6 +53,7 @@ export const C = {
   subtle: 'subtle',
   branch: 'merged',
   dirty: 'warning',
+  interrupted: 'warning',
   modePlan: 'planMode',
   modeAcceptEdits: 'autoAccept',
   modeBypass: 'error',
