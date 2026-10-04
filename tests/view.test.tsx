@@ -417,6 +417,8 @@ describe('renderPane', () => {
       renderPane(el, { ...ascii, view: 'team', members, tasks }, act),
       renderPane(el, { ...ascii, turns: [] }, act),
       renderPane(el, { ...ascii, selected: 1, isLatest: true }, act),
+      renderPane(el, { ...ascii, isFocused: true }, act),
+      renderPane(el, { ...ascii, isFocused: false }, act),
       renderBar(el, {
         project: 'tail',
         git: null,
@@ -598,6 +600,8 @@ describe('renderPane', () => {
       renderPane(el, { ...base, icons: ICON_SETS.unicode, view: 'turns', stats: [base.turnStat, undefined] }, act),
       renderPane(el, { ...base, icons: ICON_SETS.ascii, view: 'team', members, tasks }, act),
       renderPane(el, { ...base, selected: 1, isLatest: true, icons: ICON_SETS.ascii }, act),
+      renderPane(el, { ...base, isFocused: true }, act),
+      renderPane(el, { ...base, isFocused: false }, act),
     ]
     const allowed: unknown[] = [...Object.values(C), ...['fable', 'opus', 'sonnet', 'haiku'].map(m => modelColor(m))]
     let texts = 0
@@ -1036,6 +1040,41 @@ describe('footer', () => {
     const tree = renderPane(el, { ...base, columns: 40, selected: 1 }, act)
     expect(byKey(tree, 'nav')?.props['flexWrap']).toBe('wrap')
     expect(footerOf(tree)?.props['width']).toBe(40)
+  })
+})
+
+describe('pane focus', () => {
+  const mark = (tree: unknown) => byKey(tree, 'brand-mark')
+  const last = (tree: unknown) => byKey(tree, 'focus-note')
+
+  test('a focused pane has a bold brand mark and says keys are active', () => {
+    const tree = renderPane(el, { ...base, isFocused: true }, act)
+    expect(mark(tree)?.props['color']).toBe('claude')
+    expect(mark(tree)?.props['bold']).toBe(true)
+    expect(text(mark(tree))).toContain(ICON_SETS.nerd.robot)
+    expect(text(last(tree))).toBe('keys active')
+    expect(last(tree)?.props['color']).toBe('suggestion')
+  })
+
+  test('an unfocused pane mutes the mark and hints how to get the keys', () => {
+    const tree = renderPane(el, { ...base, isFocused: false }, act)
+    expect(mark(tree)?.props['color']).toBe('inactive')
+    expect(mark(tree)?.props['bold']).not.toBe(true)
+    expect(text(last(tree))).toBe('ctrl+x tab to use keys')
+    expect(last(tree)?.props['color']).toBe('inactive')
+  })
+
+  test('an unknown focus acts as unfocused, without the hint', () => {
+    const tree = renderPane(el, base, act)
+    expect(mark(tree)?.props['color']).toBe('inactive')
+    expect(last(tree)).toBeUndefined()
+    expect(text(tree)).not.toContain('keys')
+  })
+
+  test('the note ends the footer', () => {
+    const footer = byKey(renderPane(el, { ...base, isFocused: true }, act), 'footer')
+    const parts = (footer?.children as Node[]).filter(Boolean)
+    expect(parts.at(-1)?.props['key']).toBe('focus-note')
   })
 })
 

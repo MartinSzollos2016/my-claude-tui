@@ -140,6 +140,9 @@ function itemIcon(item: Item, icons: Icons): { glyph: string; color?: ThemeKey }
 export type Trace = { items: Item[] } | { denied: string }
 
 type PaneData = {
+  // Whether the person has given the pane the keyboard; left out when the
+  // engine does not say.
+  isFocused?: boolean
   // Thinking of the shown turn: how many blocks, and their readable text.
   thinking?: TurnThinking
   turns: Turn[]
@@ -488,7 +491,7 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
   return (
     <Box flexDirection="row" justifyContent="space-between" width={data.columns}>
       <Box flexDirection="row" flexShrink={1}>
-        <Text bold color={C.brand}>
+        <Text key="brand-mark" bold={data.isFocused === true} color={data.isFocused === true ? C.brand : C.muted}>
           {icons.robot}{' '}
         </Text>
         <Text bold color={C.text}>
@@ -542,6 +545,11 @@ function renderFooter(el: El, data: Ctx, act: PaneActions) {
           </Text>
         </Box>
       </Box>
+      {data.isFocused !== undefined && (
+        <Text key="focus-note" color={data.isFocused ? C.accent : C.muted}>
+          {data.isFocused ? 'keys active' : 'ctrl+x tab to use keys'}
+        </Text>
+      )}
     </Box>
   )
 }

@@ -568,6 +568,7 @@ export const register: Register = on => {
         agents,
         agentStats: await read($, agentStats),
         traces,
+        isFocused: e.props.isFocused,
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
         full: new Set(await read($, fullBlocks)),
