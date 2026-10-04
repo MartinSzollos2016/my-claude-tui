@@ -429,12 +429,11 @@ async function copyBlock($: EngineInterface, text: string, surface?: RenderSurfa
   $.ui.toast(copied.isCopied ? 'Copied' : `Not copied: ${copied.reason}`)
 }
 
-// Moves the keyboard cursor one row along `ids` and puts the keyboard focus
-// on that row's button, so Enter opens or closes it. A row with no button
-// (nothing to open) refuses the focus, which changes nothing here.
+// Moves the keyboard cursor one row along `ids`. The engine's focus ring is
+// not used: it draws the focused button in reverse video of the terminal's
+// own colors, which can be unreadable under the other theme.
 async function stepCursor($: EngineInterface, ids: readonly string[], delta: number): Promise<void> {
-  const id = await update($, cursor, cur => moveCursor(ids, cur, delta))
-  if (id !== null) await $.ui.focus({ requestId: PANE, key: id })
+  await update($, cursor, cur => moveCursor(ids, cur, delta))
 }
 
 // Shows one turn in the detail view; the latest one follows new turns.
@@ -777,6 +776,10 @@ export const register: Register = on => {
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
         cursorDown: () => stepCursor($, rowIds, 1).catch(ignore),
         cursorUp: () => stepCursor($, rowIds, -1).catch(ignore),
+        cursorOpen: () =>
+          cursorId === null || cursorText === undefined || cursorText === ''
+            ? undefined
+            : update($, expanded, ids => toggleId(ids, cursorId, MAX_EXPANDED)).catch(ignore),
         copyCursor: surface => (cursorText === undefined ? undefined : copyBlock($, cursorText, surface).catch(ignore)),
         toggleFull: id => update($, fullBlocks, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
       },

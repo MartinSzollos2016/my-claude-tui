@@ -758,29 +758,43 @@ describe('keyboard cursor', () => {
     return found
   }
 
-  test('j and k move the cursor, mark the row and focus its button', async () => {
+  test('j and k move the cursor and mark the row, without taking the keyboard focus', async () => {
     const { $, world } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
     expect(markOf(await draw($))).toEqual([])
     await press($, 'nav-down')
-    expect(world.focused).toEqual(['t0:o0'])
     expect(markOf(await draw($))).toEqual(['t0:o0'])
     await press($, 'nav-down')
     await press($, 'nav-down')
-    expect(world.focused).toEqual(['t0:o0', 'r1', 'a1'])
     await press($, 'nav-down')
     expect(markOf(await draw($))).toEqual(['a1'])
     await press($, 'nav-up')
-    expect(world.focused.at(-1)).toBe('r1')
     expect(markOf(await draw($))).toEqual(['r1'])
+    expect(world.focused).toEqual([])
   })
 
-  test('an opened subagent adds its trace rows to the walk', async () => {
-    const { $, world } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
+  test('o opens and closes the row under the cursor, a subagent adds its trace rows', async () => {
+    const { $ } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
     await press($, 'nav-up')
-    expect(world.focused.at(-1)).toBe('a1')
-    await press($, 'a1')
+    expect(markOf(await draw($))).toEqual(['a1'])
+    await press($, 'nav-open')
+    expect(text(await draw($))).toContain('Execution Trace')
     await press($, 'nav-down')
-    expect(world.focused.at(-1)).toBe('agent-1/g1')
+    expect(markOf(await draw($))).toEqual(['agent-1/g1'])
+    await press($, 'nav-up')
+    await press($, 'nav-open')
+    expect(text(await draw($))).not.toContain('Execution Trace')
+  })
+
+  test('o on a row with nothing to open changes nothing', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    world.messages = [
+      { role: 'user', text: 'x', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'q1', tool: 'Bash', input: {} }] },
+    ]
+    await press($, 'nav-down')
+    const before = text(await draw($))
+    await press($, 'nav-open')
+    expect(text(await draw($))).toBe(before)
   })
 
   test('y copies the whole text of the row under the cursor, with the surface of the press', async () => {
@@ -802,16 +816,6 @@ describe('keyboard cursor', () => {
     expect(markOf(await draw($))).toEqual([])
     expect(byKey(await draw($), 'nav-copy')).toBeUndefined()
     expect(world.copies).toEqual([])
-  })
-
-  test('a row that cannot open is moved onto without a failing focus', async () => {
-    const { $, world } = fakeEngine({ messages: main })
-    world.messages = [
-      ...main,
-      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'q1', tool: 'Bash', input: {} }] },
-    ]
-    await press($, 'nav-up')
-    expect(world.focused.at(-1)).toBeDefined()
   })
 })
 

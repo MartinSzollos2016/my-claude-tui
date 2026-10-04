@@ -152,6 +152,7 @@ const act = {
   focusSearch: () => calls.push('focusSearch'),
   cursorDown: () => calls.push('down'),
   cursorUp: () => calls.push('up'),
+  cursorOpen: () => calls.push('open'),
   copyCursor: (surface?: string) => calls.push(`copyCursor:${surface}`),
 }
 
@@ -1920,6 +1921,7 @@ describe('keyboard cursor', () => {
     expect(keys).toEqual([
       ['nav-down', 'j', 'down'],
       ['nav-up', 'k', 'up'],
+      ['nav-open', 'o', 'open'],
       ['nav-copy', 'y', 'copy'],
     ])
     for (const [key] of keys) {
@@ -1934,6 +1936,7 @@ describe('keyboard cursor', () => {
     const idle = renderPane(el, base, act)
     expect(buttons(idle, 'nav-down')).toBeDefined()
     expect(buttons(idle, 'nav-copy')).toBeUndefined()
+    expect(buttons(idle, 'nav-open')).toBeUndefined()
     const empty = renderPane(el, { ...base, turns: buildTurns([{ role: 'user', text: 'hi', toolUses: [] }]) }, act)
     expect(byKey(empty, 'nav-group-cursor')).toBeUndefined()
   })
@@ -1943,8 +1946,9 @@ describe('keyboard cursor', () => {
     const tree = renderPane(el, { ...base, cursor: 'b1' }, act)
     ;(buttons(tree, 'nav-down')!.props['onPress'] as () => void)()
     ;(buttons(tree, 'nav-up')!.props['onPress'] as () => void)()
+    ;(buttons(tree, 'nav-open')!.props['onPress'] as () => void)()
     ;(buttons(tree, 'nav-copy')!.props['onPress'] as (e: { surface: string }) => void)({ surface: 'terminal' })
-    expect(calls).toEqual(['down', 'up', 'copyCursor:terminal'])
+    expect(calls).toEqual(['down', 'up', 'open', 'copyCursor:terminal'])
   })
 })
 
