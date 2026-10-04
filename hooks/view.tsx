@@ -4,7 +4,7 @@ import type { RenderChildren, RenderElement } from 'claude-code'
 
 import type { GitInfo } from '../types'
 import { ICON_SETS, type Icons } from './icons'
-import { agentStatusColor, C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
+import { C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 import type { WorkflowState } from './model/activity'
 import { groupLabel, hoverCard } from './model/card'
 import { chunkText, clampText } from './model/clamp'
@@ -19,13 +19,10 @@ import {
   treePrefix,
 } from './model/format'
 import { groupRuns, type GroupItem } from './model/groups'
-import { sanitizeText } from './model/sanitize'
-import { clampScroll, contentRows, overflowRows, type RowBlock, type ScrollFrame } from './model/scroll'
-import { splitMatch } from './model/search'
+import { clampScroll, contentRows, overflowRows, type ScrollFrame } from './model/scroll'
 import { cachedSections, firstErrorLine, pieceStarts, reserveSections, type Section } from './model/sections'
 import { itemName, itemSummary } from './model/summaries'
-import { taskMark, type TaskEntry, type TeamMember } from './model/team'
-import { EMPTY_TURN_TEXT, turnTable } from './model/turn-table'
+import { EMPTY_TURN_TEXT } from './model/turn-table'
 import { isAgentRunning, isSubagent, itemStatus, traceStats, type ItemStatus } from './model/turns'
 import type { Item, ToolItem, Turn } from './model/types'
 import { displayWidth, durationBar, fitPath, padEndDisplay, pathOf, truncateMiddle } from './model/width'
@@ -41,7 +38,6 @@ import {
   FRAME_INSET,
   groupDuration,
   hasExpandedContent,
-  INPUT_ROWS,
   itemDuration,
   LINE,
   longestCall,
@@ -54,7 +50,6 @@ import {
   tracesOf,
   wrapWidth,
   type Ctx,
-  type HeaderPart,
   type PaneActions,
   type PaneData,
   type PaneParts,
@@ -79,6 +74,8 @@ import {
   TRACE_INDENT,
   type El,
 } from './view/kit'
+import { renderTeam } from './view/team'
+import { renderTurnList } from './view/turn-list'
 
 // -- Detail view --------------------------------------------------------------
 
@@ -158,275 +155,6 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       </Box>
     ),
   })
-}
-
-// Every turn of the session, newest first: one button per turn that opens
-// it in the detail view. A search narrows the list to the matching turns
-// and shows where each one matched.
-function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
-  const trunc = cutter(data.icons)
-  const { Box, Button, Input, Text } = el
-  const query = data.query ?? ''
-  const isFiltered = query.trim() !== ''
-  const snippets = new Map((data.matches ?? []).map(match => [match.index, match.snippet] as const))
-  const table = turnTable(data.turns, data.stats, data.columns, data.icons)
-  const rows = table.rows
-    .filter(row => !isFiltered || snippets.has(row.index))
-    .map(row => ({
-      index: row.index,
-      snippet: snippets.get(row.index) ?? '',
-      label: `${row.index === data.selected ? data.icons.marker : ' '} ${row.label}`,
-    }))
-
-  data.budget.left -= table.header.length + 2
-  // Every row draws from the pane's text budget; what does not fit is counted.
-  const shown: typeof rows = []
-  for (const row of rows.reverse()) {
-    const cost = row.label.length + row.snippet.length
-    if (cost > data.budget.left) break
-    data.budget.left -= cost
-    shown.push(row)
-  }
-  const hidden = rows.length - shown.length
-  const isNoMatch = isFiltered && rows.length === 0
-  const noMatch = `No turn matches "${trunc(sanitizeText(query), 40)}".`
-  const hiddenNote = `${hidden} more turn${hidden === 1 ? '' : 's'}${isFiltered ? ` ${data.icons.dash} refine the search` : ''}`
-  data.layout.push(
-    LINE,
-    ...(rows.length > 0 ? [LINE] : []),
-    ...(isNoMatch ? [textLine(data, noMatch, 0), textLine(data, NO_MATCH_HINT, 0)] : []),
-    ...shown.map((row): RowBlock => {
-      const id = turnRowId(row.index)
-      return row.snippet === ''
-        ? { kind: 'turn', id }
-        : isUnicodeCut(data.icons)
-          ? { kind: 'turn', id, snippet: row.snippet }
-          : { kind: 'turn', id, snippet: `${SNIPPET_INDENT}${row.snippet}`, width: wrapWidth(data, 0) }
-    }),
-    ...(hidden > 0 ? [textLine(data, hiddenNote, 0)] : []),
-  )
-
-  const header: HeaderPart[] = [
-    {
-      rows: 1,
-      node: (
-        <Box key="turns-title" flexDirection="row" gap={2}>
-          <Text bold color={C.brand}>
-            {isFiltered ? `Turns (${rows.length} of ${data.turns.length})` : `Turns (${data.turns.length})`}
-          </Text>
-        </Box>
-      ),
-    },
-  ]
-  if (Input)
-    header.push({
-      rows: INPUT_ROWS,
-      node: (
-        <Box key="turns-search" flexDirection="row" gap={2}>
-          <Input
-            key="turn-search"
-            placeholder="Search turns"
-            value={query}
-            submitLabel="open"
-            onInput={value => act.search(value)}
-            onSubmit={value => act.submitSearch(value)}
-          />
-          {isFiltered && (
-            <Button
-              key="search-clear"
-              plain
-              dimColor
-              hover={buttonHover('btn:search-clear')}
-              label="clear"
-              onPress={() => act.search('')}
-            />
-          )}
-        </Box>
-      ),
-    })
-  const content = (
-    <Box flexDirection="column">
-      <Box flexDirection="column" marginTop={1}>
-        {rows.length > 0 && (
-          <Text key="turn-header" color={C.muted}>
-            {`  ${table.header}`}
-          </Text>
-        )}
-        {isNoMatch && (
-          <Box flexDirection="column">
-            <Text color={C.muted}>{noMatch}</Text>
-            <Text key="empty-search" color={C.muted}>
-              {NO_MATCH_HINT}
-            </Text>
-          </Box>
-        )}
-        {shown.map(row => {
-          // The cursor takes the row's first cell, in the accent.
-          const isCursor = row.index === data.turnCursor
-          const label = isCursor ? row.label.slice(1) : row.label
-          return (
-            <Box key={`turn-row-${row.index}`} flexDirection="column">
-              <Box flexDirection="row">
-                {isCursor && (
-                  <Text key={`turn-cursor-${row.index}`} color={C.accent}>
-                    {data.icons.cursor}
-                  </Text>
-                )}
-                {row.index === data.selected ? (
-                  <Text key={`turn-${row.index}`} bold color={C.text}>
-                    {label}
-                  </Text>
-                ) : (
-                  <Button
-                    key={`turn-${row.index}`}
-                    plain
-                    dimColor
-                    label={label}
-                    hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
-                    onPress={() => act.pickTurn(row.index)}
-                  />
-                )}
-              </Box>
-              {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
-            </Box>
-          )
-        })}
-        {hidden > 0 && <Text color={C.muted}>{hiddenNote}</Text>}
-      </Box>
-    </Box>
-  )
-  return { header, content }
-}
-
-const SNIPPET_INDENT = '      '
-
-// A turn row's id in the content's rows: where the turn list's cursor finds it.
-export const turnRowId = (index: number) => `turn:${index}`
-const NO_MATCH_HINT = 'Clear the search or try fewer words.'
-
-// The line a search hit gets under its turn: the matched part underlined and
-// bold in the accent, the surrounding text muted.
-function renderSnippet(el: El, snippet: string, query: string, data: Ctx) {
-  const { Text } = el
-  const { before, match, after } = splitMatch(sanitizeText(snippet), query, data.icons.ellipsis)
-  return (
-    <Text color={C.muted} wrap={endWrap(data.icons)}>
-      {`${SNIPPET_INDENT}${before}`}
-      {match !== '' && (
-        <Text bold underline color={C.accent}>
-          {match}
-        </Text>
-      )}
-      {after}
-    </Text>
-  )
-}
-
-// The team board: each teammate with its type and status, then the tasks
-// with their TodoWrite marks and owners.
-const NO_MEMBERS = 'No teammates in this session.'
-const NO_MEMBERS_HINT = 'Teammates show up once Claude starts a team.'
-const NO_TASKS = 'No tasks yet.'
-const NO_TASKS_HINT = 'Tasks show up when Claude plans with TodoWrite or TaskCreate.'
-
-function renderTeam(el: El, data: Ctx): PaneParts {
-  const trunc = cutter(data.icons)
-  const { Box, Text } = el
-  const members = data.members ?? []
-  const tasks = data.tasks ?? []
-
-  // Every row draws from the pane's text budget; what does not fit is counted.
-  const memberRows: { member: TeamMember; name: string; type: string; cost: number }[] = []
-  for (const member of members) {
-    const name = padEndDisplay(trunc(member.name, 24), 24)
-    const type = padEndDisplay(trunc(member.type, 20), 20)
-    const cost = name.length + type.length + member.status.length + 4
-    if (cost > data.budget.left) break
-    data.budget.left -= cost
-    memberRows.push({ member, name, type, cost })
-  }
-  const taskRows: { task: TaskEntry; label: string }[] = []
-  for (const task of tasks) {
-    const owner = task.owner ? `  ${data.icons.arrow} ${trunc(task.owner, 40)}` : ''
-    const label = `${taskMark(task.status, data.icons)} #${trunc(task.id, 20)} ${trunc(task.subject, 200)}${owner}`
-    if (label.length > data.budget.left) break
-    data.budget.left -= label.length
-    taskRows.push({ task, label })
-  }
-  const hiddenMembers = members.length - memberRows.length
-  const hiddenTasks = tasks.length - taskRows.length
-  // A blank row and the members (or the two empty lines), then a blank row,
-  // the tasks heading and the tasks (or the two empty lines), each wrapped.
-  const line = (text: string, isCut = false) => textLine(data, text, 0, isCut)
-  data.layout.push(
-    LINE,
-    ...(members.length === 0 ? [line(NO_MEMBERS), line(NO_MEMBERS_HINT)] : []),
-    ...memberRows.map(row => line(`${data.icons.bullet} ${row.name} ${row.type} ${row.member.status}`)),
-    ...(hiddenMembers > 0 ? [line(`${hiddenMembers} more teammates`)] : []),
-    LINE,
-    LINE,
-    ...(tasks.length === 0 ? [line(NO_TASKS), line(NO_TASKS_HINT)] : []),
-    ...taskRows.map(row => line(row.label, isUnicodeCut(data.icons))),
-    ...(hiddenTasks > 0 ? [line(`${hiddenTasks} more tasks`)] : []),
-  )
-
-  const header = [
-    {
-      rows: 1,
-      node: (
-        <Box key="team-title" flexDirection="row" gap={2}>
-          <Text bold color={C.brand}>{`Team (${members.length})`}</Text>
-        </Box>
-      ),
-    },
-  ]
-  const content = (
-    <Box flexDirection="column">
-      <Box flexDirection="column" marginTop={1}>
-        {members.length === 0 && (
-          <Box flexDirection="column">
-            <Text color={C.muted}>{NO_MEMBERS}</Text>
-            <Text key="empty-members" color={C.muted}>
-              {NO_MEMBERS_HINT}
-            </Text>
-          </Box>
-        )}
-        {memberRows.map((row, i) => (
-          <Box key={`member-${i}`} flexDirection="row">
-            <Text color={agentStatusColor(row.member.status)}>{`${data.icons.bullet} `}</Text>
-            <Text bold color={C.text}>
-              {row.name}
-            </Text>
-            <Text color={C.muted}>{` ${row.type} `}</Text>
-            <Text color={agentStatusColor(row.member.status)}>{row.member.status}</Text>
-          </Box>
-        ))}
-        {hiddenMembers > 0 && <Text color={C.muted}>{`${hiddenMembers} more teammates`}</Text>}
-      </Box>
-      <Box flexDirection="column" marginTop={1}>
-        <Text bold color={C.text}>{`Tasks (${tasks.length})`}</Text>
-        {tasks.length === 0 && (
-          <Box flexDirection="column">
-            <Text color={C.muted}>{NO_TASKS}</Text>
-            <Text key="empty-tasks" color={C.muted}>
-              {NO_TASKS_HINT}
-            </Text>
-          </Box>
-        )}
-        {taskRows.map(row => (
-          <Text
-            key={`task-${row.task.id}`}
-            color={row.task.status === 'completed' ? C.muted : C.text}
-            wrap={endWrap(data.icons)}
-          >
-            {row.label}
-          </Text>
-        ))}
-        {hiddenTasks > 0 && <Text color={C.muted}>{`${hiddenTasks} more tasks`}</Text>}
-      </Box>
-    </Box>
-  )
-  return { header, content }
 }
 
 // The pane body, painted edge to edge in the theme's background and exactly
