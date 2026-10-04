@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "my-claude-tui",
+  "description": "tail-view: tail-claude's detail view and info bar inside Claude Code",
+  "owner": { "name": "Martin Szollos" },
+  "plugins": [
+    {
+      "name": "tail-view",
+      "source": "./",
+      "description": "tail-claude's detail view (tool calls, subagent traces) and info bar inside Claude Code",
+      "version": "0.1.0",
+      "category": "productivity",
+      "homepage": "https://github.com/MartinSzollos2016/my-claude-tui",
+      "keywords": ["tui", "transcript", "tool-calls", "subagents", "tail-claude"]
+    }
+  ]
+}
