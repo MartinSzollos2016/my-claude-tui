@@ -80,6 +80,10 @@ const G = {
   dot: '·',
 }
 
+// A hovered button reads at full contrast: its idle label is the theme grey.
+const HOVER_TEXT = { color: C.text, bold: true } as const
+const buttonHover = (scope: string) => ({ scope, ...HOVER_TEXT })
+
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
 function itemIcon(item: Item): { glyph: string; color?: ThemeKey } {
@@ -261,8 +265,24 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
         <Text bold color={C.brand}>
           {isFiltered ? `Turns (${rows.length} of ${data.turns.length})` : `Turns (${data.turns.length})`}
         </Text>
-        <Button key="nav-detail" plain hotkey="d" label="back to detail" onPress={act.showDetail} />
-        <Button key="nav-search" plain hotkey="s" label="search" onPress={act.focusSearch} />
+        <Button
+          key="nav-detail"
+          plain
+          dimColor
+          hover={buttonHover('btn:nav-detail')}
+          hotkey="d"
+          label="back to detail"
+          onPress={act.showDetail}
+        />
+        <Button
+          key="nav-search"
+          plain
+          dimColor
+          hover={buttonHover('btn:nav-search')}
+          hotkey="s"
+          label="search"
+          onPress={act.focusSearch}
+        />
       </Box>
       {Input && (
         <Box flexDirection="row" gap={2}>
@@ -274,7 +294,16 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
             onInput={value => act.search(value)}
             onSubmit={value => act.submitSearch(value)}
           />
-          {isFiltered && <Button key="search-clear" plain dimColor label="clear" onPress={() => act.search('')} />}
+          {isFiltered && (
+            <Button
+              key="search-clear"
+              plain
+              dimColor
+              hover={buttonHover('btn:search-clear')}
+              label="clear"
+              onPress={() => act.search('')}
+            />
+          )}
         </Box>
       )}
       <Box flexDirection="column" marginTop={1}>
@@ -286,9 +315,9 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
             <Button
               key={`turn-${row.index}`}
               plain
-              dimColor={row.index !== data.selected}
+              dimColor
               label={row.label}
-              hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover }}
+              hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
               onPress={() => act.pickTurn(row.index)}
             />
             {row.snippet !== '' && (
@@ -338,7 +367,15 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
     <Box flexDirection="column">
       <Box flexDirection="row" gap={2}>
         <Text bold color={C.brand}>{`Team (${members.length})`}</Text>
-        <Button key="nav-detail" plain hotkey="d" label="back to detail" onPress={act.showDetail} />
+        <Button
+          key="nav-detail"
+          plain
+          dimColor
+          hover={buttonHover('btn:nav-detail')}
+          hotkey="d"
+          label="back to detail"
+          onPress={act.showDetail}
+        />
       </Box>
       <Box flexDirection="column" marginTop={1}>
         {members.length === 0 && <Text color={C.muted}>No teammates in this session.</Text>}
@@ -430,17 +467,87 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
 
   return (
     <Box flexDirection="row" gap={2}>
-      <Button key="nav-prev" plain hotkey="p" dimColor={data.selected === 0} label="prev" onPress={act.prev} />
-      <Text color={C.muted}>{`turn ${data.selected + 1}/${total}${data.isLatest ? ' (live)' : ''}`}</Text>
-      <Button key="nav-next" plain hotkey="n" dimColor={data.selected >= total - 1} label="next" onPress={act.next} />
-      <Button key="nav-latest" plain hotkey="l" dimColor={data.isLatest} label="latest" onPress={act.latest} />
-      <Button key="nav-turns" plain hotkey="t" label="turns" onPress={act.showTurns} />
-      <Button key="nav-search" plain hotkey="s" label="search" onPress={act.focusSearch} />
-      {(data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0 && (
-        <Button key="nav-team" plain hotkey="m" label="team" onPress={act.showTeam} />
+      {data.selected > 0 && (
+        <Button
+          key="nav-prev"
+          plain
+          dimColor
+          hover={buttonHover('btn:nav-prev')}
+          hotkey="p"
+          label="prev"
+          onPress={act.prev}
+        />
       )}
-      <Button key="nav-expand" plain hotkey="e" label="expand all" onPress={act.expandAll} />
-      <Button key="nav-collapse" plain hotkey="c" label="collapse" onPress={act.collapseAll} />
+      <Text color={C.muted}>{`turn ${data.selected + 1}/${total}${data.isLatest ? ' (live)' : ''}`}</Text>
+      {data.selected < total - 1 && (
+        <Button
+          key="nav-next"
+          plain
+          dimColor
+          hover={buttonHover('btn:nav-next')}
+          hotkey="n"
+          label="next"
+          onPress={act.next}
+        />
+      )}
+      {!data.isLatest && (
+        <Button
+          key="nav-latest"
+          plain
+          dimColor
+          hover={buttonHover('btn:nav-latest')}
+          hotkey="l"
+          label="latest"
+          onPress={act.latest}
+        />
+      )}
+      <Button
+        key="nav-turns"
+        plain
+        dimColor
+        hover={buttonHover('btn:nav-turns')}
+        hotkey="t"
+        label="turns"
+        onPress={act.showTurns}
+      />
+      <Button
+        key="nav-search"
+        plain
+        dimColor
+        hover={buttonHover('btn:nav-search')}
+        hotkey="s"
+        label="search"
+        onPress={act.focusSearch}
+      />
+      {(data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0 && (
+        <Button
+          key="nav-team"
+          plain
+          dimColor
+          hover={buttonHover('btn:nav-team')}
+          hotkey="m"
+          label="team"
+          onPress={act.showTeam}
+        />
+      )}
+      <Button
+        key="nav-expand"
+        plain
+        dimColor
+        hover={buttonHover('btn:nav-expand')}
+        hotkey="e"
+        label="expand all"
+        onPress={act.expandAll}
+      />
+      <Button
+        key="nav-collapse"
+        plain
+        dimColor
+        hover={buttonHover('btn:nav-collapse')}
+        hotkey="c"
+        label="collapse"
+        onPress={act.collapseAll}
+      />
     </Box>
   )
 }
@@ -459,7 +566,7 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
       <Box flexDirection="row">
         <Text color={isOpen ? C.text : C.muted}>{`${isOpen ? G.expanded : G.collapsed} `}</Text>
         <Text color={C.accent}>{`${G.thinking} `}</Text>
-        <Button key={id} plain label={label} onPress={() => act.toggle(id)} />
+        <Button key={id} plain dimColor hover={buttonHover(`btn:${id}`)} label={label} onPress={() => act.toggle(id)} />
       </Box>
       {isOpen && (
         <Box flexDirection="column" marginLeft={4} marginBottom={1}>
@@ -533,7 +640,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
         </Text>
         <Box flexGrow={1} flexShrink={1}>
           {canOpen ? (
-            <Button key={item.id} plain label={label} hover={hover} onPress={toggle} />
+            <Button key={item.id} plain dimColor label={label} hover={{ ...hover, ...HOVER_TEXT }} onPress={toggle} />
           ) : (
             <Text color={C.muted} wrap="truncate-end" hover={hover}>
               {label}
@@ -643,6 +750,7 @@ function renderFrame(
           key={`copy:${blockId}`}
           plain
           dimColor
+          hover={buttonHover(`btn:copy:${blockId}`)}
           label="copy"
           onPress={press => act.copy(copyText, press.surface)}
         />
@@ -691,12 +799,20 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
           key={`full:${id}`}
           plain
           dimColor
+          hover={buttonHover(`btn:full:${id}`)}
           label={`${shown.note} – show all`}
           onPress={() => act.toggleFull(id)}
         />
       )}
       {canShrink && !isBudgetCut && (
-        <Button key={`full:${id}`} plain dimColor label="show less" onPress={() => act.toggleFull(id)} />
+        <Button
+          key={`full:${id}`}
+          plain
+          dimColor
+          hover={buttonHover(`btn:full:${id}`)}
+          label="show less"
+          onPress={() => act.toggleFull(id)}
+        />
       )}
     </Box>
   )
