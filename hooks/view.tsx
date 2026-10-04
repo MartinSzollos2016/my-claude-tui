@@ -194,7 +194,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   if (data.view === 'team') return paneBody(el, data, renderTeam(el, data, act))
 
   if (!turn) {
-    return paneBody(el, data, <Text dimColor>No turns yet. Send a prompt and the detail view fills in.</Text>)
+    return paneBody(el, data, <Text color={C.muted}>No turns yet. Send a prompt and the detail view fills in.</Text>)
   }
   if (data.view === 'turns') return paneBody(el, data, renderTurnList(el, data, act))
 
@@ -204,7 +204,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     <Box flexDirection="column">
       {renderHeader(el, turn, data)}
       {turn.prompt !== '' && (
-        <Text dimColor wrap="truncate-end">
+        <Text color={C.muted} wrap="truncate-end">
           {'❯ '}
           {truncate(turn.prompt, data.columns * 2)}
         </Text>
@@ -213,7 +213,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       <Box flexDirection="column" marginTop={1}>
         {renderThinking(el, turn, data, act)}
         {turn.items.length === 0 && (data.thinking?.text ?? '') === '' && (
-          <Text dimColor>{data.isWorking && data.isLatest ? 'Working…' : EMPTY_TURN_TEXT}</Text>
+          <Text color={C.muted}>{data.isWorking && data.isLatest ? 'Working…' : EMPTY_TURN_TEXT}</Text>
         )}
         {turn.items.map(item => renderItem(el, item, data, act, 0))}
       </Box>
@@ -279,7 +279,7 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
       )}
       <Box flexDirection="column" marginTop={1}>
         {isFiltered && rows.length === 0 && (
-          <Text dimColor>{`No turn matches "${truncate(sanitizeText(query), 40)}".`}</Text>
+          <Text color={C.muted}>{`No turn matches "${truncate(sanitizeText(query), 40)}".`}</Text>
         )}
         {shown.map(row => (
           <Box key={`turn-row-${row.index}`} flexDirection="column">
@@ -291,7 +291,9 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
               hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover }}
               onPress={() => act.pickTurn(row.index)}
             />
-            {row.snippet !== '' && <Text dimColor wrap="truncate-end">{`      ${sanitizeText(row.snippet)}`}</Text>}
+            {row.snippet !== '' && (
+              <Text color={C.muted} wrap="truncate-end">{`      ${sanitizeText(row.snippet)}`}</Text>
+            )}
           </Box>
         ))}
         {hidden > 0 && (
@@ -339,26 +341,32 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
         <Button key="nav-detail" plain hotkey="d" label="back to detail" onPress={act.showDetail} />
       </Box>
       <Box flexDirection="column" marginTop={1}>
-        {members.length === 0 && <Text dimColor>No teammates in this session.</Text>}
+        {members.length === 0 && <Text color={C.muted}>No teammates in this session.</Text>}
         {memberRows.map((row, i) => (
           <Box key={`member-${i}`} flexDirection="row">
             <Text color={agentStatusColor(row.member.status)}>{'● '}</Text>
-            <Text bold>{row.name}</Text>
-            <Text dimColor>{` ${row.type} `}</Text>
+            <Text bold color={C.text}>
+              {row.name}
+            </Text>
+            <Text color={C.muted}>{` ${row.type} `}</Text>
             <Text color={agentStatusColor(row.member.status)}>{row.member.status}</Text>
           </Box>
         ))}
-        {hiddenMembers > 0 && <Text dimColor>{`${hiddenMembers} more teammates`}</Text>}
+        {hiddenMembers > 0 && <Text color={C.muted}>{`${hiddenMembers} more teammates`}</Text>}
       </Box>
       <Box flexDirection="column" marginTop={1}>
-        <Text bold>{`Tasks (${tasks.length})`}</Text>
-        {tasks.length === 0 && <Text dimColor>No tasks yet.</Text>}
+        <Text bold color={C.text}>{`Tasks (${tasks.length})`}</Text>
+        {tasks.length === 0 && <Text color={C.muted}>No tasks yet.</Text>}
         {taskRows.map(row => (
-          <Text key={`task-${row.task.id}`} dimColor={row.task.status === 'completed'} wrap="truncate-end">
+          <Text
+            key={`task-${row.task.id}`}
+            color={row.task.status === 'completed' ? C.muted : C.text}
+            wrap="truncate-end"
+          >
             {row.label}
           </Text>
         ))}
-        {hiddenTasks > 0 && <Text dimColor>{`${hiddenTasks} more tasks`}</Text>}
+        {hiddenTasks > 0 && <Text color={C.muted}>{`${hiddenTasks} more tasks`}</Text>}
       </Box>
     </Box>
   )
@@ -386,14 +394,16 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
         <Text bold color={C.brand}>
           {G.robot}{' '}
         </Text>
-        <Text bold>Claude </Text>
-        <Text color={modelColor(model)}>{model}</Text>
+        <Text bold color={C.text}>
+          Claude{' '}
+        </Text>
+        <Text color={modelColor(model) ?? C.text}>{model}</Text>
         {(turn.toolCount > 0 || turn.outputCount > 0) && <Text color={C.muted}> {G.dot} </Text>}
-        {turn.toolCount > 0 && <Text dimColor>{`${G.wrench} ${turn.toolCount}  `}</Text>}
+        {turn.toolCount > 0 && <Text color={C.muted}>{`${G.wrench} ${turn.toolCount}  `}</Text>}
         {turn.outputCount > 0 && <Text color={C.accent}>{G.output} </Text>}
-        {turn.outputCount > 0 && <Text dimColor>{`${turn.outputCount}  `}</Text>}
+        {turn.outputCount > 0 && <Text color={C.muted}>{`${turn.outputCount}  `}</Text>}
         {data.thinking !== undefined && data.thinking.count > 0 && (
-          <Text dimColor>{`${G.thinking} ${data.thinking.count}  `}</Text>
+          <Text color={C.muted}>{`${G.thinking} ${data.thinking.count}  `}</Text>
         )}
         {subagents.map(item => (
           <Text color={isAgentRunning(data.agents.get(item.agentId)) ? C.ongoing : C.accent}>{`${G.robot} `}</Text>
@@ -401,12 +411,12 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
       </Box>
       <Box flexDirection="row" flexShrink={0}>
         {stat?.outputTokens !== undefined && (
-          <Text dimColor>{`${G.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}  `}</Text>
+          <Text color={C.muted}>{`${G.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}  `}</Text>
         )}
         {data.isLatest && data.contextPercent !== undefined && (
           <Text color={contextColor(data.contextPercent)}>{`ctx ${Math.round(data.contextPercent)}%  `}</Text>
         )}
-        {stat && <Text dimColor>{`${G.clock} ${formatDuration(stat.durationMs)}  `}</Text>}
+        {stat && <Text color={C.muted}>{`${G.clock} ${formatDuration(stat.durationMs)}  `}</Text>}
         {data.isLatest && data.isWorking && <Text color={C.ongoing}>{`${SPINNER[data.frame % SPINNER.length]} `}</Text>}
         {stat && <Text color={C.muted}>{formatClock(stat.endedAt)}</Text>}
       </Box>
@@ -421,7 +431,7 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
   return (
     <Box flexDirection="row" gap={2}>
       <Button key="nav-prev" plain hotkey="p" dimColor={data.selected === 0} label="prev" onPress={act.prev} />
-      <Text dimColor>{`turn ${data.selected + 1}/${total}${data.isLatest ? ' (live)' : ''}`}</Text>
+      <Text color={C.muted}>{`turn ${data.selected + 1}/${total}${data.isLatest ? ' (live)' : ''}`}</Text>
       <Button key="nav-next" plain hotkey="n" dimColor={data.selected >= total - 1} label="next" onPress={act.next} />
       <Button key="nav-latest" plain hotkey="l" dimColor={data.isLatest} label="latest" onPress={act.latest} />
       <Button key="nav-turns" plain hotkey="t" label="turns" onPress={act.showTurns} />
@@ -447,7 +457,7 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
   return (
     <Box key={`item-${id}`} flexDirection="column">
       <Box flexDirection="row">
-        <Text dimColor={!isOpen}>{`${isOpen ? G.expanded : G.collapsed} `}</Text>
+        <Text color={isOpen ? C.text : C.muted}>{`${isOpen ? G.expanded : G.collapsed} `}</Text>
         <Text color={C.accent}>{`${G.thinking} `}</Text>
         <Button key={id} plain label={label} onPress={() => act.toggle(id)} />
       </Box>
@@ -517,15 +527,15 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
   return (
     <Box key={`item-${item.id}`} flexDirection="column" marginLeft={depth * 4}>
       <Box flexDirection="row" width={width}>
-        <Text dimColor={!isOpen} hover={hover}>{`${chevron} `}</Text>
-        <Text color={icon.color} dimColor={icon.color === undefined} hover={hover}>
+        <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${chevron} `}</Text>
+        <Text color={icon.color ?? C.muted} hover={hover}>
           {`${icon.glyph} `}
         </Text>
         <Box flexGrow={1} flexShrink={1}>
           {canOpen ? (
             <Button key={item.id} plain label={label} hover={hover} onPress={toggle} />
           ) : (
-            <Text dimColor wrap="truncate-end" hover={hover}>
+            <Text color={C.muted} wrap="truncate-end" hover={hover}>
               {label}
             </Text>
           )}
@@ -535,14 +545,14 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
         </Text>
         <Box flexShrink={0}>
           {modelText !== '' && model !== undefined && (
-            <Text color={modelColor(model)} hover={hover}>
+            <Text color={modelColor(model) ?? C.text} hover={hover}>
               {modelText}
             </Text>
           )}
           <Text color={C.ongoing} hover={hover}>
             {durationText !== '' ? `${G.dot} ` : '  '}
           </Text>
-          <Text dimColor hover={hover}>
+          <Text color={C.muted} hover={hover}>
             {durationText.padEnd(7)}
           </Text>
         </Box>
@@ -625,7 +635,9 @@ function renderFrame(
           <Text bold color={tone}>
             {title}
           </Text>
-          {meta !== undefined && meta !== '' && <Text dimColor wrap="truncate-end">{`  ${truncate(meta, 300)}`}</Text>}
+          {meta !== undefined && meta !== '' && (
+            <Text color={C.muted} wrap="truncate-end">{`  ${truncate(meta, 300)}`}</Text>
+          )}
         </Box>
         <Button
           key={`copy:${blockId}`}
@@ -668,9 +680,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
         ) : spec.kind === 'code' ? (
           <Code language={spec.language} source={piece} />
         ) : (
-          <Text color={spec.isError ? C.error : undefined} dimColor={!spec.isError}>
-            {piece}
-          </Text>
+          <Text color={spec.isError ? C.error : C.muted}>{piece}</Text>
         ),
       )}
       {isBudgetCut && (
@@ -700,14 +710,14 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
   if (!trace) {
     return (
       <Box marginLeft={4}>
-        <Text dimColor>Loading trace…</Text>
+        <Text color={C.muted}>Loading trace…</Text>
       </Box>
     )
   }
   if ('denied' in trace) {
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-        <Text dimColor>{`Trace unavailable: ${truncate(trace.denied, 300)}`}</Text>
+        <Text color={C.muted}>{`Trace unavailable: ${truncate(trace.denied, 300)}`}</Text>
         {renderSections(el, item, data, act)}
       </Box>
     )
@@ -717,11 +727,13 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box flexDirection="row" marginLeft={4}>
-        <Text dimColor>{`${G.system}  `}</Text>
-        <Text bold>Execution Trace</Text>
-        <Text dimColor>{` ${G.dot} ${stats.tools} tool calls, ${stats.messages} messages`}</Text>
-        {model !== undefined && <Text dimColor>{` ${G.dot} `}</Text>}
-        {model !== undefined && <Text color={modelColor(model)}>{shortModel(model)}</Text>}
+        <Text color={C.muted}>{`${G.system}  `}</Text>
+        <Text bold color={C.text}>
+          Execution Trace
+        </Text>
+        <Text color={C.muted}>{` ${G.dot} ${stats.tools} tool calls, ${stats.messages} messages`}</Text>
+        {model !== undefined && <Text color={C.muted}>{` ${G.dot} `}</Text>}
+        {model !== undefined && <Text color={modelColor(model) ?? C.text}>{shortModel(model)}</Text>}
       </Box>
       {trace.items.map(child => renderItem(el, child, data, act, depth + 1))}
     </Box>

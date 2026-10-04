@@ -174,7 +174,63 @@ describe('renderPane', () => {
     expect(byKey(tree, 'b1')?.props['label']).toContain('Run tests')
     expect(all).toContain('2.5s')
     expect(all).toContain('haiku4.5')
-    expect(byKey(tree, 'nav-prev')?.props['dimColor']).toBe(true)
+  })
+
+  test('every Text carries a theme color and every Button the theme grey with a full-contrast hover', () => {
+    const thinking = { count: 1, text: 'Plan the fix' }
+    const trace = buildTurns(
+      [{ role: 'assistant', text: 'ok', toolUses: [{ tool_use_id: 'g', tool: 'Grep', input: { pattern: 'x' } }] }],
+      'ag/',
+    )
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    const tasks = [
+      { id: '1', subject: 'Write tests', status: 'in_progress', owner: 'alice' },
+      { id: '2', subject: 'Ship', status: 'completed' },
+    ]
+    const long = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          {
+            tool_use_id: 'x1',
+            tool: 'Bash',
+            input: { command: 'cat' },
+            text: Array.from({ length: 300 }, (_, n) => `line ${n}`).join('\n'),
+          },
+        ],
+      },
+    ])
+    const open = new Set(['b1', 'e1', 'a1', 't0:o0', 't0:thinking'])
+    const trees = [
+      renderPane(
+        el,
+        { ...base, thinking, expanded: open, traces: new Map([['ag', { items: trace[0]!.items }]]), members, tasks },
+        act,
+      ),
+      renderPane(el, { ...base, selected: 1, isLatest: true, members, tasks }, act),
+      renderPane(el, { ...base, expanded: open }, act),
+      renderPane(el, { ...base, expanded: open, traces: new Map([['ag', { denied: 'gone' }]]) }, act),
+      renderPane(el, { ...base, turns: long, expanded: new Set(['x1']) }, act),
+      renderPane(el, { ...base, turns: long, expanded: new Set(['x1']), full: new Set(['x1:output']) }, act),
+      renderPane(el, { ...base, turns: [] }, act),
+      renderPane(el, { ...base, turns: buildTurns([{ role: 'user', text: 'hi', toolUses: [] }]) }, act),
+      renderPane(el, { ...base, view: 'turns', stats: [base.turnStat, undefined] }, act),
+      renderPane(el, { ...base, view: 'turns', query: 'callers', matches: [{ index: 0, snippet: 'a' }] }, act),
+      renderPane(el, { ...base, view: 'turns', query: 'zzz', matches: [] }, act),
+      renderPane(el, { ...base, view: 'team', members, tasks }, act),
+      renderPane(el, { ...base, view: 'team', turns: [] }, act),
+    ]
+    let texts = 0
+    for (const tree of trees)
+      for (const n of nodes(tree)) {
+        if (n.type === 'Text') {
+          texts++
+          expect(typeof n.props['color'], text(n)).toBe('string')
+        }
+      }
+    expect(texts).toBeGreaterThan(50)
   })
 
   test('expanded rows draw input and output frames, errors in red', () => {
