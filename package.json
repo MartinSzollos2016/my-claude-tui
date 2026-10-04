@@ -14,13 +14,16 @@
     "test": "claude plugin test .",
     "validate": "claude plugin validate . --strict",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run validate && npm test",
-    "audit": "npm audit --audit-level=moderate"
+    "audit": "npm audit --audit-level=moderate",
+    "coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@vitest/coverage-istanbul": "5.0.3",
     "husky": "9.1.7",
     "knip": "6.39.0",
     "prettier": "3.9.9",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
   },
   "engines": {
     "node": ">=22"
