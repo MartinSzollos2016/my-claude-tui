@@ -1,5 +1,5 @@
 import type { AgentStatus } from 'claude-code'
-import type { SectionKind } from './model'
+import type { SectionKind } from './model/sections'
 
 // Colors as Claude Code theme keys. The engine resolves a key against the
 // theme the person picked in /theme (dark, light, their daltonized and ANSI

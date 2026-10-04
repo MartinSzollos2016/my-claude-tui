@@ -60,8 +60,6 @@ import {
   spinnerMessage,
   statusText,
   stepCursor,
-  taskBoard,
-  teamMembers,
   thinkingCounts,
   turnListText,
   turnText,
@@ -69,13 +67,13 @@ import {
   type EngineScroll,
   type RunningTool,
   type ScrollFrame,
-  type TaskEntry,
   type TurnMatch,
   type TurnThinking,
 } from './model'
 import { engineDuration } from './model/format'
 import { groupRuns } from './model/groups'
 import { sanitizePrompt, sanitizeText } from './model/sanitize'
+import { taskBoard, teamMembers, type TaskEntry } from './model/team'
 import { buildTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
 import type { Item, Turn } from './model/types'
 import { shortPath, truncate } from './model/width'

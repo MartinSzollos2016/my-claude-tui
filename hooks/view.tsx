@@ -15,28 +15,20 @@ import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import { ICON_SETS, type Icons } from './icons'
 import { agentStatusColor, C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 import {
-  cachedSections,
   clampScroll,
   contentRows,
   EMPTY_TURN_TEXT,
-  firstErrorLine,
   footerLayout,
   footerPads,
   groupLabel,
   hoverCard,
   overflowRows,
   pageScroll,
-  pieceStarts,
-  reserveSections,
   splitMatch,
-  taskMark,
   turnTable,
   type FooterLayout,
   type RowBlock,
   type ScrollFrame,
-  type Section,
-  type TaskEntry,
-  type TeamMember,
   type TurnMatch,
   type TurnThinking,
   type WorkflowState,
@@ -54,7 +46,9 @@ import {
 } from './model/format'
 import { groupRuns, type GroupItem } from './model/groups'
 import { sanitizeText } from './model/sanitize'
+import { cachedSections, firstErrorLine, pieceStarts, reserveSections, type Section } from './model/sections'
 import { itemName, itemSummary, toolCategory } from './model/summaries'
+import { taskMark, type TaskEntry, type TeamMember } from './model/team'
 import { isAgentRunning, isSubagent, itemStatus, traceStats, type ItemStatus } from './model/turns'
 import type { Item, ToolItem, Turn } from './model/types'
 import {
