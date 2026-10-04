@@ -115,15 +115,19 @@ tail-claude.
 ## Develop
 
 ```bash
-claude plugin validate .
-claude plugin test .
-npx -p typescript tsc -p .   # after the engine has laid .claude-plugin/types
+npm install          # prettier and typescript (exact versions, lockfile)
+npm run format       # format everything with Prettier
+npm run check        # format check, typecheck, plugin validate, tests
 ```
 
-- `hooks/model.ts` – pure: rows → turns → items, tool summaries (ported from
-  agent-ouija `claude/tools/summary.go`), formatters
+`npm run typecheck` needs the types Claude Code lays into
+`.claude-plugin/types/` once it has loaded the plugin.
+
+- `hooks/model.ts` – pure: rows → turns → items and sections, tool summaries
+  (ported from agent-ouija `claude/tools/summary.go`), formatters
 - `hooks/view.tsx` – rendering of pane and bar
-- `hooks/theme.ts` – theme keys and semantic color roles
+- `hooks/theme.ts` – theme keys, semantic color roles, section tones
+- `hooks/commands.ts` – slash commands and help
 - `hooks/register.tsx` – event wiring and state
 - `types/index.d.ts` – the `$.state` contract
 
@@ -137,8 +141,7 @@ prefixed with a [gitmoji](https://gitmoji.dev/):
 🐛 fix(view): cap text blocks below the engine limit
 ```
 
-Before committing: `claude plugin validate .`, `claude plugin test .` and
-`tsc -p .` must pass.
+Before committing: `npm run check` must pass.
 
 ## License
 
