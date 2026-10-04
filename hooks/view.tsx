@@ -21,11 +21,8 @@ import {
   clampScroll,
   clampText,
   contentRows,
-  displayWidth,
-  durationBar,
   EMPTY_TURN_TEXT,
   firstErrorLine,
-  fitPath,
   footerLayout,
   footerPads,
   groupLabel,
@@ -37,9 +34,7 @@ import {
   itemStatus,
   itemSummary,
   overflowRows,
-  padEndDisplay,
   pageScroll,
-  pathOf,
   pieceStarts,
   reserveSections,
   splitDiff,
@@ -47,8 +42,6 @@ import {
   taskMark,
   toolCategory,
   traceStats,
-  truncateDisplay,
-  truncateMiddle,
   turnTable,
   type FooterLayout,
   type GroupItem,
@@ -73,6 +66,15 @@ import {
 } from './model/format'
 import { sanitizeText } from './model/sanitize'
 import type { Item, ToolItem, Turn } from './model/types'
+import {
+  displayWidth,
+  durationBar,
+  fitPath,
+  padEndDisplay,
+  pathOf,
+  truncateDisplay,
+  truncateMiddle,
+} from './model/width'
 
 // Text narrowed to theme keys: tsc rejects a raw color (hex, rgb, ansi)
 // anywhere in the views, so everything follows the person's /theme.
