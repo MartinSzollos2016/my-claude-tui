@@ -566,6 +566,15 @@ describe('icon sets', () => {
     expect(ICON_SETS.nerd.border).toBe('round')
     expect(ICON_SETS.unicode.ellipsis).toBe('…')
   })
+
+  test('the page keys and the more above / below rows have triangles, ^ and v in ascii', () => {
+    for (const set of [ICON_SETS.nerd, ICON_SETS.unicode]) {
+      expect([set.pageUp, set.pageDown, set.moreAbove, set.moreBelow]).toEqual(['▲', '▼', '▲', '▼'])
+      for (const glyph of [set.pageUp, set.pageDown, set.moreAbove, set.moreBelow]) expect(displayWidth(glyph)).toBe(1)
+    }
+    expect([ICON_SETS.ascii.pageUp, ICON_SETS.ascii.pageDown]).toEqual(['^', 'v'])
+    expect([ICON_SETS.ascii.moreAbove, ICON_SETS.ascii.moreBelow]).toEqual(['^', 'v'])
+  })
 })
 
 describe('truncateMiddle', () => {

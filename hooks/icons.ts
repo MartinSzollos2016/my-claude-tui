@@ -63,6 +63,12 @@ export type Icons = {
   cursorDown: string
   cursorUp: string
   columnSep: string
+  // The page keys of the pane's own scroll, and the rows that say how much of
+  // the content is out of view above and below.
+  pageUp: string
+  pageDown: string
+  moreAbove: string
+  moreBelow: string
   // The footer's keys under 40 columns, where only a glyph stands for the word.
   keyLatest: string
   keyOpen: string
@@ -128,6 +134,10 @@ const nerd: Icons = {
   cursorDown: '↓',
   cursorUp: '↑',
   columnSep: '│',
+  pageUp: '▲',
+  pageDown: '▼',
+  moreAbove: '▲',
+  moreBelow: '▼',
   keyLatest: '»',
   keyOpen: '+',
   keyCopy: '⧉',
@@ -209,6 +219,10 @@ const ascii: Icons = {
   cursorDown: 'v',
   cursorUp: '^',
   columnSep: '|',
+  pageUp: '^',
+  pageDown: 'v',
+  moreAbove: '^',
+  moreBelow: 'v',
   keyLatest: '>>',
   keyOpen: '+',
   keyCopy: 'c',
