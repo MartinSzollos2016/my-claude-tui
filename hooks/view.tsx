@@ -169,6 +169,8 @@ type PaneData = {
   // Whether the info bar shows above the prompt: it takes the first
   // ctrl+x tab, the pane the second.
   isBarShown?: boolean
+  // The turn the turn list's cursor stands on; null or left out for none.
+  turnCursor?: number | null
   // Thinking of the shown turn: how many blocks, and their readable text.
   thinking?: TurnThinking
   turns: Turn[]
@@ -364,7 +366,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 
   if (!turn) {
     const sep = data.icons.groupSep
-    const hint = `Keys: t turns ${sep} s search ${sep} e expand ${sep} ${focusChord(data)} focuses this pane`
+    const hint = `Keys: t turns ${sep} s search ${sep} e expand ${sep} click or ${focusChord(data)} for keys`
     data.layout.push(
       textLine(data, 'No turns yet.', 0),
       textLine(data, 'Send a prompt; tool calls and subagents appear here.', 0),
@@ -477,13 +479,14 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
     LINE,
     ...(rows.length > 0 ? [LINE] : []),
     ...(isNoMatch ? [textLine(data, noMatch, 0), textLine(data, NO_MATCH_HINT, 0)] : []),
-    ...shown.map((row): RowBlock =>
-      row.snippet === ''
-        ? { kind: 'turn' }
+    ...shown.map((row): RowBlock => {
+      const id = turnRowId(row.index)
+      return row.snippet === ''
+        ? { kind: 'turn', id }
         : isUnicodeCut(data.icons)
-          ? { kind: 'turn', snippet: row.snippet }
-          : { kind: 'turn', snippet: `${SNIPPET_INDENT}${row.snippet}`, width: wrapWidth(data, 0) },
-    ),
+          ? { kind: 'turn', id, snippet: row.snippet }
+          : { kind: 'turn', id, snippet: `${SNIPPET_INDENT}${row.snippet}`, width: wrapWidth(data, 0) }
+    }),
     ...(hidden > 0 ? [textLine(data, hiddenNote, 0)] : []),
   )
 
@@ -541,25 +544,37 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
             </Text>
           </Box>
         )}
-        {shown.map(row => (
-          <Box key={`turn-row-${row.index}`} flexDirection="column">
-            {row.index === data.selected ? (
-              <Text key={`turn-${row.index}`} bold color={C.text}>
-                {row.label}
-              </Text>
-            ) : (
-              <Button
-                key={`turn-${row.index}`}
-                plain
-                dimColor
-                label={row.label}
-                hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
-                onPress={() => act.pickTurn(row.index)}
-              />
-            )}
-            {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
-          </Box>
-        ))}
+        {shown.map(row => {
+          // The cursor takes the row's first cell, in the accent.
+          const isCursor = row.index === data.turnCursor
+          const label = isCursor ? row.label.slice(1) : row.label
+          return (
+            <Box key={`turn-row-${row.index}`} flexDirection="column">
+              <Box flexDirection="row">
+                {isCursor && (
+                  <Text key={`turn-cursor-${row.index}`} color={C.accent}>
+                    {data.icons.cursor}
+                  </Text>
+                )}
+                {row.index === data.selected ? (
+                  <Text key={`turn-${row.index}`} bold color={C.text}>
+                    {label}
+                  </Text>
+                ) : (
+                  <Button
+                    key={`turn-${row.index}`}
+                    plain
+                    dimColor
+                    label={label}
+                    hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
+                    onPress={() => act.pickTurn(row.index)}
+                  />
+                )}
+              </Box>
+              {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
+            </Box>
+          )
+        })}
         {hidden > 0 && <Text color={C.muted}>{hiddenNote}</Text>}
       </Box>
     </Box>
@@ -568,6 +583,9 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
 }
 
 const SNIPPET_INDENT = '      '
+
+// A turn row's id in the content's rows: where the turn list's cursor finds it.
+export const turnRowId = (index: number) => `turn:${index}`
 const NO_MATCH_HINT = 'Clear the search or try fewer words.'
 
 // The line a search hit gets under its turn: the matched part underlined and
@@ -703,7 +721,7 @@ function renderTeam(el: El, data: Ctx): PaneParts {
 function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   const { Box, Text } = el
   const { icons } = data
-  const layout = footerLayout(data.columns)
+  const layout = footerRowsOf(data, act)
   // A pane too short for the header and a row of content drops the header.
   const fullHeader = parts.header.reduce((sum, part) => sum + part.rows, 0)
   const header = data.rows - fullHeader - layout.rows >= 1 ? parts.header : []
@@ -814,6 +832,8 @@ type FooterKey = {
   short: string
   label: string
   isOn: boolean
+  // Drawn in this view; a key that is not keeps its hotkey in a hidden box.
+  isShown: boolean
   onPress: (e: { surface?: RenderSurface }) => void
 }
 
@@ -823,10 +843,9 @@ type FooterKey = {
 function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout, frame: ScrollFrame) {
   const { Box, Text } = el
   const { icons } = data
-  const { move, cursor, views, expand, page } = footerGroups(data, act, frame)
-  // As the engine draws a button: `<key>: <label>`.
-  const textOf = (k: FooterKey) => `${k.hotkey}: ${footerLabel(k, layout.labels)}`
-  const groupWidth = (group: readonly FooterKey[]) => displayWidth(group.map(textOf).join('  '))
+  const plan = footerPlan(footerGroups(data, act, frame), layout, data.columns)
+  const { leftWidth, page, isPageInRow } = plan
+  const textOf = (k: FooterKey) => footerText(k, layout)
   // The gap between keys is part of the key before it (trailing cells of its
   // label), so the row has no cell a click falls through; given a width, the
   // last key fills the column up to it.
@@ -839,41 +858,34 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
     return group.map((k, i) => renderFooterKey(el, k, footerLabel(k, layout.labels), pads[i] ?? 0))
   }
   const inner = data.columns - STATUS_INSET
-  const leftWidth = Math.max(groupWidth(move), groupWidth(views))
-  const isTwo = layout.columns === 'two'
-  // The views row with the page keys at its end: the left column and the
-  // separator (two gaps around it), then the expand keys.
-  const pageWidth = groupWidth(page)
-  const isPageInRow = (isTwo ? leftWidth + 5 : 0) + groupWidth(expand) + 2 + pageWidth <= inner
-  const expandKeys = isPageInRow ? [...expand, ...page] : expand
-  const columnsRow = (n: number, left: readonly FooterKey[], right: readonly FooterKey[]) => (
-    <Box key={`footer-row-${n}`} flexDirection="row">
-      <Box key={`footer-left-${n}`} flexDirection="row" width={leftWidth + KEY_GAP} flexShrink={0}>
-        {keys(left, leftWidth + KEY_GAP)}
+  const pageWidth = displayWidth(page.map(textOf).join('  '))
+  // A row of two columns: the left keys padded up to the separator, then the
+  // right ones; a row with one side only draws no separator.
+  const rows = plan.rows.map(row =>
+    row.left === undefined || row.left.length === 0 ? (
+      <Box key={`footer-row-${row.id}`} flexDirection="row">
+        {keys(row.keys)}
       </Box>
-      <Box key={`footer-divider-${n}`} width={1 + KEY_GAP} flexShrink={0}>
-        <Text key={`footer-sep-${n}`} color={C.muted}>
-          {icons.columnSep}
-        </Text>
-      </Box>
-      <Box key={`footer-right-${n}`} flexDirection="row">
-        {keys(right)}
-      </Box>
-    </Box>
-  )
-  const stacked: [string, readonly FooterKey[]][] = [
-    ['move', move],
-    ['cursor', cursor],
-    ['views', views],
-    ['expand', expandKeys],
-  ]
-  const rows = isTwo
-    ? [columnsRow(1, move, cursor), columnsRow(2, views, expandKeys)]
-    : stacked.map(([id, group]) => (
-        <Box key={`footer-row-${id}`} flexDirection="row">
-          {keys(group)}
+    ) : (
+      <Box key={`footer-row-${row.id}`} flexDirection="row">
+        <Box key={`footer-left-${row.id}`} flexDirection="row" width={leftWidth + KEY_GAP} flexShrink={0}>
+          {keys(row.left, leftWidth + KEY_GAP)}
         </Box>
-      ))
+        {row.keys.length > 0 && (
+          <Box key={`footer-divider-${row.id}`} width={1 + KEY_GAP} flexShrink={0}>
+            <Text key={`footer-sep-${row.id}`} color={C.muted}>
+              {icons.columnSep}
+            </Text>
+          </Box>
+        )}
+        {row.keys.length > 0 && (
+          <Box key={`footer-right-${row.id}`} flexDirection="row">
+            {keys(row.keys)}
+          </Box>
+        )}
+      </Box>
+    ),
+  )
   const statusBox = (width: number) => {
     const status = footerStatus(data, width, frame)
     return (
@@ -902,13 +914,87 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
           {statusBox(inner - pageWidth - 2)}
         </Box>
       )}
+      {plan.hidden.length > 0 && (
+        <Box key="footer-hidden" display="none">
+          {plan.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+        </Box>
+      )}
     </Box>
   )
 }
 
-// The chord that gives the pane the keyboard: pressed twice while the info
-// bar shows, which the engine focuses first.
-const focusChord = (data: Ctx) => (data.isBarShown === true ? 'ctrl+x tab twice' : 'ctrl+x tab')
+// As the engine draws a footer button: `<key>: <label>`.
+const footerText = (k: FooterKey, layout: FooterLayout) => `${k.hotkey}: ${footerLabel(k, layout.labels)}`
+
+// What the footer draws for a view: the rows of the keys it shows, two
+// columns (`left` and `keys`) or one group each, where the page keys go,
+// and the keys it hides, which keep their hotkeys.
+type FooterRow = { id: string; left?: readonly FooterKey[]; keys: readonly FooterKey[] }
+type FooterPlan = {
+  rows: FooterRow[]
+  leftWidth: number
+  page: readonly FooterKey[]
+  isPageInRow: boolean
+  hidden: FooterKey[]
+}
+
+function footerPlan(groups: FooterGroups, layout: FooterLayout, columns: number): FooterPlan {
+  const shown = (group: readonly FooterKey[]) => group.filter(k => k.isShown)
+  const [move, cursor, views, expand, page] = [
+    groups.move,
+    groups.cursor,
+    groups.views,
+    groups.expand,
+    groups.page,
+  ].map(shown) as [FooterKey[], FooterKey[], FooterKey[], FooterKey[], FooterKey[]]
+  const groupWidth = (group: readonly FooterKey[]) => displayWidth(group.map(k => footerText(k, layout)).join('  '))
+  const inner = columns - STATUS_INSET
+  const leftWidth = Math.max(groupWidth(move), groupWidth(views))
+  const isTwo = layout.columns === 'two'
+  // The views row with the page keys at its end: the left column and the
+  // separator (two gaps around it), then the expand keys.
+  const isPageInRow = (isTwo ? leftWidth + 5 : 0) + groupWidth(expand) + 2 + groupWidth(page) <= inner
+  const expandKeys = isPageInRow ? [...expand, ...page] : expand
+  const rows: FooterRow[] = isTwo
+    ? [
+        { id: '1', left: move, keys: cursor },
+        { id: '2', left: views, keys: expandKeys },
+      ]
+    : [
+        { id: 'move', keys: move },
+        { id: 'cursor', keys: cursor },
+        { id: 'views', keys: views },
+        { id: 'expand', keys: expandKeys },
+      ]
+  const all = [groups.move, groups.cursor, groups.views, groups.expand, groups.page].flat()
+  return {
+    rows: rows.filter(row => (row.left?.length ?? 0) + row.keys.length > 0),
+    leftWidth,
+    page,
+    isPageInRow,
+    hidden: all.filter(k => !k.isShown),
+  }
+}
+
+// The keys a view does not draw: those that act on the detail turn, outside
+// the detail view; on the team board the cursor and the board's own key too.
+const HIDDEN_KEYS: Record<'detail' | 'turns' | 'team', ReadonlySet<string>> = {
+  detail: new Set(),
+  turns: new Set(['prev', 'next', 'latest', 'copy', 'expand', 'collapse']),
+  team: new Set(['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'team', 'expand', 'collapse']),
+}
+
+// The rows the footer of this pane draws, for the window's height: the plan
+// of the keys does not depend on where the window stands.
+function footerRowsOf(data: Ctx, act: PaneActions): FooterLayout {
+  const all = footerLayout(data.columns)
+  const groups = footerGroups(data, act, { scrollTop: 0, windowRows: 1, total: 0, starts: {} })
+  return footerLayout(data.columns, footerPlan(groups, all, data.columns).rows.length)
+}
+
+// The chord that gives the pane the keyboard (a click does too): pressed
+// twice while the info bar shows, which the engine focuses first.
+const focusChord = (data: Ctx) => (data.isBarShown === true ? `ctrl+x tab ${data.icons.times}2` : 'ctrl+x tab')
 
 // The status row: the position of the turn and the focus note, right-aligned
 // inside the pane's frame and padding (STATUS_INSET cells) and cut with the
@@ -923,7 +1009,7 @@ function footerStatus(data: Ctx, room: number, frame: ScrollFrame) {
   // Where the window stands while the content overflows: at its top or end.
   const lastTop = clampScroll(Infinity, frame.total, frame.windowRows)
   const place = lastTop === 0 ? '' : frame.scrollTop === 0 ? 'top' : frame.scrollTop >= lastTop ? 'end' : ''
-  const note = data.isFocused === undefined ? '' : data.isFocused ? 'keys on' : `${focusChord(data)} for keys`
+  const note = data.isFocused === undefined ? '' : data.isFocused ? 'keys on' : `click or ${focusChord(data)}`
   const dot = ` ${icons.dot} `
   const segments = [
     { key: 'turn-position', text: position, color: C.muted },
@@ -987,6 +1073,9 @@ function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): FooterGr
   const hasRows = (data.turns[data.selected]?.items.length ?? 0) > 0
   const hasCursor = hasRows && data.cursor !== undefined && data.cursor !== null
   const isDetail = data.view === 'detail'
+  // The turn list's cursor moves over the turn rows it draws.
+  const hasTurnRows = data.view === 'turns' && Object.keys(frame.starts).some(id => id.startsWith('turn:'))
+  const hasTurnCursor = data.view === 'turns' && data.turnCursor !== undefined && data.turnCursor !== null
   // The page keys work in every view: b does nothing at the top, f at the end.
   const lastTop = clampScroll(Infinity, frame.total, frame.windowRows)
   const paged = (delta: number) =>
@@ -1006,6 +1095,7 @@ function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): FooterGr
     label,
     short,
     isOn,
+    isShown: !HIDDEN_KEYS[data.view].has(name),
     onPress,
     ...(glyph === undefined ? {} : { glyph }),
     ...(isGlyphAfter === true ? { isGlyphAfter } : {}),
@@ -1019,9 +1109,25 @@ function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): FooterGr
       key('latest', 'l', 'latest', icons.keyLatest, isDetail && !data.isLatest, act.latest),
     ],
     cursor: [
-      key('down', 'j', '', icons.cursorDown, isDetail && hasRows, () => act.cursorDown(frame), icons.cursorDown),
-      key('up', 'k', '', icons.cursorUp, isDetail && hasRows, () => act.cursorUp(frame), icons.cursorUp),
-      key('open', 'o', 'open', icons.keyOpen, isDetail && hasCursor, act.cursorOpen),
+      key(
+        'down',
+        'j',
+        '',
+        icons.cursorDown,
+        (isDetail && hasRows) || hasTurnRows,
+        () => act.cursorDown(frame),
+        icons.cursorDown,
+      ),
+      key(
+        'up',
+        'k',
+        '',
+        icons.cursorUp,
+        (isDetail && hasRows) || hasTurnRows,
+        () => act.cursorUp(frame),
+        icons.cursorUp,
+      ),
+      key('open', 'o', 'open', icons.keyOpen, (isDetail && hasCursor) || hasTurnCursor, act.cursorOpen),
       key('copy', 'y', 'copy', icons.keyCopy, isDetail && hasCursor, press => act.copyCursor(press.surface)),
     ],
     views: [
@@ -1060,7 +1166,11 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
   if (thinking === undefined || thinking.text === '') return undefined
   const id = `t${turn.index}:thinking`
   const isOpen = data.expanded.has(id)
-  const label = trunc(`${padEndDisplay('Thinking', 12)} - ${thinking.text}`, Math.max(8, data.columns - 8))
+  // The label fills the row after its chevron and glyph columns (6 cells).
+  const label = padEndDisplay(
+    trunc(`${padEndDisplay('Thinking', 12)} - ${thinking.text}`, Math.max(8, data.columns - 8)),
+    Math.max(8, data.columns - 6),
+  )
   data.layout.push({ kind: 'line', id })
   const frame =
     isOpen &&
@@ -1082,7 +1192,14 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
   return (
     <Box key={`item-${id}`} flexDirection="column">
       <Box flexDirection="row">
-        <Text color={isOpen ? C.text : C.muted}>{`${isOpen ? icons.expanded : icons.collapsed} `}</Text>
+        <Button
+          key={`chevron-${id}`}
+          plain
+          dimColor
+          hover={buttonHover(scopeOf('chev:', id))}
+          label={`${isOpen ? icons.expanded : icons.collapsed} `}
+          onPress={() => act.toggle(id)}
+        />
         <Text color={C.muted}>{'  '}</Text>
         <Text color={C.accent}>{`${icons.thinking} `}</Text>
         <Button
@@ -1159,7 +1276,9 @@ function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined,
   const hasCursorColumn = data.cursor !== undefined && data.cursor !== null
   const room =
     width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - 2 - 7 - barRoom - (hasCursorColumn ? 1 : 0)
-  const label = line.label(room)
+  // A row that opens takes a click anywhere from the chevron to the model
+  // column: the chevron is a button too, and the label fills its room.
+  const label = canOpen ? padEndDisplay(line.label(room), room) : line.label(room)
   const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
 
   return (
@@ -1175,7 +1294,18 @@ function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined,
             {guide}
           </Text>
         )}
-        <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${line.chevron} `}</Text>
+        {canOpen ? (
+          <Button
+            key={`chevron-${id}`}
+            plain
+            dimColor
+            label={`${line.chevron} `}
+            hover={buttonHover(scopeOf('chev:', id))}
+            onPress={line.onPress}
+          />
+        ) : (
+          <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${line.chevron} `}</Text>
+        )}
         <Text key={`status-${id}`} color={mark?.color ?? C.muted} hover={hover}>
           {mark === undefined ? '  ' : `${mark.glyph} `}
         </Text>

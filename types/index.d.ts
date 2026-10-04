@@ -56,6 +56,8 @@ declare module 'claude-code' {
       isBarHidden: boolean
       // The row the keyboard cursor stands on (an item or folded run id); null for none.
       cursor: string | null
+      // The turn the turn list's cursor stands on (its index); null for none.
+      turnCursor: number | null
       // The transcript spinner's text while a main-loop tool runs; null leaves the engine's.
       spinner: string | null
     }
