@@ -189,6 +189,20 @@ describe('searchTurns', () => {
     expect(searchTurns(buildTurns([prompt('short\nline')]), 'line')[0]!.snippet).toBe('short line')
   })
 
+  test('never splits a surrogate pair or loses the hit when lowercasing changes the length', () => {
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+    for (let pad = 0; pad < 16; pad++) {
+      const dense = buildTurns([prompt(`${'😀'.repeat(60 + pad)}needle${'😀'.repeat(60 + pad)}`)])
+      const snippet = searchTurns(dense, 'needle')[0]!.snippet
+      expect(snippet).toContain('needle')
+      expect(lone.test(snippet)).toBe(false)
+    }
+    const dotted = buildTurns([prompt(`${'İ'.repeat(100)}needle${'İ'.repeat(100)}`)])
+    const [match] = searchTurns(dotted, 'needle')
+    expect(match!.snippet).toContain('needle')
+    expect(lone.test(match!.snippet)).toBe(false)
+  })
+
   test('stays linear on a long input', () => {
     const big = buildTurns([prompt('x'), { role: 'assistant', text: 'a'.repeat(1_000_000), toolUses: [] }])
     const started = performance.now()

@@ -284,6 +284,25 @@ describe('renderPane', () => {
     expect(byKey(tree, 'turn-0')?.props['label']).toContain('1m 5s')
   })
 
+  test('a long turn list stays within the pane text budget', () => {
+    const many = buildTurns(
+      Array.from({ length: 1500 }, (_, i) => ({
+        role: 'user' as const,
+        text: `prompt ${i} ${'x'.repeat(60)}`,
+        toolUses: [],
+      })),
+    )
+    const matches = many.map(t => ({ index: t.index, snippet: `…${'s'.repeat(70)}…` }))
+    const all = renderPane(el, { ...base, turns: many, stats: [], view: 'turns' }, act)
+    const filtered = renderPane(el, { ...base, turns: many, stats: [], view: 'turns', query: 'x', matches }, act)
+    for (const tree of [all, filtered]) {
+      expect(text(tree).length).toBeLessThan(100_000)
+      expect(text(tree)).toMatch(/\d+ more turns/)
+    }
+    expect(text(filtered)).toContain('refine the search')
+    expect(text(all)).not.toContain('refine the search')
+  })
+
   test('row buttons call their actions', () => {
     const tree = renderPane(el, base, act)
     for (const key of [
