@@ -41,23 +41,25 @@ import {
 import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
 import {
-  callInput,
-  compactCall,
   engineScroll,
-  finishedSince,
-  finishedWorkflows,
   gitDirFrom,
   parseGitHead,
-  runningTool,
   scrollToRow,
-  spinnerMessage,
-  statusText,
   stepCursor,
-  workflowState,
   type EngineScroll,
-  type RunningTool,
   type ScrollFrame,
 } from './model'
+import {
+  callInput,
+  compactCall,
+  finishedSince,
+  finishedWorkflows,
+  runningTool,
+  spinnerMessage,
+  statusText,
+  workflowState,
+  type RunningTool,
+} from './model/activity'
 import { cursorRows, rowText } from './model/cursor'
 import { engineDuration } from './model/format'
 import { groupRuns } from './model/groups'

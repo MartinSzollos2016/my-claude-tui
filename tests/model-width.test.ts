@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
-import { compactCall } from '../hooks/model'
+import { compactCall } from '../hooks/model/activity'
 import { clampText } from '../hooks/model/clamp'
 import { searchTurns, splitMatch } from '../hooks/model/search'
 import { toolSections } from '../hooks/model/sections'

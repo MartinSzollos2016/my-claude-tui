@@ -24,8 +24,8 @@ import {
   type FooterLayout,
   type RowBlock,
   type ScrollFrame,
-  type WorkflowState,
 } from './model'
+import type { WorkflowState } from './model/activity'
 import { groupLabel, hoverCard } from './model/card'
 import { chunkText, clampText } from './model/clamp'
 import { clampDiff, splitDiff } from './model/diff'

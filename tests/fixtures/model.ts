@@ -1,4 +1,5 @@
 import type { SessionMessage } from 'claude-code'
+import type { ToolUseSummary } from 'claude-code'
 import type { ToolItem } from '../../hooks/model/types'
 export const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
 
@@ -65,3 +66,5 @@ export const main: SessionMessage[] = [
     ],
   },
 ]
+
+export const read: ToolUseSummary = { tool_use_id: 'u1', tool: 'Read', input: { file_path: '/a.go' } }
