@@ -1,5 +1,11 @@
 // Untrusted text: what the transcript, tool input and prompts carry is
 // cleaned of terminal escapes, control and bidi characters before display.
+//
+// Tool results, model output and tool inputs are untrusted: a fetched page or
+// a file can carry terminal escape sequences (OSC 52 writes the clipboard,
+// OSC 8 spoofs links, CSI moves the cursor over other rows) or bidi controls
+// that make code read differently than it runs (Trojan Source). Everything
+// from the transcript passes through sanitizeText before it is drawn.
 
 // CSI, OSC (BEL or ST terminated), DCS/SOS/PM/APC strings, two-byte escapes.
 const ESCAPE_SEQUENCES =
