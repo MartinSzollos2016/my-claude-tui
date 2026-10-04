@@ -414,6 +414,19 @@ export function truncateMiddle(s: string, max: number, ellipsis = '…'): string
   return `${head.text}${ellipsis}${graphemesOf(tail.text).toReversed().join('')}`
 }
 
+// A duration as a bar of up to `cells` cells in eighths of a block, relative
+// to the longest call; nothing under one percent. A part of a cell shows the
+// set's partial step (ascii: `-`, a whole cell `=`).
+export function durationBar(ms: number, maxMs: number, cells: number, icons: Pick<Icons, 'bar'>): string {
+  if (!(ms > 0) || !(maxMs > 0)) return ''
+  const ratio = Math.min(1, ms / maxMs)
+  if (ratio < 0.01) return ''
+  const eighths = Math.max(1, Math.round(ratio * cells * 8))
+  const whole = Math.floor(eighths / 8)
+  const rest = eighths % 8
+  return icons.bar[7]!.repeat(whole) + (rest > 0 ? icons.bar[rest - 1]! : '')
+}
+
 export function shortPath(path: string, n: number): string {
   const segments = path.replaceAll('\\', '/').split('/').filter(Boolean)
   return segments.slice(-n).join('/')

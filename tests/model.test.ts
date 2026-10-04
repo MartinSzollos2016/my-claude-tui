@@ -47,6 +47,7 @@ import {
   turnTail,
   truncate,
   truncateMiddle,
+  durationBar,
   displayWidth,
   padEndDisplay,
   truncateDisplay,
@@ -1171,5 +1172,42 @@ describe('display width', () => {
 
   test('truncateMiddle counts cells too', () => {
     expect(displayWidth(truncateMiddle('日本語日本語日本語日本語', 9))).toBeLessThanOrEqual(9)
+  })
+})
+
+describe('durationBar', () => {
+  const nerd = ICON_SETS.nerd
+  test('nothing under one percent, nothing without a duration', () => {
+    expect(durationBar(0, 1000, 8, nerd)).toBe('')
+    expect(durationBar(5, 1000, 8, nerd)).toBe('')
+    expect(durationBar(10, 0, 8, nerd)).toBe('')
+    expect(durationBar(Number.NaN, 1000, 8, nerd)).toBe('')
+  })
+
+  test('the longest call fills every cell, shorter ones scale', () => {
+    expect(durationBar(1000, 1000, 8, nerd)).toBe('████████')
+    expect(durationBar(2000, 1000, 8, nerd)).toBe('████████')
+    expect(durationBar(500, 1000, 8, nerd)).toBe('████')
+  })
+
+  test('the remainder is drawn in eighths of a block', () => {
+    expect(durationBar(140, 8000, 8, nerd)).toBe('▏')
+    expect(durationBar(4500, 8000, 8, nerd)).toBe('████▌')
+    expect(durationBar(7 * 1000 + 875, 8000, 8, nerd)).toBe('███████▉')
+    expect(durationBar(20, 1000, 8, nerd)).toBe('▏')
+  })
+
+  test('ascii draws = for whole cells and - for a part', () => {
+    expect(durationBar(1000, 1000, 8, ICON_SETS.ascii)).toBe('========')
+    expect(durationBar(4500, 8000, 8, ICON_SETS.ascii)).toBe('====-')
+    expect(durationBar(4500, 8000, 8, ICON_SETS.ascii)).toMatch(/^[\x20-\x7e]*$/)
+  })
+
+  test('every set has eight steps and a times sign', () => {
+    for (const set of Object.values(ICON_SETS)) {
+      expect(set.bar).toHaveLength(8)
+      expect(set.times).not.toBe('')
+    }
+    expect(ICON_SETS.ascii.times).toBe('x')
   })
 })

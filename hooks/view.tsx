@@ -20,6 +20,7 @@ import {
   clampText,
   contextMeter,
   displayWidth,
+  durationBar,
   formatClock,
   EMPTY_TURN_TEXT,
   formatDuration,
@@ -99,6 +100,9 @@ const middleWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-middle' : 
 // The context meter's length, and the info bar width it needs to show.
 const METER_CELLS = 10
 const BAR_METER_COLUMNS = 100
+// The duration bar's cells, and the pane width it needs to show.
+const BAR_CELLS = 8
+const BAR_MIN_COLUMNS = 70
 const HEADER_METER_COLUMNS = 80
 
 // A trace's rows sit this far in from its subagent's row.
@@ -198,7 +202,12 @@ const PREVIEW = {
 } as const
 
 // Render-time state: what is left of the pane's text budget.
-type Ctx = PaneData & { icons: Icons; budget: { left: number } }
+type Ctx = PaneData & {
+  icons: Icons
+  budget: { left: number }
+  // The longest measured call of the shown turn: what a bar is relative to.
+  maxMs: number
+}
 
 type PaneActions = {
   copy: (text: string, surface?: RenderSurface) => void
@@ -218,7 +227,7 @@ type PaneActions = {
   focusSearch: () => void
 }
 
-function itemDuration(item: Item, data: Ctx): number | undefined {
+function itemDuration(item: Item, data: Pick<PaneData, 'agentStats' | 'timings' | 'now'>): number | undefined {
   if (item.kind !== 'tool') return undefined
   if (item.agentId !== undefined) {
     const d = item.durationMs ?? data.agentStats[item.agentId]?.durationMs
@@ -230,6 +239,12 @@ function itemDuration(item: Item, data: Ctx): number | undefined {
   return (timing.end ?? (item.isPending ? data.now : timing.start)) - timing.start
 }
 
+// The longest measured call among the turn's rows and its loaded traces.
+function longestCall(input: PaneData, turn: Turn | undefined): number {
+  const traced = [...input.traces.values()].flatMap(trace => ('items' in trace ? trace.items : []))
+  return Math.max(0, ...[...(turn?.items ?? []), ...traced].map(item => itemDuration(item, input) ?? 0))
+}
+
 function hasExpandedContent(item: Item): boolean {
   if (item.kind === 'output') return item.text.trim() !== ''
   return isSubagent(item) || Object.keys(item.input).length > 0 || (item.resultText ?? '') !== ''
@@ -237,9 +252,14 @@ function hasExpandedContent(item: Item): boolean {
 
 export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const { Box, Text } = el
-  const data: Ctx = { ...input, icons: input.icons ?? ICON_SETS.nerd, budget: { left: PANE_TEXT_BUDGET } }
+  const turn = input.turns[input.selected]
+  const data: Ctx = {
+    ...input,
+    icons: input.icons ?? ICON_SETS.nerd,
+    budget: { left: PANE_TEXT_BUDGET },
+    maxMs: longestCall(input, turn),
+  }
   const trunc = cutter(data.icons)
-  const turn = data.turns[data.selected]
   if (data.view === 'team') return paneBody(el, data, renderTeam(el, data, act))
 
   if (!turn) {
@@ -764,7 +784,9 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
 
   // One button carries name and summary, so a click or Enter anywhere on the
   // row toggles it; the label is cut to the room the fixed columns leave.
-  const room = width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - 2 - 7
+  const hasBar = data.columns >= BAR_MIN_COLUMNS
+  const barRoom = hasBar ? BAR_CELLS + 1 : 0
+  const room = width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - 2 - 7 - barRoom
   const prefix = `${padEndDisplay(name, 12)} - `
   const label =
     summary && item.kind === 'tool' && pathOf(item) !== ''
@@ -807,8 +829,20 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
             {durationText !== '' ? `${icons.dot} ` : '  '}
           </Text>
           <Text color={C.muted} hover={hover}>
-            {padEndDisplay(durationText, 7)}
+            {`${padEndDisplay(durationText, 7)}${hasBar ? ' ' : ''}`}
           </Text>
+          {hasBar && (
+            <Text
+              key={`bar-${item.id}`}
+              color={duration !== undefined && duration > 0 && duration >= data.maxMs ? C.accent : C.muted}
+              hover={hover}
+            >
+              {padEndDisplay(
+                duration === undefined ? '' : durationBar(duration, data.maxMs, BAR_CELLS, icons),
+                BAR_CELLS,
+              )}
+            </Text>
+          )}
         </Box>
       </Box>
       {isOpen && canOpen && renderExpanded(el, item, data, act, place)}
