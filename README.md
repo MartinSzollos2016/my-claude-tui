@@ -71,6 +71,20 @@ in `/theme`; `/tail theme` names the one matching your current theme.
   a cloned repo's config cannot make the info bar execute a program.
 - Persisted state is bounded (timings, turn stats, expanded rows).
 
+## Commands
+
+Each command shows up in the slash menu; `/tail <sub>` works too
+(`/tail width 70`, `/tail help`).
+
+| Command | What it does |
+|---|---|
+| `/tail` | open the detail pane at its width share |
+| `/tail-width <30-80>` | pane width as % of the terminal, kept across sessions |
+| `/tail-theme` | name the `Tail …` theme matching yours, to pick in `/theme` |
+| `/tail-compact` | toggle one-line tool results in the transcript |
+| `/tail-bar` | show or hide the info bar above the prompt |
+| `/tail-help` | list the commands and pane keys |
+
 ## Keys (pane focused: `/tail`, or ctrl+x tab)
 
 | Key | Action |
