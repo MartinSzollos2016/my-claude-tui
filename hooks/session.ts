@@ -33,10 +33,16 @@ export function recordToolEnd(
   return { ...timings, [id]: { start: timings[id]?.start ?? start, end: now } }
 }
 
-export function turnStatFrom(input: { durationMs: number; usage?: TurnUsage }, prompt: string, now: number): TurnStat {
+export function turnStatFrom(
+  input: { durationMs: number; usage?: TurnUsage },
+  prompt: string,
+  now: number,
+  index?: number,
+): TurnStat {
   const usage = input.usage
   return {
     prompt,
+    ...(index === undefined ? {} : { turnIndex: index }),
     durationMs: input.durationMs,
     endedAt: now,
     model: usage?.model,
@@ -65,9 +71,33 @@ export function toggleId(ids: readonly string[], id: string, max: number): strin
 export function statFor(stats: readonly TurnStat[], turn: Turn | undefined): TurnStat | undefined {
   if (!turn) return undefined
   for (let i = stats.length - 1; i >= 0; i--) {
-    if (stats[i]!.prompt === turn.prompt) return stats[i]
+    const stat = stats[i]!
+    if (stat.turnIndex === undefined ? stat.prompt === turn.prompt : stat.turnIndex === turn.index) return stat
   }
   return undefined
+}
+
+// The index buildTurns gives the turn starting with `prompt`: the last turn
+// when the transcript already holds the prompt (or the turn has none, a
+// continuation), else the one about to open after it.
+export function turnIndexAtStart(turns: readonly Turn[], prompt: string): number {
+  const last = turns.at(-1)
+  if (!last) return 0
+  return prompt === '' || last.prompt === prompt ? last.index : turns.length
+}
+
+const MAX_PENDING_TURNS = 50
+
+// Indexes of turns whose prompt was submitted but whose turn.start has not
+// come yet, oldest first; bounded in case a turn never starts.
+export function enqueueTurn(queue: readonly number[], index: number): number[] {
+  return [...queue, index].slice(-MAX_PENDING_TURNS)
+}
+
+// The oldest pending index, else `fallback` (a turn no submit announced, such
+// as one a notification started).
+export function takeTurnIndex(queue: readonly number[], fallback: number): { index: number; queue: number[] } {
+  return queue.length === 0 ? { index: fallback, queue: [] } : { index: queue[0]!, queue: queue.slice(1) }
 }
 
 export type Memo<T> = { key: string; value: T }

@@ -2,9 +2,12 @@
 // tool_use_id. Captured live by the tool.call hook (main loop and subagents).
 export type ToolTiming = { start: number; end?: number }
 
-// One finished main-loop turn, matched back to its prompt by text.
+// One finished main-loop turn. turnIndex is the turn's index in buildTurns,
+// noted when the turn was submitted or started; a stat recorded before it
+// existed matches by prompt.
 export type TurnStat = {
   prompt: string
+  turnIndex?: number
   durationMs: number
   endedAt: number
   model?: string
