@@ -37,6 +37,7 @@ import {
   taskMark,
   toolCategory,
   toolSections,
+  treePrefix,
   turnTail,
   type Section,
   type TaskEntry,
@@ -93,6 +94,9 @@ const middleWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-middle' : 
 // The context meter's length, and the info bar width it needs to show.
 const METER_CELLS = 10
 const BAR_METER_COLUMNS = 100
+
+// A trace's rows sit this far in from its subagent's row.
+const TRACE_INDENT = 4
 
 const buttonHover = (scope: string) => ({ scope, ...HOVER_TEXT })
 
@@ -250,7 +254,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
             {data.isWorking && data.isLatest ? `Working${data.icons.ellipsis}` : EMPTY_TURN_TEXT}
           </Text>
         )}
-        {turn.items.map(item => renderItem(el, item, data, act, 0))}
+        {turn.items.map(item => renderItem(el, item, data, act))}
       </Box>
     </Box>,
   )
@@ -667,7 +671,11 @@ function withWorkflowNote(item: Item, summary: string, data: Ctx): string {
   return summary === '' ? note : `${summary} ${icons.dot} ${note}`
 }
 
-function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: number) {
+// Where a row of a subagent's trace sits in the tree: which parent levels
+// still continue, and whether it is the last of its siblings.
+type TreePlace = { path: readonly boolean[]; isLast: boolean }
+
+function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: TreePlace) {
   const trunc = cutter(data.icons)
   const { icons } = data
   const { Box, Button, Text } = el
@@ -676,7 +684,9 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
   const icon = itemIcon(item, icons)
   const name = itemName(item)
   const summary = withWorkflowNote(item, itemSummary(item), data)
-  const width = Math.max(20, data.columns - depth * 4)
+  const guide = place === undefined ? '' : treePrefix(place.path, place.isLast, icons)
+  const indent = place === undefined ? 0 : TRACE_INDENT
+  const width = Math.max(20, data.columns - (place === undefined ? 0 : TRACE_INDENT * (place.path.length + 1)))
 
   const chevron = !canOpen
     ? icons.selected
@@ -703,7 +713,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
 
   // One button carries name and summary, so a click or Enter anywhere on the
   // row toggles it; the label is cut to the room the fixed columns leave.
-  const room = width - 2 - 3 - 2 - modelText.length - 2 - 7
+  const room = width - guide.length - 2 - 3 - 2 - modelText.length - 2 - 7
   const prefix = `${name.padEnd(12)} - `
   const label =
     summary && item.kind === 'tool' && pathOf(item) !== ''
@@ -713,8 +723,13 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
   const toggle = () => canOpen && act.toggle(item.id)
 
   return (
-    <Box key={`item-${item.id}`} flexDirection="column" marginLeft={depth * 4}>
+    <Box key={`item-${item.id}`} flexDirection="column" marginLeft={indent}>
       <Box flexDirection="row" width={width}>
+        {guide !== '' && (
+          <Text key={`guide-${item.id}`} color={C.muted}>
+            {guide}
+          </Text>
+        )}
         <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${chevron} `}</Text>
         <Text key={`status-${item.id}`} color={mark?.color ?? C.muted} hover={hover}>
           {mark === undefined ? '  ' : `${mark.glyph} `}
@@ -745,12 +760,12 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
           </Text>
         </Box>
       </Box>
-      {isOpen && canOpen && renderExpanded(el, item, data, act, depth)}
+      {isOpen && canOpen && renderExpanded(el, item, data, act, place)}
     </Box>
   )
 }
 
-function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: number) {
+function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place?: TreePlace) {
   const { Box } = el
 
   if (item.kind === 'output') {
@@ -773,7 +788,7 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: 
   }
 
   if (isSubagent(item)) {
-    return renderTrace(el, item, data, act, depth)
+    return renderTrace(el, item, data, act, place)
   }
 
   return renderSections(el, item, data, act)
@@ -941,7 +956,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
   )
 }
 
-function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, depth: number) {
+function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, place?: TreePlace) {
   const trunc = cutter(data.icons)
   const { icons } = data
   const { Box, Text } = el
@@ -976,7 +991,12 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
         {model !== undefined && <Text color={C.muted}>{` ${icons.dot} `}</Text>}
         {model !== undefined && <Text color={modelColor(model) ?? C.text}>{shortModel(model)}</Text>}
       </Box>
-      {trace.items.map(child => renderItem(el, child, data, act, depth + 1))}
+      {trace.items.map((child, i) =>
+        renderItem(el, child, data, act, {
+          path: place === undefined ? [] : [...place.path, !place.isLast],
+          isLast: i === trace.items.length - 1,
+        }),
+      )}
     </Box>
   )
 }

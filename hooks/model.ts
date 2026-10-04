@@ -306,6 +306,18 @@ export function contextMeter(percent: number, cells: number = 10, icons: Pick<Ic
   return icons.meterFull.repeat(full) + icons.meterEmpty.repeat(cells - full)
 }
 
+// The guides in front of a row of a subagent's trace. `depthPath` says which
+// parent levels still continue (a guide) or ended (blank); `isLast` closes the
+// row's own branch.
+export function treePrefix(
+  depthPath: readonly boolean[],
+  isLast: boolean,
+  icons: Pick<Icons, 'treeBranch' | 'treeLast' | 'treeGuide'>,
+) {
+  const blank = ' '.repeat(icons.treeGuide.length)
+  return depthPath.map(goes => (goes ? icons.treeGuide : blank)).join('') + (isLast ? icons.treeLast : icons.treeBranch)
+}
+
 export function truncate(s: string, max: number, ellipsis = '…'): string {
   const one = s.replaceAll('\n', ' ')
   const chars = [...one]
