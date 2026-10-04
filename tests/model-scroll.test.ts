@@ -1,122 +1,14 @@
 import { describe, expect, test } from 'claude-code/testing'
-
-import { parseCommand } from '../hooks/commands'
-import { ICON_SETS } from '../hooks/icons'
 import {
   clampScroll,
   contentRows,
   engineScroll,
   followCursor,
-  footerLayout,
-  footerPads,
   overflowRows,
   pageScroll,
   scrollToRow,
   stepCursor,
-} from '../hooks/model'
-import { displayWidth } from '../hooks/model/width'
-
-describe('parseCommand', () => {
-  test('routes subcommands and their /tail shorthand alike', () => {
-    expect(parseCommand('tail', '')).toEqual({ sub: 'open', arg: '' })
-    expect(parseCommand('tail', 'width 70')).toEqual({ sub: 'width', arg: '70' })
-    expect(parseCommand('tail-width', ' 70 ')).toEqual({ sub: 'width', arg: '70' })
-    expect(parseCommand('tail', 'help')).toEqual({ sub: 'help', arg: '' })
-    expect(parseCommand('tail', 'nonsense')).toEqual({ sub: 'open', arg: 'nonsense' })
-    expect(parseCommand('tail-turns', '')).toEqual({ sub: 'turns', arg: '' })
-    expect(parseCommand('tail', 'turns')).toEqual({ sub: 'turns', arg: '' })
-    expect(parseCommand('tail-icons', ' ascii ')).toEqual({ sub: 'icons', arg: 'ascii' })
-    expect(parseCommand('tail', 'icons unicode')).toEqual({ sub: 'icons', arg: 'unicode' })
-    expect(parseCommand('tail-status', ' off ')).toEqual({ sub: 'status', arg: 'off' })
-    expect(parseCommand('tail', 'status on')).toEqual({ sub: 'status', arg: 'on' })
-    expect(parseCommand('tail-notify', 'on')).toEqual({ sub: 'notify', arg: 'on' })
-    expect(parseCommand('tail', 'notify off')).toEqual({ sub: 'notify', arg: 'off' })
-    expect(parseCommand('other', '')).toBe(undefined)
-  })
-})
-
-const MULTI = [
-  'ellipsis',
-  'border',
-  'taskDone',
-  'taskActive',
-  'taskTodo',
-  'treeBranch',
-  'treeLast',
-  'treeGuide',
-  'keyLatest',
-]
-
-describe('icon sets', () => {
-  test('every set has the same keys', () => {
-    const keys = Object.keys(ICON_SETS.nerd).sort()
-    expect(Object.keys(ICON_SETS.unicode).sort()).toEqual(keys)
-    expect(Object.keys(ICON_SETS.ascii).sort()).toEqual(keys)
-  })
-
-  test('the ascii set is only ASCII, the unicode set has no Nerd Font private-use glyph', () => {
-    const all = (set: (typeof ICON_SETS)['nerd']) => Object.values(set).flat().join('')
-    expect(all(ICON_SETS.ascii)).toMatch(/^[\x20-\x7e]+$/)
-    expect(all(ICON_SETS.unicode)).not.toMatch(/[\ue000-\uf8ff\u{f0000}-\u{ffffd}]/u)
-    expect(all(ICON_SETS.nerd)).toMatch(/[\ue000-\uf8ff\u{f0000}-\u{ffffd}]/u)
-  })
-
-  test('no set draws the paused mark as a spinner frame, and the unicode set avoids the wide U+23F8', () => {
-    for (const set of Object.values(ICON_SETS)) expect(set.spinner).not.toContain(set.idle)
-    expect(ICON_SETS.unicode.interrupted).not.toBe('\u23f8')
-    expect(ICON_SETS.nerd.interrupted).toBe('\u23f8')
-  })
-
-  test('each glyph is one cell wide in the unicode and ascii sets, the spinner has frames', () => {
-    for (const set of [ICON_SETS.unicode, ICON_SETS.ascii])
-      for (const [key, value] of Object.entries(set).filter(([k]) => !MULTI.includes(k)))
-        for (const glyph of [value].flat()) expect([...glyph].length, key).toBe(1)
-    for (const set of Object.values(ICON_SETS))
-      for (const key of ['treeBranch', 'treeLast', 'treeGuide'] as const) expect([...set[key]].length, key).toBe(3)
-    expect(ICON_SETS.ascii.spinner).toEqual(['|', '/', '-', '\\'])
-    expect(ICON_SETS.ascii.done).toBe('+')
-    expect(ICON_SETS.ascii.error).toBe('x')
-    expect(ICON_SETS.ascii.ellipsis).toBe('...')
-    expect(ICON_SETS.ascii.border).toBe('classic')
-    expect(ICON_SETS.nerd.border).toBe('round')
-    expect(ICON_SETS.unicode.ellipsis).toBe('…')
-  })
-
-  test('the page keys and the more above / below rows have triangles, ^ and v in ascii', () => {
-    for (const set of [ICON_SETS.nerd, ICON_SETS.unicode]) {
-      expect([set.pageUp, set.pageDown, set.moreAbove, set.moreBelow]).toEqual(['▲', '▼', '▲', '▼'])
-      for (const glyph of [set.pageUp, set.pageDown, set.moreAbove, set.moreBelow]) expect(displayWidth(glyph)).toBe(1)
-    }
-    expect([ICON_SETS.ascii.pageUp, ICON_SETS.ascii.pageDown]).toEqual(['^', 'v'])
-    expect([ICON_SETS.ascii.moreAbove, ICON_SETS.ascii.moreBelow]).toEqual(['^', 'v'])
-  })
-})
-
-describe('footerLayout', () => {
-  test('two columns with labels from 64 columns up', () => {
-    expect(footerLayout(100)).toEqual({ rows: 4, columns: 'two', labels: true })
-    expect(footerLayout(64)).toEqual({ rows: 4, columns: 'two', labels: true })
-  })
-
-  test('stacked groups with labels from 40 to 63 columns', () => {
-    expect(footerLayout(63)).toEqual({ rows: 6, columns: 'stacked', labels: true })
-    expect(footerLayout(40)).toEqual({ rows: 6, columns: 'stacked', labels: true })
-  })
-
-  test('stacked groups without labels under 40 columns', () => {
-    expect(footerLayout(39)).toEqual({ rows: 6, columns: 'stacked', labels: false })
-    expect(footerLayout(0)).toEqual({ rows: 6, columns: 'stacked', labels: false })
-  })
-})
-
-describe('footerLayout with the rows a view draws', () => {
-  test('the footer is the rule, the group rows the view draws and the status row', () => {
-    expect(footerLayout(100, 2).rows).toBe(4)
-    expect(footerLayout(100, 1).rows).toBe(3)
-    expect(footerLayout(60, 3).rows).toBe(5)
-    expect(footerLayout(36, 4)).toEqual({ rows: 6, columns: 'stacked', labels: false })
-  })
-})
+} from '../hooks/model/scroll'
 
 describe('contentRows of the turn list', () => {
   test('a turn row with an id has its start, as an item row does', () => {
@@ -127,20 +19,6 @@ describe('contentRows of the turn list', () => {
     ])
     expect(rows.starts).toEqual({ 'turn:2': 1, 'turn:1': 2 })
     expect(rows.total).toBe(4)
-  })
-})
-
-describe('footerPads', () => {
-  test('every key but the last takes the gap after it', () => {
-    expect(footerPads([9, 9, 9], 2)).toEqual([2, 2, 0])
-    expect(footerPads([4], 2)).toEqual([0])
-    expect(footerPads([], 2)).toEqual([])
-  })
-
-  test('with a width the last key fills the row up to it, never below zero', () => {
-    expect(footerPads([9, 9, 9], 2, 35)).toEqual([2, 2, 4])
-    expect(footerPads([9, 9, 9], 2, 31)).toEqual([2, 2, 0])
-    expect(footerPads([9, 9, 9], 2, 20)).toEqual([2, 2, 0])
   })
 })
 
