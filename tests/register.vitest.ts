@@ -300,6 +300,19 @@ describe('live data', () => {
 })
 
 describe('detail pane', () => {
+  test('searches the turn list and focuses the field on s', async () => {
+    const { $, world } = fakeEngine({ messages: three })
+    await press($, 'nav-search')
+    expect(world.focused).toEqual(['turn-search'])
+    const field = byKey(await draw($), 'turn-search')
+    ;(field?.props['onInput'] as (value: string) => void)('tests')
+    await settle()
+    expect(text(await draw($))).toContain('Turns (1 of 3)')
+    ;(byKey(await draw($), 'turn-search')?.props['onSubmit'] as (value: string) => void)('fix')
+    await settle()
+    expect(text(await draw($))).toContain('turn 1/3')
+  })
+
   test('copies a block, or says why it could not', async () => {
     const bash: SessionMessage[] = [
       { role: 'user', text: 'test it', toolUses: [] },

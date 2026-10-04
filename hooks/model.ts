@@ -788,6 +788,48 @@ export function turnListText(turns: readonly Turn[], stats: readonly (TurnStat |
   return clampReport([`Turns (${turns.length}), newest last:`, ...lines].join('\n'))
 }
 
+// -- Search -------------------------------------------------------------------
+
+export type TurnMatch = { index: number; snippet: string }
+
+const SNIPPET = 80
+
+// Turns whose prompt, output, tool summaries or tool results contain `query`
+// as plain text (case-insensitive, no pattern syntax), each with a one-line
+// snippet around its first hit. indexOf keeps it linear in the text.
+export function searchTurns(turns: readonly Turn[], query: string): TurnMatch[] {
+  const needle = query.trim().toLowerCase()
+  if (needle === '') return []
+  const matches: TurnMatch[] = []
+  for (const turn of turns) {
+    for (const hay of searchable(turn)) {
+      const at = hay.toLowerCase().indexOf(needle)
+      if (at >= 0) {
+        matches.push({ index: turn.index, snippet: snippetAt(hay, at) })
+        break
+      }
+    }
+  }
+  return matches
+}
+
+function searchable(turn: Turn): string[] {
+  const texts = [turn.prompt]
+  for (const item of turn.items) {
+    if (item.kind === 'output') texts.push(item.text)
+    else texts.push(item.summary, item.resultText ?? '')
+  }
+  return texts
+}
+
+function snippetAt(text: string, at: number): string {
+  const start = Math.max(0, Math.min(at - 20, text.length - SNIPPET))
+  const end = Math.min(text.length, start + SNIPPET)
+  const head = start > 0 ? '…' : ''
+  const tail = end < text.length ? '…' : ''
+  return head + text.slice(start + head.length, end - tail.length).replaceAll('\n', ' ') + tail
+}
+
 // The one line a tool call gets in the compact transcript: its name and the
 // shortest useful summary (a Bash call's description, else its first line).
 export function compactCall(tool: string, rawInput: unknown): { name: string; summary: string } {

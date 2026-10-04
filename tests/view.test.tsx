@@ -19,6 +19,7 @@ const el = {
   Button: make('Button'),
   Markdown: make('Markdown'),
   Code: make('Code'),
+  Input: make('Input'),
 } as unknown as El
 
 function nodes(tree: unknown, found: Node[] = []): Node[] {
@@ -120,6 +121,9 @@ const act = {
   showTurns: () => calls.push('showTurns'),
   showDetail: () => calls.push('showDetail'),
   pickTurn: (i: number) => calls.push(`pick:${i}`),
+  search: (query: string) => calls.push(`search:${query}`),
+  submitSearch: (query: string) => calls.push(`submit:${query}`),
+  focusSearch: () => calls.push('focusSearch'),
 }
 
 describe('renderPane', () => {
@@ -238,13 +242,73 @@ describe('renderPane', () => {
     ).toContain('Working…')
   })
 
+  test('the turn search filters the list and shows each match', () => {
+    const tree = renderPane(
+      el,
+      { ...base, view: 'turns', query: 'callers', matches: [{ index: 0, snippet: 'Explore - Find callers' }] },
+      act,
+    )
+    expect(text(tree)).toContain('Turns (1 of 2)')
+    expect(byKey(tree, 'turn-0')).toBeDefined()
+    expect(byKey(tree, 'turn-1')).toBeUndefined()
+    expect(text(tree)).toContain('Explore - Find callers')
+    const input = byKey(tree, 'turn-search')
+    expect(input?.type).toBe('Input')
+    expect(input?.props['placeholder']).toBe('Search turns')
+    expect(input?.props['value']).toBe('callers')
+    ;(input?.props['onInput'] as (value: string) => void)('x')
+    ;(input?.props['onSubmit'] as (value: string) => void)('y')
+    ;(byKey(tree, 'search-clear')?.props['onPress'] as () => void)()
+    expect(calls).toEqual(expect.arrayContaining(['search:x', 'submit:y', 'search:']))
+
+    expect(text(renderPane(el, { ...base, view: 'turns', query: 'zzz', matches: [] }, act))).toContain(
+      'No turn matches "zzz".',
+    )
+    const all = renderPane(el, { ...base, view: 'turns', query: '' }, act)
+    expect(byKey(all, 'turn-0')).toBeDefined()
+    expect(byKey(all, 'turn-1')).toBeDefined()
+    expect(byKey(all, 'search-clear')).toBeUndefined()
+  })
+
+  test('a filtered row keeps the real tail, and the echoed query is sanitized and cut', () => {
+    const query = `a\u001b[31m${'q'.repeat(100)}`
+    const empty = text(renderPane(el, { ...base, view: 'turns', query, matches: [] }, act))
+    expect(empty).not.toContain('\u001b')
+    expect(empty).toContain('No turn matches "aqqq')
+    expect(empty).toContain('…"')
+    const tree = renderPane(
+      el,
+      { ...base, view: 'turns', stats: [base.turnStat, undefined], query: 'c', matches: [{ index: 0, snippet: 's' }] },
+      act,
+    )
+    expect(byKey(tree, 'turn-0')?.props['label']).toContain('1m 5s')
+  })
+
   test('row buttons call their actions', () => {
     const tree = renderPane(el, base, act)
-    for (const key of ['b1', 'nav-prev', 'nav-next', 'nav-latest', 'nav-turns', 'nav-expand', 'nav-collapse']) {
+    for (const key of [
+      'b1',
+      'nav-prev',
+      'nav-next',
+      'nav-latest',
+      'nav-turns',
+      'nav-search',
+      'nav-expand',
+      'nav-collapse',
+    ]) {
       ;(byKey(tree, key)?.props['onPress'] as () => void)()
     }
     expect(calls).toEqual(
-      expect.arrayContaining(['toggle:b1', 'prev', 'next', 'latest', 'showTurns', 'expandAll', 'collapseAll']),
+      expect.arrayContaining([
+        'toggle:b1',
+        'prev',
+        'next',
+        'latest',
+        'showTurns',
+        'focusSearch',
+        'expandAll',
+        'collapseAll',
+      ]),
     )
   })
 })

@@ -33,6 +33,8 @@ declare module 'claude-code' {
       expanded: string[]
       // Blocks shown whole instead of previewed (output, input, result ids).
       full: string[]
+      // The turn search's query; '' lists every turn.
+      query: string
       timings: Record<string, ToolTiming>
       turnStats: TurnStat[]
       agentStats: Record<string, AgentStat>
