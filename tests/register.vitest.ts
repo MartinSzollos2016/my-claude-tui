@@ -957,6 +957,84 @@ describe('status line', () => {
   })
 })
 
+describe('transcript spinner and turn duration', () => {
+  const call = { tool_use_id: 'b1', tool: 'Bash', command: 'go test ./...' }
+  const hold = () => {
+    let release = () => undefined as unknown
+    const next = () => new Promise(resolve => (release = () => resolve({})))
+    return { next, release: () => release() }
+  }
+  const spinner = {
+    component: 'Spinner',
+    surface: 'terminal',
+    props: { word: 'Sauteing', message: null, suffix: '…', mode: 'tool-use' },
+  }
+  const duration = { component: 'TurnDuration', surface: 'terminal', props: { word: 'Baked', durationMs: 3_000 } }
+  const props = async ($: Parameters<typeof run>[1], e: Record<string, unknown>) =>
+    ((await run('ui.render', $, e, async x => x)) as { props: Record<string, unknown> }).props
+
+  test('the spinner names the running tool, its summary and the elapsed time', async () => {
+    const { $, world } = fakeEngine()
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    world.now += 12_400
+    expect(await props($, spinner)).toMatchObject({ message: 'Bash go test ./... · 12s', suffix: '', word: 'Sauteing' })
+    gate.release()
+    await running
+    await settle()
+    expect(await props($, spinner)).toMatchObject({ message: null, suffix: '…' })
+  })
+
+  test('the spinner is left alone for a subagent tool, with the switch off, and draws ASCII in the ascii set', async () => {
+    const { $, world } = fakeEngine()
+    const sub = hold()
+    const inner = run('tool.call', $, { ...call, agentId: 'ag' }, sub.next)
+    await settle()
+    expect((await props($, spinner))['message']).toBeNull()
+    sub.release()
+    await inner
+
+    const gate = hold()
+    const running = run('tool.call', $, { ...call, tool_use_id: 'b2' }, gate.next)
+    await settle()
+    await say($, 'tail-icons', 'ascii')
+    expect((await props($, spinner))['message']).toBe('Bash go test ./... . 0s')
+    await say($, 'tail-status', 'off')
+    expect(await props($, spinner)).toMatchObject({ message: null, suffix: '…' })
+    expect(world.store.get('tail-view.status')).toBe(false)
+    gate.release()
+    await running
+  })
+
+  test('the turn duration line gets the tool and agent counts of the last turn', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    const drawn = await run('ui.render', $, duration, async x => x)
+    expect(text(drawn)).toBe('Baked for 3s · 1 tool · 1 agent')
+    expect((drawn as { props: Record<string, unknown> }).props['color']).toBe('inactive')
+  })
+
+  test("the turn duration line is the engine's own with the switch off or nothing to count", async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    await say($, 'tail-status', 'off')
+    expect(await props($, duration)).toMatchObject({ word: 'Baked', durationMs: 3_000 })
+    await say($, 'tail-status', 'on')
+    world.messages = [
+      { role: 'user', text: 'hi', toolUses: [] },
+      { role: 'assistant', text: 'Hello', toolUses: [] },
+    ]
+    expect(await props($, duration)).toMatchObject({ word: 'Baked', durationMs: 3_000 })
+    world.messages = []
+    expect(await props($, duration)).toMatchObject({ word: 'Baked' })
+  })
+
+  test('the ascii set gives an ASCII duration line', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    await say($, 'tail-icons', 'ascii')
+    expect(text(await run('ui.render', $, duration, async x => x))).toBe('Baked for 3s . 1 tool . 1 agent')
+  })
+})
+
 describe('finish toasts', () => {
   const info = (status: 'running' | 'completed', id = 'ag-1') => ({
     id,
