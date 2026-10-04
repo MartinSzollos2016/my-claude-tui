@@ -1499,6 +1499,25 @@ describe('hoverCard', () => {
     expect(hoverCard(bash('é'.repeat(100)), 30, ICON_SETS.ascii)![0]!.endsWith('...')).toBe(true)
   })
 
+  test('a call drawn as JSON shows one key: value line per field, never braces or quotes', () => {
+    const send: ToolItem = {
+      ...bash(''),
+      tool: 'SendMessage',
+      input: { to: 'a811', summary: 'Wave 5 fix', message: 'line one\nline two', count: 3 },
+    }
+    expect(hoverCard(send, 60, ICON_SETS.nerd)).toEqual([
+      'to: a811',
+      'summary: Wave 5 fix',
+      'message: line one line two',
+      'count: 3',
+    ])
+  })
+
+  test('a card is at most CARD_WIDTH cells wide however wide the pane', () => {
+    const card = hoverCard(bash('x'.repeat(300)), 200, ICON_SETS.nerd)!
+    expect(card[0]!.length).toBeLessThanOrEqual(72)
+  })
+
   test('a call with no input has no card', () => {
     expect(hoverCard({ ...bash('x'), input: {} }, 40, ICON_SETS.nerd)).toBeUndefined()
   })

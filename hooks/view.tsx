@@ -903,8 +903,11 @@ function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined,
           key={`card-${id}`}
           position="absolute"
           display="none"
-          top={1}
+          // Above its row: an absolute Box is painted over what comes before
+          // it, and the rows after it would draw over a card placed below.
+          bottom={1}
           left={CARD_INDENT}
+          backgroundColor={C.paneBackground}
           flexDirection="column"
           borderStyle={icons.border}
           borderColor={C.muted}

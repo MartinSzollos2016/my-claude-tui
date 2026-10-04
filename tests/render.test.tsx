@@ -390,6 +390,11 @@ describe('detail pane', () => {
     expect(card?.hover).toMatchObject({ scope: 'row:r1', display: 'flex' })
     expect(card?.props?.['display']).toBe('none')
     expect(card?.props?.['position']).toBe('absolute')
+    // Painted over what comes before it only: it sits above its row, and its
+    // own fill keeps the rows it covers from showing through.
+    expect(card?.props?.['bottom']).toBe(1)
+    expect(card?.props?.['top']).toBeUndefined()
+    expect(card?.props?.['backgroundColor']).toBe('inverseText')
     expect(textsOf(card).join('')).toContain('/a/b/main.go')
     await ui.press({ key: 'r1' })
     expect(findKey(await ui.drawn(), 'card-r1')).toBeUndefined()
