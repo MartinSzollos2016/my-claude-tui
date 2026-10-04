@@ -11,6 +11,7 @@ import type { AgentStatus, EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import { buildTurns, isSubagent, paneColumns, resultLine, sanitizePrompt, sanitizeText, shortPath, traceItems, type Item, type Turn } from './model'
+import { COMMANDS, helpText, parseCommand } from './commands'
 import { C, tailThemeAdvice } from './theme'
 import { renderBar, renderPane, type El, type Trace } from './view'
 
@@ -223,28 +224,38 @@ async function toggleCompact($: EngineInterface): Promise<string> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    await $.command.register({
-      name: 'tail',
-      description:
-        'Open the tail-claude detail view; bar: info bar, compact: one-line tool results, width N: pane share %, theme: pane theme',
-      argumentHint: '[bar|compact|width N|theme]',
-    })
+    for (const spec of COMMANDS) {
+      await $.command.register({
+        name: spec.name,
+        description: spec.description,
+        ...(spec.argumentHint ? { argumentHint: spec.argumentHint } : {}),
+      })
+    }
     detach(refreshGit($))
     detach(openPane($, false))
     return started
   })
 
-  on('command.run', { command: 'tail' }, async ($, e) => {
-    const arg = e.args.trim()
-    if (arg === 'bar') {
-      const hidden = await update($, isBarHidden, h => !h)
-      return { text: hidden ? 'Info bar hidden.' : 'Info bar shown.' }
+  on('command.run', async ($, e, next) => {
+    const parsed = parseCommand(e.command, e.args)
+    if (!parsed) return next(e)
+    switch (parsed.sub) {
+      case 'bar': {
+        const hidden = await update($, isBarHidden, h => !h)
+        return { text: hidden ? 'Info bar hidden.' : 'Info bar shown.' }
+      }
+      case 'theme':
+        return { text: await themeAdvice($) }
+      case 'compact':
+        return { text: await toggleCompact($) }
+      case 'width':
+        return { text: await setWidth($, parsed.arg, e.presentation.columns) }
+      case 'help':
+        return { text: helpText() }
+      case 'open':
+        await openPane($, true, e.presentation.columns)
+        return { text: 'Detail view opened. /tail-help lists the commands and keys.' }
     }
-    if (arg === 'theme') return { text: await themeAdvice($) }
-    if (arg === 'compact') return { text: await toggleCompact($) }
-    if (arg === 'width' || arg.startsWith('width ')) return { text: await setWidth($, arg.slice(5).trim(), e.presentation.columns) }
-    await openPane($, true, e.presentation.columns)
-    return { text: 'Detail view opened: Tab walks rows, Enter expands, p/n/l turns, e/c expand/collapse all.' }
   })
 
   // Theme keys resolve at paint; redraw once the new theme is stored so
