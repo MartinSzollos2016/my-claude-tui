@@ -141,3 +141,25 @@ export const act = {
   cursorOpen: () => calls.push('open'),
   copyCursor: (surface?: string) => calls.push(`copyCursor:${surface}`),
 }
+
+// Four reads and three searches in a row (two groups), then an edit; the
+// regressions below draw it folded, open, narrow and in every icon set.
+export const foldedTurn = buildTurns([
+  { role: 'user', text: '日本語 fold', toolUses: [] },
+  {
+    role: 'assistant',
+    text: '',
+    toolUses: [
+      ...[1, 2, 3, 4].map(n => ({
+        tool_use_id: `fr${n}`,
+        tool: 'Read',
+        input: { file_path: `/s/f${n}.ts` },
+        text: 'x',
+      })),
+      ...[1, 2, 3].map(n => ({ tool_use_id: `fg${n}`, tool: 'Grep', input: { pattern: `p${n}` }, text: 'm' })),
+      { tool_use_id: 'fe', tool: 'Edit', input: { file_path: '/s/a', old_string: 'a', new_string: 'b' }, text: 'ok' },
+    ],
+  },
+])
+
+export const foldedTimings = { fr1: { start: 0, end: 800 }, fr2: { start: 800, end: 1500 }, fg1: { start: 0, end: 90 } }
