@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { helpText } from '../hooks/commands'
-import { compactCall } from '../hooks/model'
+import { compactCall } from '../hooks/model/activity'
 import { clampText } from '../hooks/model/clamp'
 import { formatClock, shortMode } from '../hooks/model/format'
 import { itemName, itemSummary, toolCategory, toolSummary } from '../hooks/model/summaries'
