@@ -21,12 +21,9 @@ import {
   footerPads,
   overflowRows,
   pageScroll,
-  splitMatch,
   type FooterLayout,
   type RowBlock,
   type ScrollFrame,
-  type TurnMatch,
-  type TurnThinking,
   type WorkflowState,
 } from './model'
 import { groupLabel, hoverCard } from './model/card'
@@ -43,9 +40,11 @@ import {
 } from './model/format'
 import { groupRuns, type GroupItem } from './model/groups'
 import { sanitizeText } from './model/sanitize'
+import { splitMatch, type TurnMatch } from './model/search'
 import { cachedSections, firstErrorLine, pieceStarts, reserveSections, type Section } from './model/sections'
 import { itemName, itemSummary, toolCategory } from './model/summaries'
 import { taskMark, type TaskEntry, type TeamMember } from './model/team'
+import type { TurnThinking } from './model/thinking'
 import { EMPTY_TURN_TEXT, turnTable } from './model/turn-table'
 import { isAgentRunning, isSubagent, itemStatus, traceStats, type ItemStatus } from './model/turns'
 import type { Item, ToolItem, Turn } from './model/types'

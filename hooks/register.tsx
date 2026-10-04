@@ -41,7 +41,6 @@ import {
 import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
 import {
-  alignFromEnd,
   callInput,
   compactCall,
   engineScroll,
@@ -51,24 +50,22 @@ import {
   parseGitHead,
   runningTool,
   scrollToRow,
-  searchTurns,
   spinnerMessage,
   statusText,
   stepCursor,
-  thinkingCounts,
   workflowState,
   type EngineScroll,
   type RunningTool,
   type ScrollFrame,
-  type TurnMatch,
-  type TurnThinking,
 } from './model'
 import { cursorRows, rowText } from './model/cursor'
 import { engineDuration } from './model/format'
 import { groupRuns } from './model/groups'
 import { turnListText, turnText } from './model/reports'
 import { sanitizePrompt, sanitizeText } from './model/sanitize'
+import { searchTurns, type TurnMatch } from './model/search'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
+import { alignFromEnd, thinkingCounts, type TurnThinking } from './model/thinking'
 import { durationSuffix, paneColumns, resultLine } from './model/transcript'
 import { buildTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
 import type { Item, Turn } from './model/types'
