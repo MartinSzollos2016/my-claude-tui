@@ -3,7 +3,7 @@
 // agent-ouija (claude/tools/summary.go). No engine calls here.
 import type { SessionMessage } from 'claude-code'
 
-export type OutputItem = { kind: 'output'; id: string; text: string }
+type OutputItem = { kind: 'output'; id: string; text: string }
 
 export type ToolItem = {
   kind: 'tool'
@@ -498,7 +498,7 @@ export function chunkMarkdown(text: string, size: number): string[] {
 
 export type SectionKind = 'command' | 'input' | 'file' | 'diff' | 'query' | 'output' | 'error'
 
-export type SectionFormat = { kind: 'text' } | { kind: 'code'; language: string } | { kind: 'markdown' }
+type SectionFormat = { kind: 'text' } | { kind: 'code'; language: string } | { kind: 'markdown' }
 
 export type Section = {
   kind: SectionKind

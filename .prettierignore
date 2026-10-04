@@ -3,7 +3,7 @@
 
 # Dependencies and lockfiles
 node_modules/
-package-lock.json
+**/package-lock.json
 
 # Verbatim license text
 LICENSE
