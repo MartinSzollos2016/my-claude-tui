@@ -130,6 +130,20 @@ describe('commands', () => {
     expect(await say($, 'tail-compact')).toContain('on')
     expect(await say($, 'tail-help')).toContain('/tail-turns')
   })
+
+  test('answers /tail in text in VS Code', async () => {
+    const { $, world } = fakeEngine({ surfaces: ['vscode'], messages: main })
+    expect(await say($, 'tail')).toContain('Explore      Find callers')
+    expect(await say($, 'tail-turns')).toContain('#1   Fix the bug')
+    expect(world.opened).toEqual([])
+  })
+
+  test('answers /tail in text in a -p run with no turns', async () => {
+    const { $, world } = fakeEngine({ surfaces: [], messages: [] })
+    expect(await say($, 'tail')).toBe('No turns yet. Send a prompt and /tail lists its tool calls.')
+    expect(await say($, 'tail-turns')).toBe('No turns yet.')
+    expect(world.opened).toEqual([])
+  })
 })
 
 describe('live data', () => {

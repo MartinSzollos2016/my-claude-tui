@@ -28,7 +28,9 @@ import {
   sanitizeText,
   shortPath,
   traceItems,
+  turnListText,
   turnsKey,
+  turnText,
   type Item,
   type Turn,
 } from './model'
@@ -37,6 +39,7 @@ import {
   discardStale,
   dropPending,
   enqueueTurn,
+  isTextOnly,
   memo,
   nextSelectedTurn,
   recordToolEnd,
@@ -233,14 +236,34 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       return { text: await setWidth($, parsed.arg, e.presentation.columns) }
     case 'help':
       return { text: helpText() }
-    case 'turns':
+    case 'turns': {
+      const surfaces = await $.session.surfaces()
+      if (isTextOnly(surfaces)) return { text: await turnsReport($, true) }
       await update($, paneView, () => 'turns' as const)
       await openPane($, true, e.presentation.columns)
       return { text: 'Turn list opened: Enter or click a turn to see it in detail.' }
-    case 'open':
+    }
+    case 'open': {
+      const surfaces = await $.session.surfaces()
+      if (isTextOnly(surfaces)) return { text: await turnsReport($, false) }
       await openPane($, true, e.presentation.columns)
       return { text: 'Detail view opened. /tail-help lists the commands and keys.' }
+    }
   }
+}
+
+// The pane's content as text, for VS Code and `claude -p`: the latest turn
+// in detail, or the list of turns.
+async function turnsReport($: EngineInterface, isList: boolean): Promise<string> {
+  const turns = (await currentTurns($)).value
+  const stats = await read($, turnStats)
+  if (isList)
+    return turnListText(
+      turns,
+      turns.map(t => statFor(stats, t)),
+    )
+  const turn = turns.at(-1)
+  return turnText(turn, statFor(stats, turn))
 }
 
 // Copies a whole block (not its preview) and says how it went; called with

@@ -43,6 +43,8 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 
 `/tail <sub>` works too, e.g. `/tail width 70`.
 
+In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` answer with the same content as text.
+
 ## Keys in the pane
 
 | Key                    | Action                                    |

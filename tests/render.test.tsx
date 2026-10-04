@@ -1,4 +1,4 @@
-import type { CommandRunInput, ConfigRow, SessionMessage } from 'claude-code'
+import type { CommandRunInput, ConfigRow, RenderSurface, SessionMessage } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { THEME_KEYS } from '../hooks/theme'
@@ -640,6 +640,7 @@ describe('compact transcript', () => {
 
   test('/tail opens the pane at the stored width share', async ($, on) => {
     mock.store(on)
+    on('session.surfaces', () => ({ value: ['terminal' as const] }))
     const opened: (number | undefined)[] = []
     on('ui.panes', () => ({ value: [] }))
     on('ui.open', (_$, e) => {
@@ -694,6 +695,27 @@ describe('commands', () => {
     ])
   })
 
+  test('/tail and /tail-turns answer in text where no pane is drawn', async ($, on) => {
+    mock.store(on)
+    let surfaces: RenderSurface[] = ['vscode']
+    let opened = 0
+    on('session.surfaces', () => ({ value: surfaces }))
+    on('session.messages', () => ({ value: main }))
+    on('ui.open', () => {
+      opened += 1
+      return { value: { isPlaced: true as const } }
+    })
+
+    for (const shown of [['vscode'], []] as RenderSurface[][]) {
+      surfaces = shown
+      const detail = await $.command.run(run('tail'))
+      expect(detail.text).toContain('❯ Fix the bug')
+      expect(detail.text).toContain('Explore')
+      expect((await $.command.run(run('tail-turns'))).text).toContain('#1')
+    }
+    expect(opened).toBe(0)
+  })
+
   test('/tail-help and /tail help list every command', async ($, on) => {
     mock.store(on)
     for (const ran of [await $.command.run(run('tail-help')), await $.command.run(run('tail', 'help'))]) {
@@ -704,6 +726,7 @@ describe('commands', () => {
 
   test('/tail-width and /tail-theme work like their /tail forms', async ($, on) => {
     mock.store(on)
+    on('session.surfaces', () => ({ value: ['terminal' as const] }))
     const opened: (number | undefined)[] = []
     on('ui.panes', () => ({ value: [] }))
     on('ui.open', (_$, e) => {
