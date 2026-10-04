@@ -10,9 +10,9 @@ import { rowText } from '../hooks/model/cursor'
 import { resetSectionCache, sectionCacheSize } from '../hooks/model/sections'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
-import { renderBar, renderPane, type El } from '../hooks/view'
-
-type Node = { type: string; props: Record<string, unknown>; children: unknown }
+import { renderBar, renderPane } from '../hooks/view'
+import type { El } from '../hooks/view/kit'
+import { text, type Node } from './fixtures/view'
 
 const make =
   (type: string) =>
@@ -34,22 +34,6 @@ function nodes(tree: unknown, found: Node[] = []): Node[] {
     nodes((tree as Node).children, found)
   }
   return found
-}
-
-function text(tree: unknown): string {
-  const parts: string[] = []
-  const walk = (t: unknown) => {
-    if (typeof t === 'string' || typeof t === 'number') parts.push(String(t))
-    else if (Array.isArray(t)) t.forEach(walk)
-    else if (t !== null && typeof t === 'object' && 'type' in t) {
-      const { props, children } = t as Node
-      for (const key of ['label', 'text', 'source'])
-        if (typeof props[key] === 'string') parts.push(props[key] as string)
-      walk(children)
-    }
-  }
-  walk(tree)
-  return parts.join('')
 }
 
 const byKey = (tree: unknown, key: string) => nodes(tree).find(n => n.props['key'] === key)
