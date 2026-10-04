@@ -91,6 +91,24 @@ export function statFor(
   return undefined
 }
 
+// The stat a transcript "Baked for 3s" line belongs to: the newest one with
+// exactly its duration (both come from the same turn.complete) and a turn
+// index. Undefined when no finished turn has that duration.
+export function statOfDuration(stats: readonly TurnStat[], durationMs: number): TurnStat | undefined {
+  for (let i = stats.length - 1; i >= 0; i--) {
+    const stat = stats[i]!
+    if (stat.durationMs === durationMs && stat.turnIndex !== undefined) return stat
+  }
+  return undefined
+}
+
+// The turn `stat` was recorded for, while the turn at its index still has
+// its prompt (see statFor); undefined once the rows moved on.
+export function turnOfStat(stat: TurnStat, turns: readonly Turn[]): Turn | undefined {
+  const turn = turns.find(t => t.index === stat.turnIndex)
+  return turn !== undefined && (turn.prompt === stat.prompt || turn.prompt === '') ? turn : undefined
+}
+
 // The index buildTurns gives the turn starting with `prompt`: the last turn
 // when the transcript already holds the prompt (or the turn has none, a
 // continuation), else the one about to open after it.

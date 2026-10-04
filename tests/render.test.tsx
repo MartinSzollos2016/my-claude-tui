@@ -830,14 +830,19 @@ describe('commands', () => {
 })
 
 describe('transcript spinner and turn duration', () => {
-  test('the turn duration line carries the counts of the last turn', async ($, on) => {
+  test('the turn duration line carries the counts of its own turn', async ($, on) => {
     mock.store(on)
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.messages', () => ({ value: main }))
+    on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+    on('turn.complete', () => ({ text: '' }))
+    on('ui.status', () => ({ value: undefined }))
     on('ui.render', { component: 'TurnDuration' }, ($, e) => {
       const { Text } = $.ui.resolve(e)
       return <Text>engine line</Text>
     })
+    await $.turn.start({ turnId: 't1', text: 'Fix the bug' })
+    await $.turn.complete({ answer: '', isAborted: false, reason: 'answer', turnId: 't1', durationMs: 3_000 })
     const ui = await $.ui.mount({
       plugin: 'tail-view',
       surface: 'terminal',

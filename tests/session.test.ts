@@ -12,6 +12,8 @@ import {
   recordToolStart,
   remember,
   statFor,
+  statOfDuration,
+  turnOfStat,
   noteNotified,
   noteWorkflowAgent,
   takeTurnIndex,
@@ -91,6 +93,30 @@ describe('toggleId', () => {
   test('removes an id that is there, appends one that is not, keeping the newest max', () => {
     expect(toggleId(['a'], 'a', 3)).toEqual([])
     expect(toggleId(['a', 'b', 'c'], 'd', 3)).toEqual(['b', 'c', 'd'])
+  })
+})
+
+describe('statOfDuration and turnOfStat', () => {
+  const two = buildTurns([prompt('One'), prompt('Two')])
+  // A continuation: a turn with no prompt of its own.
+  const turns = [...two, { ...two[1]!, index: 2, prompt: '' }]
+  const stats = [
+    { prompt: 'One', turnIndex: 0, durationMs: 3_000, endedAt: 1 },
+    { prompt: 'Two', durationMs: 5_000, endedAt: 2 },
+    { prompt: 'Two', turnIndex: 1, durationMs: 3_000, endedAt: 3 },
+  ]
+
+  test('the newest stat with the exact duration and a turn index', () => {
+    expect(statOfDuration(stats, 3_000)?.endedAt).toBe(3)
+    expect(statOfDuration(stats, 5_000)).toBeUndefined()
+    expect(statOfDuration([], 3_000)).toBeUndefined()
+  })
+
+  test('the turn at the stat index while it keeps the prompt; a continuation has none', () => {
+    expect(turnOfStat(stats[0]!, turns)?.prompt).toBe('One')
+    expect(turnOfStat({ ...stats[0]!, turnIndex: 1 }, turns)).toBeUndefined()
+    expect(turnOfStat({ ...stats[0]!, turnIndex: 2 }, turns)?.index).toBe(2)
+    expect(turnOfStat({ ...stats[0]!, turnIndex: 9 }, turns)).toBeUndefined()
   })
 })
 

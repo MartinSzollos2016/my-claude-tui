@@ -1032,29 +1032,76 @@ describe('transcript spinner and turn duration', () => {
     await running
   })
 
-  test('the turn duration line gets the tool and agent counts of the last turn', async () => {
-    const { $ } = fakeEngine({ messages: main })
+  // Runs one main-loop turn through submit, start and complete, the
+  // transcript holding `rows` once it started.
+  const turn = async (
+    $: Parameters<typeof run>[1],
+    world: { messages: SessionMessage[] },
+    rows: SessionMessage[],
+    turnId: string,
+    durationMs: number,
+  ) => {
+    const prompt = rows.filter(r => r.role === 'user').at(-1)!.text
+    await run('prompt.submit', $, { text: prompt }, async e => e)
+    world.messages = rows
+    await run('turn.start', $, { turnId, text: prompt }, async e => e)
+    await run('turn.complete', $, { answer: '', isAborted: false, reason: 'answer', turnId, durationMs }, async () => ({
+      text: '',
+    }))
+  }
+  const at = (durationMs: number) => ({ ...duration, props: { ...duration.props, durationMs } })
+
+  test('the turn duration line gets the tool and agent counts of its turn', async () => {
+    const { $, world } = fakeEngine()
+    await turn($, world, main, 't1', 3_000)
     const drawn = await run('ui.render', $, duration, async x => x)
     expect(text(drawn)).toBe('Baked for 3s · 1 tool · 1 agent')
     expect((drawn as { props: Record<string, unknown> }).props['color']).toBe('inactive')
   })
 
+  test('each turn duration line keeps the counts of its own turn as later turns run', async () => {
+    const { $, world } = fakeEngine()
+    await turn($, world, main, 't1', 3_000)
+    await turn($, world, three.slice(0, 4), 't2', 5_000)
+    expect(text(await run('ui.render', $, at(3_000), async x => x))).toBe('Baked for 3s · 1 tool · 1 agent')
+    expect(text(await run('ui.render', $, at(5_000), async x => x))).toBe('Baked for 5s · 1 tool')
+    // A third turn that is still running changes neither line.
+    await run('prompt.submit', $, { text: 'Thanks' }, async e => e)
+    world.messages = [...three.slice(0, 4), { role: 'user', text: 'Thanks', toolUses: [] }]
+    expect(text(await run('ui.render', $, at(3_000), async x => x))).toBe('Baked for 3s · 1 tool · 1 agent')
+    expect(text(await run('ui.render', $, at(5_000), async x => x))).toBe('Baked for 5s · 1 tool')
+  })
+
+  test('a line whose turn has no stat is the engine own, and the transcript is read once per turn', async () => {
+    const { $, world } = fakeEngine()
+    await turn($, world, main, 't1', 3_000)
+    expect(await props($, at(7_000))).toMatchObject({ word: 'Baked', durationMs: 7_000 })
+    await run('ui.render', $, duration, async x => x)
+    world.calls.length = 0
+    await run('ui.render', $, duration, async x => x)
+    await run('ui.render', $, duration, async x => x)
+    expect(world.calls.filter(c => c === 'messages:main')).toEqual([])
+  })
+
   test("the turn duration line is the engine's own with the switch off or nothing to count", async () => {
-    const { $, world } = fakeEngine({ messages: main })
+    const { $, world } = fakeEngine()
+    await turn($, world, main, 't1', 3_000)
     await say($, 'tail-status', 'off')
     expect(await props($, duration)).toMatchObject({ word: 'Baked', durationMs: 3_000 })
     await say($, 'tail-status', 'on')
-    world.messages = [
-      { role: 'user', text: 'hi', toolUses: [] },
-      { role: 'assistant', text: 'Hello', toolUses: [] },
-    ]
-    expect(await props($, duration)).toMatchObject({ word: 'Baked', durationMs: 3_000 })
-    world.messages = []
-    expect(await props($, duration)).toMatchObject({ word: 'Baked' })
+    await turn(
+      $,
+      world,
+      [...main, { role: 'user', text: 'hi', toolUses: [] }, { role: 'assistant', text: 'Hello', toolUses: [] }],
+      't2',
+      4_000,
+    )
+    expect(await props($, at(4_000))).toMatchObject({ word: 'Baked', durationMs: 4_000 })
   })
 
   test('the ascii set gives an ASCII duration line', async () => {
-    const { $ } = fakeEngine({ messages: main })
+    const { $, world } = fakeEngine()
+    await turn($, world, main, 't1', 3_000)
     await say($, 'tail-icons', 'ascii')
     expect(text(await run('ui.render', $, duration, async x => x))).toBe('Baked for 3s . 1 tool . 1 agent')
   })
