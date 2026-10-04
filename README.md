@@ -33,15 +33,14 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 
 ## Commands
 
-| Command               | What it does                                                |
-| --------------------- | ----------------------------------------------------------- |
-| `/tail`               | open the detail pane                                        |
-| `/tail-turns`         | list the session's turns and open one in the pane           |
-| `/tail-width <30-80>` | pane width as % of the terminal (default 80, kept)          |
-| `/tail-compact`       | toggle the compact transcript (on by default, kept)         |
-| `/tail-bar`           | show or hide the info bar                                   |
-| `/tail-theme`         | name the `Tail …` theme matching yours, to pick in `/theme` |
-| `/tail-help`          | list commands and keys                                      |
+| Command               | What it does                                        |
+| --------------------- | --------------------------------------------------- |
+| `/tail`               | open the detail pane                                |
+| `/tail-turns`         | list the session's turns and open one in the pane   |
+| `/tail-width <30-80>` | pane width as % of the terminal (default 80, kept)  |
+| `/tail-compact`       | toggle the compact transcript (on by default, kept) |
+| `/tail-bar`           | show or hide the info bar                           |
+| `/tail-help`          | list commands and keys                              |
 
 `/tail <sub>` works too, e.g. `/tail width 70`.
 
@@ -62,11 +61,9 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 
 Long blocks show a preview with **show all** / **show less**; **copy** in a section's frame copies the whole block.
 
-## Themes
+## Pane frame
 
-Claude Code paints the pane's frame grey and plugins cannot draw over it. `themes/` ships a
-variant of each built-in theme with a black (dark themes) or white (light themes) frame. Pick
-one in `/theme`; `/tail-theme` tells you which.
+Claude Code paints the pane's frame grey and a plugin cannot change it.
 
 ## What the plugin does on your machine
 
