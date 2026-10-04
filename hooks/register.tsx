@@ -92,7 +92,7 @@ const MAX_TRACES = 200
 
 async function loadTrace($: EngineInterface, agentId: string, status: AgentStatus | undefined): Promise<Trace> {
   const cached = traceCache.get(agentId)
-  if (cached?.isFinal) return cached.trace
+  if (cached?.isFinal && isAgentFinished(status)) return cached.trace
   const found = await $.session.messages({ agentId })
   if ('deny' in found) return { denied: sanitizeText(String(found.deny)) }
   const key = turnsKey(found)

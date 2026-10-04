@@ -146,7 +146,8 @@ export function traceStats(items: readonly Item[]): { tools: number; messages: n
 // A cheap fingerprint of a transcript, so buildTurns reruns only when it
 // changes: a message added (length, first and last), a tool answered (a new
 // result row, or the outcome filled in place once the 4096-message window
-// is full), the last message's text grown.
+// is full), the last message's text grown. It watches the last message, so
+// in-place edits to earlier messages are picked up only when the key changes.
 export function turnsKey(messages: readonly SessionMessage[]): string {
   const last = messages.at(-1)
   if (!last) return '0'
