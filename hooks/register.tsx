@@ -800,6 +800,7 @@ export const register: Register = on => {
         isFocused: e.props.isFocused,
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
+        offset: e.props.scroll.offset,
         full: new Set(fullIds),
         view,
         query,

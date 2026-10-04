@@ -415,11 +415,23 @@ describe('detail pane', () => {
       if (isFocused === undefined) delete (props as { isFocused?: boolean }).isFocused
       return text(await run('ui.render', $, { ...PANE_EVENT, props }))
     }
-    expect(await focus(true)).toContain('keys active')
-    expect(await focus(false)).toContain('ctrl+x tab to use keys')
+    expect(await focus(true)).toContain('keys on')
+    expect(await focus(false)).toContain('ctrl+x tab for keys')
     const unknown = await focus(undefined)
-    expect(unknown).not.toContain('keys active')
-    expect(unknown).not.toContain('to use keys')
+    expect(unknown).not.toContain('keys on')
+    expect(unknown).not.toContain('for keys')
+  })
+
+  test('pins the footer to the last visible row from the scroll offset and rows of the engine', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    const footerTop = async (offset: number, bodyRows: number) => {
+      const scroll = { offset, bodyRows }
+      const tree = await run('ui.render', $, { ...PANE_EVENT, props: { ...PANE_EVENT.props, scroll } })
+      return byKey(tree, 'footer')?.props['top']
+    }
+    expect(await footerTop(0, 40)).toBe(36)
+    expect(await footerTop(14, 40)).toBe(50)
+    expect(await footerTop(5, 2)).toBe(3)
   })
 
   test('a failing API read leaves the pane drawn without a thinking count', async () => {

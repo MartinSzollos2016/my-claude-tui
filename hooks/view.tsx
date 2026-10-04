@@ -19,6 +19,9 @@ import {
   clampText,
   contextMeter,
   displayWidth,
+  footerLayout,
+  footerTop,
+  type FooterLayout,
   durationBar,
   formatClock,
   EMPTY_TURN_TEXT,
@@ -177,6 +180,8 @@ type PaneData = {
   traces: ReadonlyMap<string, Trace>
   columns: number
   rows: number
+  // How many rows the pane is scrolled down; 0 when left out.
+  offset?: number
   // Blocks shown whole instead of previewed, by block id.
   full: ReadonlySet<string>
   // What the pane shows, and the stat recorded for each turn (by index).
@@ -201,6 +206,9 @@ const PANE_TEXT_BUDGET = 85_000
 // What a row is charged beyond its width: its fixed columns may carry a few
 // characters that take no cell.
 const ROW_SLACK = 8
+// What the pinned footer is charged out of the pane's budget: its buttons,
+// rule and status text, with room to spare.
+const FOOTER_BUDGET = 1500
 // What a hunk header the splitting of a long diff adds may take at most.
 const DIFF_HEADER_SLACK = 40
 
@@ -303,20 +311,21 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const data: Ctx = {
     ...input,
     icons: input.icons ?? ICON_SETS.nerd,
-    budget: { left: PANE_TEXT_BUDGET },
+    budget: { left: PANE_TEXT_BUDGET - FOOTER_BUDGET },
     cardBudget: { left: CARD_BUDGET },
     maxMs: longestCall(input, turn),
   }
   const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces)]
   reserveSections(lists.reduce((sum, items) => sum + items.length, 0))
   const trunc = cutter(data.icons)
-  if (data.view === 'team') return paneBody(el, data, renderTeam(el, data, act))
+  if (data.view === 'team') return paneBody(el, data, act, renderTeam(el, data, act))
 
   if (!turn) {
     const sep = data.icons.groupSep
     return paneBody(
       el,
       data,
+      act,
       <Box flexDirection="column">
         <Text key="empty-title" color={C.text}>
           No turns yet.
@@ -330,11 +339,12 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       </Box>,
     )
   }
-  if (data.view === 'turns') return paneBody(el, data, renderTurnList(el, data, act))
+  if (data.view === 'turns') return paneBody(el, data, act, renderTurnList(el, data, act))
 
   return paneBody(
     el,
     data,
+    act,
     <Box flexDirection="column">
       {renderHeader(el, turn, data)}
       {turn.prompt !== '' && (
@@ -352,7 +362,6 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
         )}
         {renderRows(el, turn.items, data, act)}
       </Box>
-      {renderFooter(el, data, act)}
     </Box>,
   )
 }
@@ -392,24 +401,6 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
         <Text bold color={C.brand}>
           {isFiltered ? `Turns (${rows.length} of ${data.turns.length})` : `Turns (${data.turns.length})`}
         </Text>
-        <Button
-          key="nav-detail"
-          plain
-          dimColor
-          hover={buttonHover('btn:nav-detail')}
-          hotkey="d"
-          label="back to detail"
-          onPress={act.showDetail}
-        />
-        <Button
-          key="nav-search"
-          plain
-          dimColor
-          hover={buttonHover('btn:nav-search')}
-          hotkey="s"
-          label="search"
-          onPress={act.focusSearch}
-        />
       </Box>
       {Input && (
         <Box flexDirection="row" gap={2}>
@@ -584,11 +575,19 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
 }
 
 // The pane body, painted edge to edge in the theme's background.
-function paneBody(el: El, data: Ctx, children: RenderChildren) {
+function paneBody(el: El, data: Ctx, act: PaneActions, children: RenderChildren) {
   const { Box } = el
+  const layout = footerLayout(data.columns)
   return (
-    <Box flexDirection="column" width={data.columns} minHeight={data.rows} backgroundColor={C.paneBackground}>
+    <Box
+      flexDirection="column"
+      width={data.columns}
+      minHeight={data.rows}
+      paddingBottom={layout.rows}
+      backgroundColor={C.paneBackground}
+    >
       {children}
+      {renderFooter(el, data, act, layout)}
     </Box>
   )
 }
@@ -644,102 +643,164 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
   )
 }
 
-// Under the items: a thin rule, the navigation on the left and the position
-// of the turn on the right.
-function renderFooter(el: El, data: Ctx, act: PaneActions) {
+// One key of the footer: a button, or the same text muted when the key does
+// not apply, so nothing moves. Without labels only the key and glyph remain.
+type FooterKey = {
+  key: string
+  hotkey: string
+  glyph?: string
+  label: string
+  isOn: boolean
+  onPress: (e: { surface?: RenderSurface }) => void
+}
+
+// The pinned footer: a rule, the keys in groups and the status line, drawn as
+// an absolute box on the last rows of the window (`offset` rows into the body).
+function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout) {
   const { Box, Text } = el
+  const { icons } = data
+  const groups = footerGroups(data, act)
+  const textOf = (k: FooterKey) =>
+    [k.hotkey, k.glyph, layout.labels ? k.label : undefined].filter(part => part !== undefined && part !== '').join(' ')
+  const groupText = (group: readonly FooterKey[]) => group.map(textOf).join('  ')
+  const keys = (group: readonly FooterKey[]) => group.map(k => renderFooterKey(el, k, textOf(k), layout.labels))
+  const rows =
+    layout.columns === 'stacked'
+      ? groups.map(group => (
+          <Box key={`footer-row-${group.id}`} flexDirection="row" gap={2}>
+            {keys(group.keys)}
+          </Box>
+        ))
+      : [
+          [groups[0]!, groups[1]!],
+          [groups[2]!, groups[3]!],
+        ].map(([left, right], i) => {
+          const leftWidth = Math.max(...[groups[0]!, groups[2]!].map(g => displayWidth(groupText(g.keys))))
+          return (
+            <Box key={`footer-row-${i + 1}`} flexDirection="row" gap={2}>
+              <Box key={`footer-left-${i + 1}`} flexDirection="row" gap={2} width={leftWidth} flexShrink={0}>
+                {keys(left!.keys)}
+              </Box>
+              <Text key={`footer-sep-${i + 1}`} color={C.muted}>
+                {icons.columnSep}
+              </Text>
+              <Box key={`footer-right-${i + 1}`} flexDirection="row" gap={2}>
+                {keys(right!.keys)}
+              </Box>
+            </Box>
+          )
+        })
+  const position =
+    data.turns.length > 0 ? `turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}` : ''
   return (
-    <Box key="footer" flexDirection="column" marginTop={1} width={data.columns}>
+    <Box
+      key="footer"
+      flexDirection="column"
+      position="absolute"
+      left={0}
+      top={footerTop(data.offset ?? 0, data.rows, layout.rows)}
+      width={data.columns}
+      backgroundColor={C.paneBackground}
+    >
       <Text key="footer-rule" color={C.muted}>
-        {data.icons.rule.repeat(data.columns)}
+        {icons.rule.repeat(data.columns)}
       </Text>
-      <Box flexDirection="row" justifyContent="space-between">
-        <Box flexShrink={1}>{renderNav(el, data, act)}</Box>
-        <Box flexShrink={0}>
+      {rows}
+      <Box key="footer-status" flexDirection="row" justifyContent="flex-end" width={data.columns}>
+        {position !== '' && (
           <Text key="turn-position" color={C.muted}>
-            {`turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}`}
+            {position}
           </Text>
-        </Box>
+        )}
+        {position !== '' && data.isFocused !== undefined && (
+          <Text key="footer-dot" color={C.muted}>{` ${icons.dot} `}</Text>
+        )}
+        {data.isFocused !== undefined && (
+          <Text key="focus-note" color={data.isFocused ? C.accent : C.muted}>
+            {data.isFocused ? 'keys on' : 'ctrl+x tab for keys'}
+          </Text>
+        )}
       </Box>
-      {data.isFocused !== undefined && (
-        <Text key="focus-note" color={data.isFocused ? C.accent : C.muted}>
-          {data.isFocused ? 'keys active' : 'ctrl+x tab to use keys'}
-        </Text>
-      )}
     </Box>
   )
 }
 
-function renderNav(el: El, data: Ctx, act: PaneActions) {
-  const { Box, Button, Text } = el
+function renderFooterKey(el: El, k: FooterKey, text: string, hasLabels: boolean) {
+  const { Button, Text } = el
+  if (!k.isOn)
+    return (
+      <Text key={`${k.key}-off`} color={C.muted}>
+        {text}
+      </Text>
+    )
+  const label = hasLabels
+    ? [k.glyph, k.label].filter(part => part !== undefined && part !== '').join(' ')
+    : (k.glyph ?? '')
+  return (
+    <Button
+      key={k.key}
+      plain
+      dimColor
+      hover={buttonHover(`btn:${k.key}`)}
+      hotkey={k.hotkey}
+      label={label}
+      onPress={k.onPress}
+    />
+  )
+}
+
+// The keys by purpose: moving between turns, the cursor over rows, the views
+// and expanding.
+function footerGroups(data: Ctx, act: PaneActions): { id: string; keys: FooterKey[] }[] {
+  const { icons } = data
   const total = data.turns.length
   const hasTeam = (data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0
   const hasRows = (data.turns[data.selected]?.items.length ?? 0) > 0
-  const hasCursor = data.cursor !== undefined && data.cursor !== null
-  const button = (key: string, hotkey: string, label: string, onPress: (e: { surface?: RenderSurface }) => void) => (
-    <Button
-      key={key}
-      plain
-      dimColor
-      hover={buttonHover(`btn:${key}`)}
-      hotkey={hotkey}
-      label={label}
-      onPress={onPress}
-    />
-  )
-
-  // Four groups; one that has nothing to show is left out whole.
-  const groups = [
+  const hasCursor = hasRows && data.cursor !== undefined && data.cursor !== null
+  const key = (
+    name: string,
+    hotkey: string,
+    label: string,
+    isOn: boolean,
+    onPress: FooterKey['onPress'],
+    glyph?: string,
+  ): FooterKey => ({ key: `nav-${name}`, hotkey, label, isOn, onPress, ...(glyph === undefined ? {} : { glyph }) })
+  return [
     {
       id: 'move',
-      buttons: [
-        data.selected > 0 && button('nav-prev', 'p', 'prev', act.prev),
-        data.selected < total - 1 && button('nav-next', 'n', 'next', act.next),
-        !data.isLatest && button('nav-latest', 'l', 'latest', act.latest),
+      keys: [
+        key('prev', 'p', 'prev', data.selected > 0, act.prev, icons.navPrev),
+        key('next', 'n', 'next', data.selected < total - 1, act.next, icons.navNext),
+        key('latest', 'l', 'latest', !data.isLatest, act.latest),
       ],
     },
     {
       id: 'cursor',
-      buttons: [
-        hasRows && button('nav-down', 'j', 'down', act.cursorDown),
-        hasRows && button('nav-up', 'k', 'up', act.cursorUp),
-        hasRows && hasCursor && button('nav-open', 'o', 'open', act.cursorOpen),
-        hasRows && hasCursor && button('nav-copy', 'y', 'copy', press => act.copyCursor(press.surface)),
+      keys: [
+        key('down', 'j', '', hasRows, act.cursorDown, icons.cursorDown),
+        key('up', 'k', '', hasRows, act.cursorUp, icons.cursorUp),
+        key('open', 'o', 'open', hasCursor, act.cursorOpen),
+        key('copy', 'y', 'copy', hasCursor, press => act.copyCursor(press.surface)),
       ],
     },
     {
       id: 'views',
-      buttons: [
-        button('nav-turns', 't', 'turns', act.showTurns),
-        button('nav-search', 's', 'search', act.focusSearch),
-        hasTeam && button('nav-team', 'm', 'team', act.showTeam),
+      keys: [
+        data.view === 'turns'
+          ? key('detail', 'd', 'detail', true, act.showDetail)
+          : key('turns', 't', 'turns', true, act.showTurns),
+        key('search', 's', 'search', true, act.focusSearch),
+        key('team', 'm', 'team', hasTeam, act.showTeam),
       ],
     },
     {
       id: 'expand',
-      buttons: [
-        button('nav-expand', 'e', 'expand all', act.expandAll),
-        button('nav-collapse', 'c', 'collapse', act.collapseAll),
+      keys: [
+        key('expand', 'e', 'expand', hasRows, act.expandAll),
+        key('collapse', 'c', 'collapse', hasRows, act.collapseAll),
       ],
     },
   ]
-    .map(group => ({ ...group, buttons: group.buttons.filter(b => b !== false) }))
-    .filter(group => group.buttons.length > 0)
-
-  return (
-    <Box key="nav" flexDirection="row" flexWrap="wrap" columnGap={2}>
-      {groups.map((group, i) => (
-        <Box key={`nav-group-${group.id}`} flexDirection="row" gap={2}>
-          {i > 0 && (
-            <Text key={`nav-sep-${group.id}`} color={C.muted}>
-              {data.icons.groupSep}
-            </Text>
-          )}
-          {group.buttons}
-        </Box>
-      ))}
-    </Box>
-  )
 }
 
 // The turn's thinking as one row above the items, when any of it is
