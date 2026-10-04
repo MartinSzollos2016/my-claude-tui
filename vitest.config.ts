@@ -21,6 +21,7 @@ export default defineConfig({
       'tests/summaries.test.ts',
       'tests/view.test.tsx',
       'tests/session.test.ts',
+      'tests/turns.test.ts',
       'tests/register.vitest.ts',
     ],
     coverage: {

@@ -18,6 +18,7 @@ import {
   formatClock,
   formatDuration,
   formatTokens,
+  isAgentRunning,
   isSubagent,
   itemName,
   itemSummary,
@@ -143,9 +144,6 @@ type PaneActions = {
   showDetail: () => void
   pickTurn: (index: number) => void
 }
-
-const isAgentRunning = (status: AgentStatus | undefined) =>
-  status === 'running' || status === 'pending' || status === 'waiting'
 
 function itemDuration(item: Item, data: Ctx): number | undefined {
   if (item.kind !== 'tool') return undefined

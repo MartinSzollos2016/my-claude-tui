@@ -120,6 +120,45 @@ const PANE = {
 } as const
 
 describe('detail pane', () => {
+  test('reads a finished subagent trace once', async ($, on) => {
+    const done: SessionMessage[] = [
+      { role: 'user', text: 'Map it', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          {
+            tool_use_id: 'd1',
+            tool: 'Agent',
+            input: { subagent_type: 'Explore', description: 'Map callers' },
+            agentId: 'agent-done',
+            text: 'ok',
+          },
+        ],
+      },
+    ]
+    let traceReads = 0
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', (_$, e) => {
+      if (e.agentId !== 'agent-done') return { value: done }
+      traceReads += 1
+      return { value: child }
+    })
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({
+      value: [{ id: 'agent-done', description: 'Map callers', type: 'Explore', status: 'completed' as const }],
+    }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    await ui.press({ key: 'd1' })
+    expect(await ui.find({ text: /Execution Trace/ })).toBeDefined()
+    await ui.press({ key: 'nav-expand' })
+    expect(await ui.find({ text: /3 matches/ })).toBeDefined()
+    expect(traceReads).toBe(1)
+    await ui.unmount()
+  })
+
   test('paints the body with the theme background, full height', async ($, on) => {
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.model', () => ({ value: 'claude-opus-5-5' }))

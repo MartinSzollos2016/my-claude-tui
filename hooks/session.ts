@@ -69,3 +69,17 @@ export function statFor(stats: readonly TurnStat[], turn: Turn | undefined): Tur
   }
   return undefined
 }
+
+export type Memo<T> = { key: string; value: T }
+
+// The cached value while `key` holds, else a fresh one from `build`.
+export function memo<T>(cache: Memo<T> | undefined, key: string, build: () => T): Memo<T> {
+  return cache !== undefined && cache.key === key ? cache : { key, value: build() }
+}
+
+// Sets `key` in a map kept to `max` entries, the least recently set dropped.
+export function remember<K, V>(map: Map<K, V>, key: K, value: V, max: number): void {
+  map.delete(key)
+  map.set(key, value)
+  while (map.size > max) map.delete(map.keys().next().value as K)
+}
