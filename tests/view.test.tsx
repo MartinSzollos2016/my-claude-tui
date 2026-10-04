@@ -1232,6 +1232,12 @@ describe('pane focus', () => {
     expect(last(tree)?.props['color']).toBe('inactive')
   })
 
+  test('with the info bar shown the hint asks for the chord twice: the bar takes the first', () => {
+    const tree = renderPane(el, { ...base, isFocused: false, isBarShown: true }, act)
+    expect(text(last(tree))).toBe('ctrl+x tab twice for keys')
+    expect(text(last(renderPane(el, { ...base, isFocused: true, isBarShown: true }, act)))).toBe('keys on')
+  })
+
   test('an unknown focus acts as unfocused, without the hint', () => {
     const tree = renderPane(el, base, act)
     expect(mark(tree)?.props['color']).toBe('inactive')
@@ -1741,6 +1747,9 @@ describe('empty states', () => {
       { text: 'Keys: t turns · s search · e expand · ctrl+x tab focuses this pane', color: 'inactive' },
     ])
     expect(lines(renderPane(el, { ...base, turns: [], view: 'turns' }, act))).toHaveLength(3)
+    expect(lines(renderPane(el, { ...base, turns: [], isBarShown: true }, act)).at(-1)?.text).toBe(
+      'Keys: t turns · s search · e expand · ctrl+x tab twice focuses this pane',
+    )
     expect(text(renderPane(el, { ...base, turns: [], icons: ICON_SETS.ascii }, act))).toContain(
       'Keys: t turns . s search . e expand . ctrl+x tab focuses this pane',
     )

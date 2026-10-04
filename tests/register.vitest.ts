@@ -129,6 +129,29 @@ describe('commands', () => {
     expect(await say($, 'tail-help')).toContain('/tail-turns')
   })
 
+  test('/tail and /tail-turns ask for the keyboard again once the command is done, until the pane has it', async () => {
+    // The engine grants the focus only over an empty composer, which still
+    // holds the command while it runs.
+    for (const name of ['tail', 'tail-turns']) {
+      const unfocused = fakeEngine({ isPaneFocused: false })
+      await say(unfocused.$, name)
+      await settle()
+      expect(unfocused.world.focusRequests, name).toBe(6)
+      // The retries keep the width the person has.
+      expect(unfocused.world.opened.slice(1), name).toEqual([undefined, undefined, undefined, undefined, undefined])
+
+      const focused = fakeEngine()
+      await say(focused.$, name)
+      await settle()
+      expect(focused.world.focusRequests, name).toBe(1)
+
+      const waiting = fakeEngine({ isPaneFocused: false, isPanePlaced: false })
+      await say(waiting.$, name)
+      await settle()
+      expect(waiting.world.focusRequests, name).toBe(1)
+    }
+  })
+
   test('/tail-icons stores the set, names it without an argument and the pane draws it', async () => {
     const { $, world } = fakeEngine({ messages: main })
     expect(await say($, 'tail-icons')).toContain('nerd')
@@ -416,6 +439,9 @@ describe('detail pane', () => {
       return text(await run('ui.render', $, { ...PANE_EVENT, props }))
     }
     expect(await focus(true)).toContain('keys on')
+    // The info bar shows by default and takes the first ctrl+x tab.
+    expect(await focus(false)).toContain('ctrl+x tab twice for keys')
+    await say($, 'tail-bar')
     expect(await focus(false)).toContain('ctrl+x tab for keys')
     const unknown = await focus(undefined)
     expect(unknown).not.toContain('keys on')

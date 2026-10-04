@@ -53,6 +53,8 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 
 ## Keys in the pane
 
+`/tail` and `/tail-turns` give the pane the keyboard. Otherwise ctrl+x tab does, pressed twice while the info bar shows (the bar takes the first), or a click in the pane.
+
 | Key                    | Action                                                    |
 | ---------------------- | --------------------------------------------------------- |
 | Tab / shift+Tab        | move between rows                                         |

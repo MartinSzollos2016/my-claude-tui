@@ -107,9 +107,14 @@ type World = {
   // started only once this settles: a slow read of an older transcript.
   hold?: Promise<void>
   copyResult: UiCopyResult
+  // What $.ui.panes reports for the pane.
+  isPaneFocused: boolean
+  isPanePlaced: boolean
   // What the plugin did, for the tests to read.
   store: Map<string, unknown>
   opened: (number | undefined)[]
+  // How many opens asked for the keyboard.
+  focusRequests: number
   commands: string[]
   copies: string[]
   toasts: string[]
@@ -134,8 +139,11 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     hasRepo: true,
     now: 1_700_000_000_000,
     copyResult: { isCopied: true },
+    isPaneFocused: true,
+    isPanePlaced: true,
     store: new Map(),
     opened: [],
+    focusRequests: 0,
     commands: [],
     copies: [],
     toasts: [],
@@ -175,6 +183,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     },
     clock: {
       now: async () => world.now,
+      sleep: async () => undefined,
       every: (_ms: number, fn: () => void) => {
         world.timers.push(fn)
         return { cancel: () => undefined }
@@ -182,11 +191,12 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     },
     ui: {
       resolve: () => el,
-      open: async (args: { columns?: number }) => {
+      open: async (args: { columns?: number; focus?: true }) => {
         world.opened.push(args.columns)
+        if (args.focus === true) world.focusRequests++
         return { isPlaced: true }
       },
-      panes: async () => [{ id: 'tail', isPlaced: true }],
+      panes: async () => [{ id: 'tail', isPlaced: world.isPanePlaced, isFocused: world.isPaneFocused }],
       invalidate: (event: string) => {
         world.invalidations.push(event)
       },

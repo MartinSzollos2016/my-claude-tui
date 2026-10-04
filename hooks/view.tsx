@@ -165,6 +165,9 @@ type PaneData = {
   // Whether the person has given the pane the keyboard; left out when the
   // engine does not say.
   isFocused?: boolean
+  // Whether the info bar shows above the prompt: it takes the first
+  // ctrl+x tab, the pane the second.
+  isBarShown?: boolean
   // Thinking of the shown turn: how many blocks, and their readable text.
   thinking?: TurnThinking
   turns: Turn[]
@@ -360,7 +363,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 
   if (!turn) {
     const sep = data.icons.groupSep
-    const hint = `Keys: t turns ${sep} s search ${sep} e expand ${sep} ctrl+x tab focuses this pane`
+    const hint = `Keys: t turns ${sep} s search ${sep} e expand ${sep} ${focusChord(data)} focuses this pane`
     data.layout.push(
       textLine(data, 'No turns yet.', 0),
       textLine(data, 'Send a prompt; tool calls and subagents appear here.', 0),
@@ -890,6 +893,10 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
   )
 }
 
+// The chord that gives the pane the keyboard: pressed twice while the info
+// bar shows, which the engine focuses first.
+const focusChord = (data: Ctx) => (data.isBarShown === true ? 'ctrl+x tab twice' : 'ctrl+x tab')
+
 // The status row: the position of the turn and the focus note, right-aligned
 // inside the pane's frame and padding (STATUS_INSET cells) and cut with the
 // set's ellipsis when it does not fit `room` cells.
@@ -903,7 +910,7 @@ function footerStatus(data: Ctx, room: number, frame: ScrollFrame) {
   // Where the window stands while the content overflows: at its top or end.
   const lastTop = clampScroll(Infinity, frame.total, frame.windowRows)
   const place = lastTop === 0 ? '' : frame.scrollTop === 0 ? 'top' : frame.scrollTop >= lastTop ? 'end' : ''
-  const note = data.isFocused === undefined ? '' : data.isFocused ? 'keys on' : 'ctrl+x tab for keys'
+  const note = data.isFocused === undefined ? '' : data.isFocused ? 'keys on' : `${focusChord(data)} for keys`
   const dot = ` ${icons.dot} `
   const segments = [
     { key: 'turn-position', text: position, color: C.muted },
