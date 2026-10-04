@@ -1370,8 +1370,8 @@ export function turnTail(turn: Turn, stat?: { durationMs: number }, dot = '·'):
 
 // -- Turn table ------------------------------------------------------------------
 
-export type TurnCells = { number: string; prompt: string; tools: string; time: string; tokens: string; bar: string }
-export type TurnTableRow = { index: number; cells: TurnCells; label: string }
+type TurnCells = { number: string; prompt: string; tools: string; time: string; tokens: string; bar: string }
+type TurnTableRow = { index: number; cells: TurnCells; label: string }
 export type TurnTable = { header: string; rows: TurnTableRow[] }
 
 const TABLE_BAR_CELLS = 8
