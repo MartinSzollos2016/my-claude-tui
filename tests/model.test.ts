@@ -10,6 +10,9 @@ import {
   formatDuration,
   formatTokens,
   itemName,
+  languageFor,
+  toolSections,
+  type ToolItem,
   itemSummary,
   sanitizePrompt,
   shortModel,
@@ -79,6 +82,81 @@ describe('summaries', () => {
     const agent = buildTurns(transcript)[0]!.items[2]!
     expect(itemName(agent)).toBe('Explore')
     expect(itemSummary(agent)).toBe('Find callers')
+  })
+})
+
+const tool = (over: Partial<ToolItem>): ToolItem => ({
+  kind: 'tool',
+  id: 't',
+  tool: 'Bash',
+  input: {},
+  summary: '',
+  isError: false,
+  isPending: false,
+  ...over,
+})
+
+describe('toolSections', () => {
+  test('Bash separates the command from its output', () => {
+    const sections = toolSections(tool({ input: { command: 'go test ./...', description: 'Run tests' }, resultText: 'ok\nPASS' }))
+    expect(sections.map(s => s.kind)).toEqual(['command', 'output'])
+    expect(sections[0]).toEqual({ kind: 'command', title: '$ command', meta: 'Run tests', body: 'go test ./...', format: { kind: 'code', language: 'bash' } })
+    expect(sections[1]?.meta).toBe('ok · 2 lines')
+  })
+
+  test('an errored result is an error section', () => {
+    const sections = toolSections(tool({ input: { command: 'false' }, resultText: 'exit 1', isError: true }))
+    expect(sections[1]?.kind).toBe('error')
+    expect(sections[1]?.meta).toBe('error · 1 line')
+  })
+
+  test('a pending call has no output section yet', () => {
+    expect(toolSections(tool({ input: { command: 'sleep 9' }, isPending: true })).map(s => s.kind)).toEqual(['command'])
+  })
+
+  test('Read shows the file and highlights its content by extension', () => {
+    const [file, out] = toolSections(tool({ tool: 'Read', input: { file_path: '/src/app/main.go', offset: 10, limit: 5 }, resultText: 'package main' }))
+    expect(file?.kind).toBe('file')
+    expect(file?.body).toBe('/src/app/main.go')
+    expect(file?.meta).toBe('lines 10-14')
+    expect(out?.format).toEqual({ kind: 'code', language: 'go' })
+  })
+
+  test('Edit is a diff of the file', () => {
+    const [diff] = toolSections(tool({ tool: 'Edit', input: { file_path: '/a.ts', old_string: 'a', new_string: 'b' }, resultText: 'ok' }))
+    expect(diff).toEqual({ kind: 'diff', title: 'diff', meta: '/a.ts', body: '-a\n+b', format: { kind: 'code', language: 'diff' } })
+  })
+
+  test('Write shows the written content in its language', () => {
+    const [file] = toolSections(tool({ tool: 'Write', input: { file_path: '/x/y.py', content: 'print(1)' } }))
+    expect(file).toEqual({ kind: 'file', title: 'write', meta: '/x/y.py', body: 'print(1)', format: { kind: 'code', language: 'python' } })
+  })
+
+  test('Grep and WebSearch are queries; web results are markdown', () => {
+    expect(toolSections(tool({ tool: 'Grep', input: { pattern: 'Run(', glob: '*.go' } }))[0]?.body).toBe('Run(  in *.go')
+    const web = toolSections(tool({ tool: 'WebSearch', input: { query: 'bubbletea' }, resultText: '# hits' }))
+    expect(web.map(s => s.kind)).toEqual(['query', 'output'])
+    expect(web[1]?.format).toEqual({ kind: 'markdown' })
+  })
+
+  test('TodoWrite lists items with their status', () => {
+    const [list] = toolSections(
+      tool({ tool: 'TodoWrite', input: { todos: [{ content: 'a', status: 'completed' }, { content: 'b', status: 'in_progress' }, { content: 'c', status: 'pending' }] } }),
+    )
+    expect(list?.body).toBe('☑ a\n◐ b\n☐ c')
+  })
+
+  test('other tools show their input as JSON', () => {
+    const [input] = toolSections(tool({ tool: 'mcp__x__y', input: { q: 1 }, resultText: 'r' }))
+    expect(input?.kind).toBe('input')
+    expect(input?.format).toEqual({ kind: 'code', language: 'json' })
+    expect(input?.body).toBe('{\n  "q": 1\n}')
+  })
+
+  test('languageFor maps common extensions', () => {
+    expect(languageFor('a/b.tsx')).toBe('tsx')
+    expect(languageFor('Makefile')).toBe(undefined)
+    expect(languageFor('x.YAML')).toBe('yaml')
   })
 })
 
