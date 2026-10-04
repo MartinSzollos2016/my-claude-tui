@@ -310,6 +310,28 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
   const { Box, Button, Text } = el
   const members = data.members ?? []
   const tasks = data.tasks ?? []
+
+  // Every row draws from the pane's text budget; what does not fit is counted.
+  const memberRows: { member: TeamMember; name: string; type: string; cost: number }[] = []
+  for (const member of members) {
+    const name = truncate(member.name, 24).padEnd(24)
+    const type = truncate(member.type, 20).padEnd(20)
+    const cost = name.length + type.length + member.status.length + 4
+    if (cost > data.budget.left) break
+    data.budget.left -= cost
+    memberRows.push({ member, name, type, cost })
+  }
+  const taskRows: { task: TaskEntry; label: string }[] = []
+  for (const task of tasks) {
+    const owner = task.owner ? `  → ${truncate(task.owner, 40)}` : ''
+    const label = `${taskMark(task.status)} #${truncate(task.id, 20)} ${truncate(task.subject, 200)}${owner}`
+    if (label.length > data.budget.left) break
+    data.budget.left -= label.length
+    taskRows.push({ task, label })
+  }
+  const hiddenMembers = members.length - memberRows.length
+  const hiddenTasks = tasks.length - taskRows.length
+
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" gap={2}>
@@ -318,23 +340,25 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
       </Box>
       <Box flexDirection="column" marginTop={1}>
         {members.length === 0 && <Text dimColor>No teammates in this session.</Text>}
-        {members.map(member => (
-          <Box key={`member-${member.name}`} flexDirection="row">
-            <Text color={agentStatusColor(member.status)}>{'● '}</Text>
-            <Text bold>{truncate(member.name, 24).padEnd(24)}</Text>
-            <Text dimColor>{` ${truncate(member.type, 20).padEnd(20)} `}</Text>
-            <Text color={agentStatusColor(member.status)}>{member.status}</Text>
+        {memberRows.map((row, i) => (
+          <Box key={`member-${i}`} flexDirection="row">
+            <Text color={agentStatusColor(row.member.status)}>{'● '}</Text>
+            <Text bold>{row.name}</Text>
+            <Text dimColor>{` ${row.type} `}</Text>
+            <Text color={agentStatusColor(row.member.status)}>{row.member.status}</Text>
           </Box>
         ))}
+        {hiddenMembers > 0 && <Text dimColor>{`${hiddenMembers} more teammates`}</Text>}
       </Box>
       <Box flexDirection="column" marginTop={1}>
         <Text bold>{`Tasks (${tasks.length})`}</Text>
         {tasks.length === 0 && <Text dimColor>No tasks yet.</Text>}
-        {tasks.map(task => (
-          <Text key={`task-${task.id}`} dimColor={task.status === 'completed'} wrap="truncate-end">
-            {`${taskMark(task.status)} #${task.id} ${task.subject}${task.owner ? `  → ${task.owner}` : ''}`}
+        {taskRows.map(row => (
+          <Text key={`task-${row.task.id}`} dimColor={row.task.status === 'completed'} wrap="truncate-end">
+            {row.label}
           </Text>
         ))}
+        {hiddenTasks > 0 && <Text dimColor>{`${hiddenTasks} more tasks`}</Text>}
       </Box>
     </Box>
   )
