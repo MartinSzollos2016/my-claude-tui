@@ -857,7 +857,7 @@ describe('own scroll', () => {
   ]
   const SMALL = { ...PANE_EVENT, props: { ...PANE_EVENT.props, scroll: { offset: 0, bodyRows: 12 } } }
   const drawSmall = ($: Parameters<typeof run>[1]) => run('ui.render', $, SMALL)
-  const topOf = async ($: Parameters<typeof run>[1]) => byKey(await drawSmall($), 'pane-content')?.props['top']
+  const topOf = async ($: Parameters<typeof run>[1]) => byKey(await drawSmall($), 'pane-content')?.props['marginTop']
   async function pressSmall($: Parameters<typeof run>[1], key: string) {
     const button = byKey(await drawSmall($), key)
     if (!button) throw new Error(`no button ${key}`)

@@ -2080,7 +2080,19 @@ export function footerLayout(columns: number): FooterLayout {
 // - `turn`: a row of the turn list and its search snippet.
 export type RowBlock =
   | { kind: 'line'; id?: string; text?: string; width?: number }
-  | { kind: 'frame'; body: readonly string[]; notes: readonly string[]; width: number; gutter?: number; head?: string }
+  | {
+      kind: 'frame'
+      body: readonly string[]
+      notes: readonly string[]
+      width: number
+      gutter?: number
+      // The header row's rows: more than one where the set leaves its meta uncut.
+      headRows?: number
+      // How the engine draws the body: Markdown drops empty lines; a diff
+      // draws no ---, +++ or @@ line and puts each line's number and marker
+      // in a gutter as wide as its widest number and 3 cells.
+      format?: 'markdown' | 'diff'
+    }
   | { kind: 'turn'; snippet?: string; width?: number }
 
 export type ContentRows = { total: number; starts: Readonly<Record<string, number>> }
@@ -2112,6 +2124,32 @@ function wrappedRows(text: string, width: number): number {
   return rows
 }
 
+// A diff piece's drawn lines without their marker, and its gutter's cells.
+const DIFF_HEADER = /^(?:--- |\+\+\+ |@@ )/
+const HUNK_RANGES = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
+
+function diffRows(piece: string, width: number): number {
+  const lines = piece.split('\n')
+  let last = 1
+  for (const line of lines) {
+    const m = HUNK_RANGES.exec(line)
+    if (m) last = Math.max(last, Number(m[1]) + Number(m[2] ?? 1), Number(m[3]) + Number(m[4] ?? 1))
+  }
+  const room = width - (String(last).length + 3)
+  const drawn = lines.filter(line => line !== '' && !DIFF_HEADER.test(line)).map(line => line.slice(1))
+  return drawn.reduce((sum, line) => sum + wrappedRows(line, room), 0)
+}
+
+// The rows of one piece of a frame's body as the engine draws its format.
+function pieceRows(piece: string, width: number, format: 'markdown' | 'diff' | undefined): number {
+  if (format === 'diff') return diffRows(piece, width)
+  if (format !== 'markdown') return wrappedRows(piece, width)
+  return piece
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .reduce((sum, line) => sum + wrappedRows(line, width), 0)
+}
+
 const textRows = (text: string | undefined, width: number | undefined): number =>
   text === undefined || width === undefined ? 1 : wrappedRows(text, width)
 
@@ -2125,8 +2163,8 @@ function blockRows(block: RowBlock): number {
       const bodyWidth = block.width - (block.gutter ?? 0)
       return (
         FRAME_BORDERS +
-        textRows(block.head, block.width) +
-        block.body.reduce((sum, piece) => sum + wrappedRows(piece, bodyWidth), 0) +
+        (block.headRows ?? 1) +
+        block.body.reduce((sum, piece) => sum + pieceRows(piece, bodyWidth, block.format), 0) +
         block.notes.reduce((sum, note) => sum + wrappedRows(note, block.width), 0)
       )
     }
