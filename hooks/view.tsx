@@ -722,8 +722,8 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
   )
 }
 
-// One key of the footer: a button, or the same text muted when the key does
-// not apply, so nothing moves. Without labels only the key and glyph remain.
+// One key of the footer: always a button with its hotkey; `isOn` says whether
+// a press acts. Without labels only the key and glyph remain.
 type FooterKey = {
   key: string
   hotkey: string
@@ -747,8 +747,7 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
   // As the engine draws a button: `<key>: <label>`.
   const textOf = (k: FooterKey) => `${k.hotkey}: ${footerLabel(k, layout.labels)}`
   const groupWidth = (group: readonly FooterKey[]) => displayWidth(group.map(textOf).join('  '))
-  const keys = (group: readonly FooterKey[]) =>
-    group.map(k => renderFooterKey(el, k, textOf(k), footerLabel(k, layout.labels)))
+  const keys = (group: readonly FooterKey[]) => group.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels)))
   const inner = data.columns - STATUS_INSET
   const leftWidth = Math.max(groupWidth(move), groupWidth(views))
   const isTwo = layout.columns === 'two'
@@ -784,7 +783,7 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
         </Box>
       ))
   const statusBox = (width: number) => {
-    const status = footerStatus(data, width)
+    const status = footerStatus(data, width, frame)
     return (
       <Box key="footer-status" flexDirection="row" justifyContent="flex-end" width={status.width}>
         {status.parts.map(part => (
@@ -820,22 +819,34 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
 // set's ellipsis when it does not fit `room` cells.
 const STATUS_INSET = 2
 
-function footerStatus(data: Ctx, room: number) {
+function footerStatus(data: Ctx, room: number, frame: ScrollFrame) {
   const { icons } = data
   const width = Math.max(1, room)
   const position =
     data.turns.length > 0 ? `turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}` : ''
-  const hasNote = data.isFocused !== undefined
-  const dot = position !== '' && hasNote ? ` ${icons.dot} ` : ''
-  const note = hasNote ? (data.isFocused ? 'keys on' : 'ctrl+x tab for keys') : ''
-  const cut = cutter(icons)(position + dot + note, width)
-  const noteColor = data.isFocused ? C.accent : C.muted
-  const pieces = [
-    { key: 'turn-position', text: cut.slice(0, position.length), color: C.muted },
-    { key: 'footer-dot', text: cut.slice(position.length, position.length + dot.length), color: C.muted },
-    { key: 'focus-note', text: cut.slice(position.length + dot.length), color: noteColor },
-  ]
-  return { width, parts: pieces.filter(piece => piece.text !== '') }
+  // Where the window stands while the content overflows: at its top or end.
+  const lastTop = clampScroll(Infinity, frame.total, frame.windowRows)
+  const place = lastTop === 0 ? '' : frame.scrollTop === 0 ? 'top' : frame.scrollTop >= lastTop ? 'end' : ''
+  const note = data.isFocused === undefined ? '' : data.isFocused ? 'keys on' : 'ctrl+x tab for keys'
+  const dot = ` ${icons.dot} `
+  const segments = [
+    { key: 'turn-position', text: position, color: C.muted },
+    { key: 'scroll-place', text: place, color: C.muted },
+    { key: 'focus-note', text: note, color: data.isFocused ? C.accent : C.muted },
+  ].filter(segment => segment.text !== '')
+  // The segments with a dot between each two, cut as one text.
+  const pieces = segments.flatMap((segment, i) => [
+    ...(i === 0 ? [] : [{ key: `footer-dot-${i}`, text: dot, color: C.muted }]),
+    segment,
+  ])
+  const cut = cutter(icons)(pieces.map(piece => piece.text).join(''), width)
+  let at = 0
+  const parts = pieces.map(piece => {
+    const text = cut.slice(at, at + piece.text.length)
+    at += piece.text.length
+    return { ...piece, text }
+  })
+  return { width, parts: parts.filter(part => part.text !== '') }
 }
 
 // The label of a key: glyph and words in the order they read; the glyph alone
@@ -846,14 +857,13 @@ function footerLabel(k: FooterKey, hasLabels: boolean): string {
   return parts.filter(part => part !== undefined && part !== '').join(' ')
 }
 
-function renderFooterKey(el: El, k: FooterKey, text: string, label: string) {
-  const { Button, Text } = el
-  if (!k.isOn)
-    return (
-      <Text key={`${k.key}-off`} color={C.muted}>
-        {text}
-      </Text>
-    )
+// Every key is a Button with its hotkey, also when it cannot act: a key
+// drawn without one would fall through to the prompt and take the focus
+// from the pane. Out of reach, the press is swallowed and changes nothing.
+const swallow = (): undefined => undefined
+
+function renderFooterKey(el: El, k: FooterKey, label: string) {
+  const { Button } = el
   return (
     <Button
       key={k.key}
@@ -862,7 +872,7 @@ function renderFooterKey(el: El, k: FooterKey, text: string, label: string) {
       hover={buttonHover(`btn:${k.key}`)}
       hotkey={k.hotkey}
       label={label}
-      onPress={k.onPress}
+      onPress={k.isOn ? k.onPress : swallow}
     />
   )
 }
@@ -878,7 +888,7 @@ function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): FooterGr
   const hasRows = (data.turns[data.selected]?.items.length ?? 0) > 0
   const hasCursor = hasRows && data.cursor !== undefined && data.cursor !== null
   const isDetail = data.view === 'detail'
-  // The page keys work in every view: b is muted at the top, f at the end.
+  // The page keys work in every view: b does nothing at the top, f at the end.
   const lastTop = clampScroll(Infinity, frame.total, frame.windowRows)
   const paged = (delta: number) =>
     clampScroll(pageScroll(frame.scrollTop, delta, frame.windowRows), frame.total, frame.windowRows)
@@ -901,7 +911,7 @@ function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): FooterGr
     ...(glyph === undefined ? {} : { glyph }),
     ...(isGlyphAfter === true ? { isGlyphAfter } : {}),
   })
-  // Keys that act on the detail turn are muted in the turn list and the team
+  // Keys that act on the detail turn do nothing in the turn list and the team
   // board, which do not show it.
   return {
     move: [
