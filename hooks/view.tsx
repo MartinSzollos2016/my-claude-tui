@@ -29,6 +29,7 @@ import {
   groupRuns,
   type GroupItem,
   fitPath,
+  hoverCard,
   formatTokens,
   isAgentRunning,
   isSubagent,
@@ -199,6 +200,13 @@ const PANE_TEXT_BUDGET = 70_000
 // What a hunk header the splitting of a long diff adds may take at most.
 const DIFF_HEADER_SLACK = 40
 
+// What all hover cards of a pane may carry together; rows after it have none.
+const CARD_BUDGET = 20_000
+// A card sits this far in from the row's edge, and is this much narrower
+// than the row (its border and padding).
+const CARD_INDENT = 4
+const CARD_SLACK = 8
+
 const PREVIEW = {
   text: { lines: 100, chars: TEXT_CHUNK },
   code: { lines: 60, chars: TEXT_CHUNK },
@@ -210,6 +218,8 @@ const PREVIEW = {
 type Ctx = PaneData & {
   icons: Icons
   budget: { left: number }
+  // The hover cards' own budget: they are drawn hidden, so the pane's does not pay for them.
+  cardBudget: { left: number }
   // The longest measured call of the shown turn: what a bar is relative to.
   maxMs: number
 }
@@ -287,6 +297,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     ...input,
     icons: input.icons ?? ICON_SETS.nerd,
     budget: { left: PANE_TEXT_BUDGET },
+    cardBudget: { left: CARD_BUDGET },
     maxMs: longestCall(input, turn),
   }
   const trunc = cutter(data.icons)
@@ -794,6 +805,8 @@ type Line = {
   duration?: number
   model?: string
   onPress: () => void
+  // The lines of the card a hover on the row reveals.
+  card?: readonly string[]
 }
 
 function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined, below?: RenderChildren) {
@@ -875,9 +888,40 @@ function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined,
           )}
         </Box>
       </Box>
+      {line.card !== undefined && (
+        <Box
+          key={`card-${id}`}
+          position="absolute"
+          display="none"
+          top={1}
+          left={CARD_INDENT}
+          flexDirection="column"
+          borderStyle={icons.border}
+          borderColor={C.muted}
+          paddingX={1}
+          hover={{ scope: scopeOf('row:', id), display: 'flex' }}
+        >
+          {line.card.map(text => (
+            <Text color={C.muted}>{text}</Text>
+          ))}
+        </Box>
+      )}
       {below}
     </Box>
   )
+}
+
+// The hover card of a collapsed tool row: the first lines of its input, while
+// the cards' budget lasts.
+function cardFor(item: Item, data: Ctx, place: TreePlace | undefined): readonly string[] | undefined {
+  if (item.kind !== 'tool') return undefined
+  const width = data.columns - CARD_SLACK - (place === undefined ? 0 : TRACE_INDENT)
+  const lines = hoverCard(item, Math.max(8, width), data.icons)
+  if (lines === undefined) return undefined
+  const cost = lines.reduce((sum, line) => sum + line.length, 0)
+  if (cost > data.cardBudget.left) return undefined
+  data.cardBudget.left -= cost
+  return lines
 }
 
 // The rows of a turn (no `path`) or of a trace (the guides of its parent
@@ -976,6 +1020,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
       duration: itemDuration(item, data),
       model: item.kind === 'tool' && item.agentId ? data.agentStats[item.agentId]?.model : undefined,
       onPress: () => canOpen && act.toggle(item.id),
+      ...(isOpen || !canOpen ? {} : { card: cardFor(item, data, place) }),
     },
     data,
     place,
