@@ -1,7 +1,7 @@
 // The team board: teammates with their state and the tasks Claude planned.
+import { agentStatusColor, C } from '../theme'
 import { taskMark, type TaskEntry, type TeamMember } from '../model/team'
 import { padEndDisplay } from '../model/width'
-import { agentStatusColor, C } from '../theme'
 import { LINE, textLine, type Ctx, type PaneParts } from './context'
 import { cutter, endWrap, isUnicodeCut, type El } from './kit'
 
