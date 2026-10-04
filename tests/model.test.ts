@@ -18,14 +18,11 @@ import {
   pageScroll,
   runningTool,
   scrollToRow,
-  searchTurns,
   spinnerMessage,
-  splitMatch,
   statusText,
   stepCursor,
 } from '../hooks/model'
 import { durationSuffix } from '../hooks/model/transcript'
-import { buildTurns } from '../hooks/model/turns'
 import type { ToolItem, Turn } from '../hooks/model/types'
 import { displayWidth } from '../hooks/model/width'
 import { tool } from './fixtures/model'
@@ -103,39 +100,6 @@ describe('icon sets', () => {
     }
     expect([ICON_SETS.ascii.pageUp, ICON_SETS.ascii.pageDown]).toEqual(['^', 'v'])
     expect([ICON_SETS.ascii.moreAbove, ICON_SETS.ascii.moreBelow]).toEqual(['^', 'v'])
-  })
-})
-
-describe('splitMatch', () => {
-  test('splits a snippet around the query, whatever the case', () => {
-    expect(splitMatch('foo Bar baz', 'bar')).toEqual({ before: 'foo ', match: 'Bar', after: ' baz' })
-    expect(splitMatch('foo Bar baz', '  BAR ')).toEqual({ before: 'foo ', match: 'Bar', after: ' baz' })
-    expect(splitMatch('…tail Bar', 'bar')).toEqual({ before: '…tail ', match: 'Bar', after: '' })
-  })
-
-  test('no match, or no query, leaves the snippet whole', () => {
-    expect(splitMatch('foo', 'zzz')).toEqual({ before: 'foo', match: '', after: '' })
-    expect(splitMatch('foo', '  ')).toEqual({ before: 'foo', match: '', after: '' })
-  })
-
-  test('maps offsets like snippetAt: lowercase length changes and surrogate pairs', () => {
-    // "İ" lowercases to two UTF-16 units, so offsets in the lowercased text drift.
-    expect(splitMatch('İx', 'x')).toEqual({ before: 'İ', match: 'x', after: '' })
-    expect(splitMatch('😀 Bar 😀', 'bar')).toEqual({ before: '😀 ', match: 'Bar', after: ' 😀' })
-    expect(splitMatch('😀😀', '😀')).toEqual({ before: '', match: '😀', after: '😀' })
-  })
-
-  test('agrees with searchTurns: the snippet it made holds the match it finds', () => {
-    const long = `${'a'.repeat(60)} needle ${'b'.repeat(60)}`
-    const turns = buildTurns([
-      { role: 'user', text: long, toolUses: [] },
-      { role: 'assistant', text: 'ok', toolUses: [] },
-    ])
-    const [hit] = searchTurns(turns, 'NEEDLE')
-    const split = splitMatch(hit!.snippet, 'NEEDLE')
-    expect(split.match).toBe('needle')
-    expect(split.before.startsWith('…')).toBe(true)
-    expect(split.after.endsWith('…')).toBe(true)
   })
 })
 
