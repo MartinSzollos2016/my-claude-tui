@@ -52,7 +52,6 @@ export const C = {
   muted: 'inactive',
   subtle: 'subtle',
   branch: 'merged',
-  dirty: 'warning',
   interrupted: 'warning',
   modePlan: 'planMode',
   modeAcceptEdits: 'autoAccept',

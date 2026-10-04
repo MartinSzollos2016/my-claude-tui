@@ -15,7 +15,7 @@ export type TurnStat = {
 // What a subagent's own turn.complete reported.
 export type AgentStat = { model?: string; durationMs?: number }
 
-export type GitInfo = { branch: string; isDirty: boolean }
+export type GitInfo = { branch: string }
 
 declare module 'claude-code' {
   interface PluginState {

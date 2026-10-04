@@ -706,37 +706,53 @@ describe('compact tool calls', () => {
 })
 
 describe('what the plugin runs and touches', () => {
-  test('git status runs with fsmonitor off, no locks and no prompts', async ($, on) => {
+  test('reads the branch from .git/HEAD and starts no program', async ($, on) => {
     mock.store(on)
-    const runs: { argv: readonly string[]; env?: Record<string, string> }[] = []
-    on('process.run', (_$, e) => {
-      runs.push({ argv: e.argv, env: e.init?.env })
-      return {
-        value: { exitCode: 0, stdout: '## main\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
-      }
+    const reads: string[] = []
+    let ranProgram = false
+    on('process.run', () => {
+      ranProgram = true
+      return { value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     })
-    on('session.cwd', () => ({ value: '/tmp/repo' }))
+    on('session.repo', () => ({ value: { root: '/r', remote: null, internal: false, name: null } }))
+    on('fs.stat', (_$, e) => ({
+      value: { kind: e.path === '/r/.git' ? ('dir' as const) : ('file' as const), size: 0, mtimeMs: 0, isLink: false },
+    }))
+    on('fs.read', (_$, e) => {
+      reads.push(e.path)
+      return { value: 'ref: refs/heads/feat/turns\n' }
+    })
+    on('session.root', () => ({ value: '/r' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
     on('command.register', (_$, e) => ({ value: { command: e.name } }))
     on('ui.open', () => ({ value: { isPlaced: false as const, reason: 'test' } }))
     on('session.start', (_$, e) => ({ cwd: e.cwd }))
 
-    await $.session.start({ cwd: '/tmp/repo', surface: 'terminal', isInteractive: true } as never)
-    // git status runs detached from session.start; wait for it.
+    await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true } as never)
+    // The branch is read detached from session.start; wait for it.
     const timers = globalThis as unknown as { setTimeout: (run: () => void, ms: number) => void }
-    for (let i = 0; i < 100 && runs.length === 0; i++) await new Promise<void>(resolve => timers.setTimeout(resolve, 5))
+    for (let i = 0; i < 100 && reads.length === 0; i++)
+      await new Promise<void>(resolve => timers.setTimeout(resolve, 5))
+    await new Promise<void>(resolve => timers.setTimeout(resolve, 20))
 
-    expect(runs[0]?.argv).toEqual([
-      'git',
-      '--no-optional-locks',
-      '-c',
-      'core.fsmonitor=false',
-      '-c',
-      'core.untrackedCache=false',
-      'status',
-      '--porcelain=v1',
-      '--branch',
-    ])
-    expect(runs[0]?.env).toEqual({ GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' })
+    expect(reads).toEqual(['/r/.git/HEAD'])
+    expect(ranProgram).toBe(false)
+    const ui = await $.ui.mount({
+      plugin: 'tail-view',
+      surface: 'terminal',
+      component: 'AbovePrompt',
+      props: {
+        hasSurvey: false,
+        isWorking: false,
+        maxRows: 10,
+        bodyColumns: 120,
+        scroll: { offset: 0, bodyRows: 10 },
+        view: {},
+      },
+    })
+    expect(await ui.find({ text: /feat\/turns/ })).toBeDefined()
+    await ui.unmount()
   })
 
   test('commands that are not tail-view pass by untouched', async ($, on) => {
