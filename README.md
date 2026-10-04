@@ -99,10 +99,10 @@ when it loads the plugin. The pre-push hook runs `npm run check`, `npm run cover
 `npm audit`; CI runs the same plus gitleaks and an install from the marketplace
 (`scripts/smoke-install.sh`).
 
-Coverage (Vitest with Istanbul) measures the unit tests: about 73 % of lines overall and
-95–100 % of the logic and views, with floors enforced in CI and the pre-push hook. The hook
-wiring in `register.tsx` is exercised only by the render tests, which run inside Claude Code's
-sandboxed test runner and cannot be instrumented.
+Coverage (Vitest with Istanbul) measures the unit tests and the hook wiring: `tests/register.vitest.ts`
+runs `register.tsx`'s hooks against a fake engine (`tests/coverage/engine.ts`), while the render tests
+drive the same hooks inside Claude Code's sandboxed test runner, which cannot be instrumented. Floors
+are enforced in CI and the pre-push hook.
 
 Commits use [Conventional Commits](https://www.conventionalcommits.org/) with a
 [gitmoji](https://gitmoji.dev/), e.g. `✨ feat(view): add turn list`.
