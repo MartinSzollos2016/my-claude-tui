@@ -103,6 +103,9 @@ type World = {
   isGitDir: boolean
   hasRepo: boolean
   now: number
+  // While set, a read of the main transcript returns the rows it saw when it
+  // started only once this settles: a slow read of an older transcript.
+  hold?: Promise<void>
   copyResult: UiCopyResult
   // What the plugin did, for the tests to read.
   store: Map<string, unknown>
@@ -149,7 +152,9 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
         world.calls.push(`messages:${args?.as ?? args?.agentId ?? 'main'}`)
         if (args?.as === 'api') return world.api
         if (args?.agentId !== undefined) return world.agentMessages[args.agentId] ?? { deny: `no ${args.agentId}` }
-        return world.messages
+        const rows = world.messages
+        if (world.hold !== undefined) await world.hold
+        return rows
       },
       model: async () => 'claude-opus-5-5',
       usage: async () => ({

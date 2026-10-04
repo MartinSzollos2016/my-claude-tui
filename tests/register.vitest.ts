@@ -1231,6 +1231,25 @@ describe('finish toasts', () => {
     },
   ]
 
+  test('a slow look at an older transcript does not toast a finished Workflow again', async () => {
+    const { $, world } = fakeEngine({ messages: workflowRows })
+    await say($, 'tail-notify', 'on')
+    await start($)
+    await tick(world)
+    let release = () => undefined as unknown
+    world.hold = new Promise<void>(resolve => (release = () => resolve()))
+    world.timers[0]!()
+    await settle()
+    world.hold = undefined
+    world.messages = doneRows
+    await tick(world)
+    expect(world.toasts).toEqual(['Workflow finished'])
+    release()
+    await settle()
+    await tick(world)
+    expect(world.toasts).toEqual(['Workflow finished'])
+  })
+
   test('a Workflow whose result arrives with its turn ending toasts once', async () => {
     const { $, world } = fakeEngine({ messages: workflowRows })
     await say($, 'tail-notify', 'on')
