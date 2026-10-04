@@ -56,6 +56,13 @@ export type Icons = {
   groupSep: string
   // The thin rule above the footer.
   rule: string
+  // The footer's arrows: previous and next turn, cursor down and up; and the
+  // line between its two columns.
+  navPrev: string
+  navNext: string
+  cursorDown: string
+  cursorUp: string
+  columnSep: string
   // The duration bar's steps from one to eight eighths of a cell, and the
   // sign of a group's call count.
   bar: readonly string[]
@@ -106,6 +113,11 @@ const nerd: Icons = {
   treeGuide: '│  ',
   groupSep: '·',
   rule: '─',
+  navPrev: '‹',
+  navNext: '›',
+  cursorDown: '↓',
+  cursorUp: '↑',
+  columnSep: '│',
   bar: ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'],
   times: '×',
 }
@@ -173,6 +185,11 @@ const ascii: Icons = {
   treeGuide: '|  ',
   groupSep: '.',
   rule: '-',
+  navPrev: '<',
+  navNext: '>',
+  cursorDown: 'v',
+  cursorUp: '^',
+  columnSep: '|',
   bar: ['-', '-', '-', '-', '-', '-', '-', '='],
   times: 'x',
 }
