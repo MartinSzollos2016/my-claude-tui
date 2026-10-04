@@ -809,17 +809,46 @@ const CARD_CHARS = 600
 // The preview a collapsed tool row shows on hover: the first lines of its
 // input frame (the command, the path and parameters), each cut to `width`
 // cells and the whole to CARD_CHARS characters. Undefined when the call
-// has no input to show.
+// has no input to show. Read from the input alone: a pane draws a card for
+// every collapsed row, so none builds a diff or the output.
 export function hoverCard(item: ToolItem, width: number, glyphs: Glyphs = DEFAULT_GLYPHS): string[] | undefined {
-  const section = cachedSections(item, glyphs).find(s => s.kind !== 'output' && s.kind !== 'error')
-  if (section === undefined || section.body.trim() === '') return undefined
+  const source = cardSource(item, glyphs)
+  if (source.length === 0) return undefined
   const lines: string[] = []
   let left = CARD_CHARS
-  for (const raw of section.body.split('\n').slice(0, CARD_LINES)) {
+  for (const raw of source.slice(0, CARD_LINES)) {
     if (left <= 0) break
     const line = [...truncateDisplay(sanitizeText(raw), Math.max(1, width), glyphs.ellipsis)].slice(0, left).join('')
     lines.push(line)
     left -= line.length + 1
+  }
+  return lines
+}
+
+// The first lines of a call's input frame, at most CARD_LINES of them.
+function cardSource(item: ToolItem, glyphs: Glyphs): string[] {
+  if (item.tool === 'Edit' || item.tool === 'MultiEdit') return editCardLines(item)
+  const body = inputSections(item, glyphs)[0]?.body ?? ''
+  return body.trim() === '' ? [] : body.split('\n', CARD_LINES)
+}
+
+// An edit's card: per edit its first old lines as - and its first new lines
+// as +, half the room each unless one side is shorter.
+function editCardLines(item: ToolItem): string[] {
+  const f = item.input
+  const edits = item.tool === 'Edit' ? [f] : Array.isArray(f['edits']) ? (f['edits'] as unknown[]) : []
+  const lines: string[] = []
+  for (const e of edits) {
+    const room = CARD_LINES - lines.length
+    if (room <= 0) break
+    const edit = e !== null && typeof e === 'object' ? (e as Record<string, unknown>) : {}
+    const before = str(edit, 'old_string')
+    const after = str(edit, 'new_string')
+    if (before === '' && after === '') continue
+    const olds = before.split('\n', CARD_LINES)
+    const news = after.split('\n', CARD_LINES)
+    const oldTake = Math.min(olds.length, Math.max(Math.ceil(room / 2), room - news.length))
+    lines.push(...olds.slice(0, oldTake).map(l => `-${l}`), ...news.slice(0, room - oldTake).map(l => `+${l}`))
   }
   return lines
 }
@@ -1418,7 +1447,11 @@ export function toolSections(item: ToolItem, glyphs: Glyphs = DEFAULT_GLYPHS): S
   return sections
 }
 
-const MAX_CACHED_SECTIONS = 200
+const MIN_CACHED_SECTIONS = 200
+const MAX_CACHED_SECTIONS = 2000
+// How many items the cache keeps: twice the calls of the shown turn, so a
+// pass over all of them (a folded run's text) hits on the next drawing.
+let sectionRoom = MIN_CACHED_SECTIONS
 const sectionCache = new Map<string, { key: string; sections: Section[] }>()
 
 // A cheap fingerprint of what the sections are built from.
@@ -1430,8 +1463,14 @@ function fingerprint(item: ToolItem, glyphs: Glyphs): string {
   return `${item.tool}|${json.length}|${hash}|${result === undefined ? -1 : result.length}|${item.isError ? 1 : 0}|${glyphs.dot}${glyphs.ellipsis}${glyphs.taskDone}`
 }
 
-// toolSections kept for the last 200 items: the pane draws again twice a
-// second, and a diff or a numbered Read is not worth computing each time.
+// Sizes the cache to a turn of `calls` tool calls (its traces included).
+export function reserveSections(calls: number): void {
+  sectionRoom = Math.min(MAX_CACHED_SECTIONS, Math.max(MIN_CACHED_SECTIONS, 2 * calls))
+}
+
+// toolSections kept for the last items drawn (see reserveSections): the pane
+// draws again twice a second, and a diff or a numbered Read is not worth
+// computing each time.
 export function cachedSections(item: ToolItem, glyphs: Glyphs = DEFAULT_GLYPHS): Section[] {
   const key = fingerprint(item, glyphs)
   const cached = sectionCache.get(item.id)
@@ -1439,8 +1478,18 @@ export function cachedSections(item: ToolItem, glyphs: Glyphs = DEFAULT_GLYPHS):
   const sections = toolSections(item, glyphs)
   sectionCache.delete(item.id)
   sectionCache.set(item.id, { key, sections })
-  while (sectionCache.size > MAX_CACHED_SECTIONS) sectionCache.delete(sectionCache.keys().next().value as string)
+  while (sectionCache.size > sectionRoom) sectionCache.delete(sectionCache.keys().next().value as string)
   return sections
+}
+
+// For tests: the cache is module state shared by every file that draws, so a
+// test that counts on it starts it empty and reads how many items it holds.
+export function resetSectionCache(): void {
+  sectionCache.clear()
+}
+
+export function sectionCacheSize(): number {
+  return sectionCache.size
 }
 
 // -- Layout and the compact transcript ----------------------------------------

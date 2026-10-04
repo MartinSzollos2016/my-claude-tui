@@ -30,6 +30,7 @@ import {
   type GroupItem,
   fitPath,
   hoverCard,
+  reserveSections,
   formatTokens,
   isAgentRunning,
   isSubagent,
@@ -302,6 +303,8 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     cardBudget: { left: CARD_BUDGET },
     maxMs: longestCall(input, turn),
   }
+  const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces)]
+  reserveSections(lists.reduce((sum, items) => sum + items.length, 0))
   const trunc = cutter(data.icons)
   if (data.view === 'team') return paneBody(el, data, renderTeam(el, data, act))
 
@@ -915,14 +918,18 @@ function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined,
 }
 
 // The hover card of a collapsed tool row: the first lines of its input, while
-// the cards' budget lasts.
+// the cards' budget lasts. The first card that does not fit spends it, so
+// the rows after it build none.
 function cardFor(item: Item, data: Ctx, place: TreePlace | undefined): readonly string[] | undefined {
-  if (item.kind !== 'tool') return undefined
+  if (item.kind !== 'tool' || data.cardBudget.left <= 0) return undefined
   const width = data.columns - CARD_SLACK - (place === undefined ? 0 : TRACE_INDENT)
   const lines = hoverCard(item, Math.max(8, width), data.icons)
   if (lines === undefined) return undefined
   const cost = lines.reduce((sum, line) => sum + line.length, 0)
-  if (cost > data.cardBudget.left) return undefined
+  if (cost > data.cardBudget.left) {
+    data.cardBudget.left = 0
+    return undefined
+  }
   data.cardBudget.left -= cost
   return lines
 }
