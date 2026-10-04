@@ -20,6 +20,8 @@ import {
   callInput,
   buildTurns,
   compactCall,
+  durationSuffix,
+  engineDuration,
   cursorRows,
   moveCursor,
   rowText,
@@ -36,6 +38,7 @@ import {
   sanitizePrompt,
   sanitizeText,
   searchTurns,
+  spinnerMessage,
   shortPath,
   statusText,
   taskBoard,
@@ -229,12 +232,17 @@ let runningTools: readonly RunningTool[] = []
 // The status line as last set, so an unchanged text is not set again.
 let lastStatus: string | undefined
 
+// The /tail-status switch: on unless stored false.
+async function isStatusOn($: EngineInterface): Promise<boolean> {
+  return (await $.store.get(STATUS_KEY)) !== false
+}
+
 // The switches and the icon set, read once per tick and passed on.
 type Prefs = { isStatusOn: boolean; isNotifyOn: boolean; icons: Icons }
 
 async function loadPrefs($: EngineInterface): Promise<Prefs> {
   return {
-    isStatusOn: (await $.store.get(STATUS_KEY)) !== false,
+    isStatusOn: await isStatusOn($),
     isNotifyOn: (await $.store.get(NOTIFY_KEY)) === true,
     icons: await currentIcons($),
   }
@@ -250,6 +258,8 @@ async function syncStatus($: EngineInterface, given?: Prefs): Promise<void> {
   if (text === lastStatus) return
   lastStatus = text
   $.ui.status(text)
+  // The transcript's spinner says the same, so it is drawn again too.
+  $.ui.invalidate('ui.render')
 }
 
 // Removes the status line at once, whatever the tools say.
@@ -815,6 +825,29 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
     if (!e.props.isExpanded || !(await isCompact($))) return next(e)
     return next({ ...e, props: { ...e.props, isExpanded: false } })
+  })
+
+  // While a main-loop tool runs the spinner names it, as the status line
+  // does; /tail-status off leaves the engine's own text.
+  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
+    if (!(await isStatusOn($))) return next(e)
+    const message = spinnerMessage(runningTools, await $.clock.now(), await currentIcons($))
+    if (message === undefined) return next(e)
+    // An empty suffix: the engine's own would add a Unicode ellipsis to the text.
+    return next({ ...e, props: { ...e.props, message, suffix: '' } })
+  })
+
+  // The engine's "Baked for 3s" line plus the last turn's counts. The line
+  // has no text prop to append to, so it is drawn whole in its place.
+  on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
+    if (!(await isStatusOn($))) return next(e)
+    const icons = await currentIcons($)
+    const tail = durationSuffix((await currentTurns($)).value.at(-1), icons.dot)
+    if (tail === '') return next(e)
+    const { Text } = $.ui.resolve(e) as unknown as El
+    return (
+      <Text color={C.muted}>{`${sanitizeText(e.props.word)} for ${engineDuration(e.props.durationMs)}${tail}`}</Text>
+    )
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

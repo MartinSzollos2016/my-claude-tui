@@ -37,6 +37,7 @@ import {
   unifiedDiff,
   type Item,
   type ToolItem,
+  type Turn,
   itemSummary,
   sanitizePrompt,
   sanitizeText,
@@ -50,6 +51,9 @@ import {
   cursorRows,
   rowText,
   hoverCard,
+  spinnerMessage,
+  durationSuffix,
+  engineDuration,
   truncate,
   truncateMiddle,
   turnTable,
@@ -1504,5 +1508,50 @@ describe('hoverCard', () => {
 
   test('a call with no input has no card', () => {
     expect(hoverCard({ ...bash('x'), input: {} }, 40, ICON_SETS.nerd)).toBeUndefined()
+  })
+})
+
+describe('spinnerMessage and durationSuffix', () => {
+  const started = (tool: string, input: Record<string, unknown>, at: number) => runningTool(tool, tool, input, at)
+
+  test('the spinner says the tool, a 40 character summary and the elapsed time', () => {
+    const bash = started('Bash', { command: 'go test ./...' }, 0)
+    expect(spinnerMessage([bash], 12_400, ICON_SETS.nerd)).toBe('Bash go test ./... · 12s')
+    expect(spinnerMessage([bash], 72_000, ICON_SETS.ascii)).toBe('Bash go test ./... . 1m 12s')
+    const long = started('Bash', { command: `echo ${'x'.repeat(100)}` }, 0)
+    const summary = spinnerMessage([long], 0, ICON_SETS.nerd)!.slice('Bash '.length, -' · 0s'.length)
+    expect([...summary]).toHaveLength(40)
+    expect(spinnerMessage([], 0, ICON_SETS.nerd)).toBeUndefined()
+    expect(spinnerMessage([started('Task', {}, 0)], 1_000, ICON_SETS.nerd)).toBe('Subagent Task · 1s')
+  })
+
+  test('the oldest running call is the one the spinner names', () => {
+    const calls = [started('Bash', { command: 'ls' }, 5_000), started('Grep', { pattern: 'x' }, 1_000)]
+    expect(spinnerMessage(calls, 6_000, ICON_SETS.nerd)).toBe('Grep "x" · 5s')
+  })
+
+  test('the suffix counts tools and agents when they are not zero', () => {
+    const turn = (toolCount: number, subagentCount: number): Turn => ({
+      index: 0,
+      prompt: '',
+      items: [],
+      toolCount,
+      outputCount: 0,
+      subagentCount,
+    })
+    expect(durationSuffix(turn(4, 1), '·')).toBe(' · 3 tools · 1 agent')
+    expect(durationSuffix(turn(1, 0), '.')).toBe(' . 1 tool')
+    expect(durationSuffix(turn(2, 2), '·')).toBe(' · 2 agents')
+    expect(durationSuffix(turn(0, 0), '·')).toBe('')
+    expect(durationSuffix(undefined, '·')).toBe('')
+  })
+})
+
+describe('engineDuration', () => {
+  test('is whole seconds, then minutes and seconds, as the engine words its line', () => {
+    expect(engineDuration(0)).toBe('0s')
+    expect(engineDuration(2_600)).toBe('3s')
+    expect(engineDuration(59_400)).toBe('59s')
+    expect(engineDuration(64_000)).toBe('1m 4s')
   })
 })

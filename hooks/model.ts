@@ -271,6 +271,13 @@ export function formatDuration(ms: number): string {
   return `${secs.toFixed(1)}s`
 }
 
+// A turn's duration the way the engine words its closing line: whole
+// seconds, then minutes and seconds ("3s", "1m 4s").
+export function engineDuration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`
+}
+
 export function formatClock(ms: number): string {
   const d = new Date(ms)
   const hours = d.getHours()
@@ -1487,12 +1494,27 @@ export function resultLine(output: unknown, isErrored: boolean): string {
 
 // The counts a turn list row shows: "3 tools · 1 agent", or "reply" for a
 // turn that only answered.
-function turnCounts(turn: Turn, dot: string): string {
+function countParts(turn: Turn): string[] {
   const parts: string[] = []
   const tools = turn.toolCount - turn.subagentCount
   if (tools > 0) parts.push(`${tools} tool${tools === 1 ? '' : 's'}`)
   if (turn.subagentCount > 0) parts.push(`${turn.subagentCount} agent${turn.subagentCount === 1 ? '' : 's'}`)
+  return parts
+}
+
+function turnCounts(turn: Turn, dot: string): string {
+  const parts = countParts(turn)
   return parts.length > 0 ? parts.join(` ${dot} `) : 'reply'
+}
+
+// What the engine's "Baked for 3s" line gets appended: " . 3 tools . 1 agent"
+// for the counts that are not zero, nothing for a turn that only answered.
+export function durationSuffix(turn: Turn | undefined, dot: string): string {
+  return turn === undefined
+    ? ''
+    : countParts(turn)
+        .map(part => ` ${dot} ${part}`)
+        .join('')
 }
 
 // A turn row's tail: its counts, then how long it took when that is known.
@@ -1855,16 +1877,34 @@ function statusIcon(tool: string, icons: Icons): string {
 // it has run, e.g. "$ Bash go test ./... . 12s". The oldest running call is
 // the one shown; undefined when nothing runs.
 export function statusText(running: readonly RunningTool[], now: number, icons: Icons): string | undefined {
-  const oldest = running.reduce<RunningTool | undefined>(
+  const oldest = oldestRunning(running)
+  if (oldest === undefined) return undefined
+  return `${statusIcon(oldest.tool, icons)} ${runningLine(oldest, now, STATUS_SUMMARY, icons)}`
+}
+
+const SPINNER_SUMMARY = 40
+
+// The transcript spinner's text while a main-loop tool runs: the tool, its
+// summary cut to 40 characters in the middle and the elapsed time, e.g.
+// "Bash go test ./... . 12s". Undefined when nothing runs.
+export function spinnerMessage(running: readonly RunningTool[], now: number, icons: Icons): string | undefined {
+  const oldest = oldestRunning(running)
+  return oldest === undefined ? undefined : runningLine(oldest, now, SPINNER_SUMMARY, icons)
+}
+
+const oldestRunning = (running: readonly RunningTool[]) =>
+  running.reduce<RunningTool | undefined>(
     (best, r) => (best === undefined || r.startedAt < best.startedAt ? r : best),
     undefined,
   )
-  if (oldest === undefined) return undefined
-  const secs = Math.max(0, Math.floor((now - oldest.startedAt) / 1000))
+
+// "Name summary . 12s": what the status line and the spinner both say.
+function runningLine(call: RunningTool, now: number, summaryMax: number, icons: Icons): string {
+  const secs = Math.max(0, Math.floor((now - call.startedAt) / 1000))
   const elapsed = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`
-  const { name, summary } = compactCall(oldest.tool, oldest.input, icons.ellipsis)
-  const shown = summary === '' ? '' : ` ${truncateMiddle(summary, STATUS_SUMMARY, icons.ellipsis)}`
-  return `${statusIcon(oldest.tool, icons)} ${name}${shown} ${icons.dot} ${elapsed}`
+  const { name, summary } = compactCall(call.tool, call.input, icons.ellipsis)
+  const shown = summary === '' ? '' : ` ${truncateMiddle(summary, summaryMax, icons.ellipsis)}`
+  return `${name}${shown} ${icons.dot} ${elapsed}`
 }
 
 // -- Team board ---------------------------------------------------------------
