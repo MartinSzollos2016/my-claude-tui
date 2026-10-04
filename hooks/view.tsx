@@ -528,90 +528,63 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
 function renderNav(el: El, data: Ctx, act: PaneActions) {
   const { Box, Button, Text } = el
   const total = data.turns.length
+  const hasTeam = (data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0
+  const button = (key: string, hotkey: string, label: string, onPress: () => void) => (
+    <Button
+      key={key}
+      plain
+      dimColor
+      hover={buttonHover(`btn:${key}`)}
+      hotkey={hotkey}
+      label={label}
+      onPress={onPress}
+    />
+  )
+
+  // Three groups; one that has nothing to show is left out whole.
+  const groups = [
+    {
+      id: 'move',
+      buttons: [
+        data.selected > 0 && button('nav-prev', 'p', 'prev', act.prev),
+        data.selected < total - 1 && button('nav-next', 'n', 'next', act.next),
+        !data.isLatest && button('nav-latest', 'l', 'latest', act.latest),
+      ],
+    },
+    {
+      id: 'views',
+      buttons: [
+        button('nav-turns', 't', 'turns', act.showTurns),
+        button('nav-search', 's', 'search', act.focusSearch),
+        hasTeam && button('nav-team', 'm', 'team', act.showTeam),
+      ],
+    },
+    {
+      id: 'expand',
+      buttons: [
+        button('nav-expand', 'e', 'expand all', act.expandAll),
+        button('nav-collapse', 'c', 'collapse', act.collapseAll),
+      ],
+    },
+  ]
+    .map(group => ({ ...group, buttons: group.buttons.filter(b => b !== false) }))
+    .filter(group => group.buttons.length > 0)
 
   return (
-    <Box flexDirection="row" gap={2}>
-      {data.selected > 0 && (
-        <Button
-          key="nav-prev"
-          plain
-          dimColor
-          hover={buttonHover('btn:nav-prev')}
-          hotkey="p"
-          label="prev"
-          onPress={act.prev}
-        />
-      )}
+    <Box key="nav" flexDirection="row" flexWrap="wrap" columnGap={2}>
       <Text color={C.muted}>{`turn ${data.selected + 1}/${total}${data.isLatest ? ' (live)' : ''}`}</Text>
-      {data.selected < total - 1 && (
-        <Button
-          key="nav-next"
-          plain
-          dimColor
-          hover={buttonHover('btn:nav-next')}
-          hotkey="n"
-          label="next"
-          onPress={act.next}
-        />
-      )}
-      {!data.isLatest && (
-        <Button
-          key="nav-latest"
-          plain
-          dimColor
-          hover={buttonHover('btn:nav-latest')}
-          hotkey="l"
-          label="latest"
-          onPress={act.latest}
-        />
-      )}
-      <Button
-        key="nav-turns"
-        plain
-        dimColor
-        hover={buttonHover('btn:nav-turns')}
-        hotkey="t"
-        label="turns"
-        onPress={act.showTurns}
-      />
-      <Button
-        key="nav-search"
-        plain
-        dimColor
-        hover={buttonHover('btn:nav-search')}
-        hotkey="s"
-        label="search"
-        onPress={act.focusSearch}
-      />
-      {(data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0 && (
-        <Button
-          key="nav-team"
-          plain
-          dimColor
-          hover={buttonHover('btn:nav-team')}
-          hotkey="m"
-          label="team"
-          onPress={act.showTeam}
-        />
-      )}
-      <Button
-        key="nav-expand"
-        plain
-        dimColor
-        hover={buttonHover('btn:nav-expand')}
-        hotkey="e"
-        label="expand all"
-        onPress={act.expandAll}
-      />
-      <Button
-        key="nav-collapse"
-        plain
-        dimColor
-        hover={buttonHover('btn:nav-collapse')}
-        hotkey="c"
-        label="collapse"
-        onPress={act.collapseAll}
-      />
+      {groups.flatMap((group, i) => [
+        ...(i > 0
+          ? [
+              <Text key={`nav-sep-${group.id}`} color={C.muted}>
+                {data.icons.groupSep}
+              </Text>,
+            ]
+          : []),
+        <Box key={`nav-group-${group.id}`} flexDirection="row" gap={2}>
+          {group.buttons}
+        </Box>,
+      ])}
     </Box>
   )
 }
