@@ -250,6 +250,67 @@ describe('detail pane', () => {
     expect(world.calls.filter(call => call === 'messages:agent-done').length).toBe(1)
   })
 
+  describe('subagent trace cache', () => {
+    const spawn = (agentId: string): SessionMessage[] => [
+      { role: 'user', text: `Run ${agentId}`, toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          {
+            tool_use_id: `t-${agentId}`,
+            tool: 'Agent',
+            input: { subagent_type: 'Explore', description: `Job ${agentId}` },
+            agentId,
+            text: 'ok',
+          },
+        ],
+      },
+    ]
+    const reply = (more: string): SessionMessage[] => [
+      { role: 'user', text: 'Go', toolUses: [] },
+      { role: 'assistant', text: more, toolUses: [] },
+    ]
+
+    test('re-reads a finished agent once it resumes', async () => {
+      const { $, world } = fakeEngine({
+        messages: spawn('agent-resume'),
+        agentMessages: { 'agent-resume': reply('First answer') },
+        agents: [{ id: 'agent-resume', description: 'Job', type: 'Explore', status: 'completed' }],
+      })
+      await press($, 't-agent-resume')
+      expect(text(await draw($))).toContain('First answer')
+      world.agents = [{ id: 'agent-resume', description: 'Job', type: 'Explore', status: 'running' }]
+      world.agentMessages['agent-resume'] = reply('Resumed answer')
+      expect(text(await draw($))).toContain('Resumed answer')
+    })
+
+    test('reuses a running agent trace until it changes', async () => {
+      let reads = 0
+      const steady: SessionMessage = {
+        role: 'assistant',
+        toolUses: [],
+        get text() {
+          reads += 1
+          return 'Working.'
+        },
+      }
+      const tail: SessionMessage = { role: 'user', text: 'Next', toolUses: [] }
+      const { $, world } = fakeEngine({
+        messages: spawn('agent-live'),
+        agentMessages: { 'agent-live': [{ role: 'user', text: 'Go', toolUses: [] }, steady, tail] },
+        agents: [{ id: 'agent-live', description: 'Job', type: 'Explore', status: 'running' }],
+      })
+      await press($, 't-agent-live')
+      await draw($)
+      await draw($)
+      expect(reads).toBe(1)
+      world.agentMessages['agent-live'] = [{ role: 'user', text: 'Go', toolUses: [] }, steady, tail, ...reply('More')]
+      await draw($)
+      expect(reads).toBe(2)
+    })
+  })
+
   test('says why a trace is unavailable', async () => {
     const { $ } = fakeEngine({ messages: main })
     await press($, 'a1')
