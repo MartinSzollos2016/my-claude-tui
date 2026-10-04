@@ -627,13 +627,15 @@ export function chunkMarkdown(text: string, size: number): string[] {
 // are cut only at line boundaries, each piece a valid diff of its own.
 
 const MAX_DIFF_LINES = 2000
+// The LCS table of the changed middle may hold this many cells (about 1 MB).
+const MAX_DIFF_CELLS = 250_000
 
 type DiffOp = { op: ' ' | '-' | '+'; text: string }
 
 const linesOf = (text: string) => (text === '' ? [] : text.split('\n'))
 
 // Line by line LCS of the changed middle, after the common head and tail.
-function diffOps(before: readonly string[], after: readonly string[]): DiffOp[] {
+function diffOps(before: readonly string[], after: readonly string[]): DiffOp[] | null {
   let head = 0
   while (head < before.length && head < after.length && before[head] === after[head]) head++
   let tail = 0
@@ -645,6 +647,7 @@ function diffOps(before: readonly string[], after: readonly string[]): DiffOp[] 
     tail++
   const a = before.slice(head, before.length - tail)
   const b = after.slice(head, after.length - tail)
+  if (a.length * b.length > MAX_DIFF_CELLS) return null
   const width = b.length + 1
   const table = new Uint32Array((a.length + 1) * width)
   for (let i = a.length - 1; i >= 0; i--) {
@@ -676,10 +679,14 @@ function diffOps(before: readonly string[], after: readonly string[]): DiffOp[] 
 
 // The header of a hunk whose first old and new lines are numbered `oldNo`
 // and `newNo`; an empty side counts from the line before, as diff does.
+function formatHeader(oldNo: number, newNo: number, oldCount: number, newCount: number): string {
+  return `@@ -${oldCount === 0 ? oldNo - 1 : oldNo},${oldCount} +${newCount === 0 ? newNo - 1 : newNo},${newCount} @@`
+}
+
 function hunkHeader(oldNo: number, newNo: number, lines: readonly string[]): string {
   const oldCount = lines.filter(l => l[0] === ' ' || l[0] === '-').length
   const newCount = lines.filter(l => l[0] === ' ' || l[0] === '+').length
-  return `@@ -${oldCount === 0 ? oldNo - 1 : oldNo},${oldCount} +${newCount === 0 ? newNo - 1 : newNo},${newCount} @@`
+  return formatHeader(oldNo, newNo, oldCount, newCount)
 }
 
 // Unified-diff hunks turning `oldText` into `newText`, `context` unchanged
@@ -696,6 +703,7 @@ export function unifiedDiff(
   const after = linesOf(newText)
   if (before.length > MAX_DIFF_LINES || after.length > MAX_DIFF_LINES) return null
   const ops = diffOps(before, after)
+  if (ops === null) return null
   const changed = ops.flatMap((o, i) => (o.op === ' ' ? [] : [i]))
   if (changed.length === 0) return ''
 
@@ -775,21 +783,27 @@ export function splitDiff(diff: string, maxLines: number, maxChars: number): str
     let startNew = newNo
     let body: string[] = []
     let bodyChars = 0
+    let oldCount = 0
+    let newCount = 0
 
+    // What the piece would hold with `extra` appended: counters, not a rebuild.
     const size = (extra: string) => {
-      const header = hunkHeader(startOld, startNew, [...body, extra]).length
+      const o = oldCount + (extra[0] === ' ' || extra[0] === '-' ? 1 : 0)
+      const n = newCount + (extra[0] === ' ' || extra[0] === '+' ? 1 : 0)
       return {
         lines: done.length + 1 + body.length + 1,
-        chars: doneChars + header + 1 + bodyChars + extra.length + 1,
+        chars: doneChars + formatHeader(startOld, startNew, o, n).length + 1 + bodyChars + extra.length + 1,
       }
     }
     const commit = () => {
       if (body.length === 0) return
-      const text = [hunkHeader(startOld, startNew, body), ...body]
+      const text = [formatHeader(startOld, startNew, oldCount, newCount), ...body]
       done.push(...text)
       doneChars += text.reduce((sum, l) => sum + l.length + 1, 0)
       body = []
       bodyChars = 0
+      oldCount = 0
+      newCount = 0
       startOld = oldNo
       startNew = newNo
     }
@@ -809,6 +823,8 @@ export function splitDiff(diff: string, maxLines: number, maxChars: number): str
       }
       body.push(line)
       bodyChars += line.length + 1
+      if (line[0] === ' ' || line[0] === '-') oldCount++
+      if (line[0] === ' ' || line[0] === '+') newCount++
       if (line[0] !== '+' && line[0] !== '\\') oldNo++
       if (line[0] !== '-' && line[0] !== '\\') newNo++
     }
@@ -904,22 +920,26 @@ const codeOrText = (path: string): SectionFormat =>
 
 // A line of Read's output or of an Edit's cat -n snippet: "   12→text" or
 // "12<tab>text".
-const NUMBERED_LINE = /^\s*(\d+)(?:→|\t)(.*)$/
+const NUMBERED_LINE = /^\s*(\d+)(?:→|\t)([\s\S]*)$/
 
 // Text whose every line is numbered, the numbers running on by one: the
 // first number and the lines without theirs. null for anything else, which
 // is then drawn as it is.
 export function parseNumbered(text: string): { startLine: number; body: string } | null {
   if (text === '') return null
+  const lines = text.split('\n')
   const body: string[] = []
   let startLine = 0
-  for (const [i, line] of text.split('\n').entries()) {
-    const found = NUMBERED_LINE.exec(line)
+  for (const [i, raw] of lines.entries()) {
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw
+    // The last line may be a blank one whose tab was trimmed off: "13".
+    const bare = i > 0 && i === lines.length - 1 ? /^\s*(\d+)$/.exec(line) : null
+    const found = NUMBERED_LINE.exec(line) ?? bare
     if (!found) return null
     const n = Number(found[1])
     if (i === 0) startLine = n
     else if (n !== startLine + i) return null
-    body.push(found[2]!)
+    body.push(found[2] ?? '')
   }
   return { startLine, body: body.join('\n') }
 }
@@ -940,14 +960,19 @@ export function pieceStarts(text: string, pieces: readonly string[]): number[] {
   return starts
 }
 
-// The number the edited text starts at in the file: its first line as the
-// result's cat -n snippet shows it; 1 when the result carries no snippet.
+// The number the edited text starts at in the file: where its whole block of
+// lines sits in the result's cat -n snippet; 1 when there is no snippet or
+// the block is not found in it.
 function editStartLine(result: string | undefined, newText: string): number {
-  const first = newText.split('\n')[0] ?? ''
-  if (result === undefined || first.trim() === '') return 1
-  for (const line of result.split('\n')) {
-    const found = NUMBERED_LINE.exec(line)
-    if (found && found[2] === first) return Number(found[1])
+  if (result === undefined || newText === '') return 1
+  const snippet = result.split('\n').flatMap(line => {
+    const found = NUMBERED_LINE.exec(line.endsWith('\r') ? line.slice(0, -1) : line)
+    return found ? [{ n: Number(found[1]), text: found[2]! }] : []
+  })
+  const block = newText.split('\n')
+  for (let i = 0; i + block.length <= snippet.length; i++) {
+    if (block.every((text, k) => snippet[i + k]!.text === text && snippet[i + k]!.n === snippet[i]!.n + k))
+      return snippet[i]!.n
   }
   return 1
 }
@@ -1107,6 +1132,31 @@ export function toolSections(item: ToolItem, glyphs: Glyphs = DEFAULT_GLYPHS): S
       ? { kind: 'code', ...(path === '' ? {} : { path }), startLine: numbered.startLine }
       : outputFormat(item),
   })
+  return sections
+}
+
+const MAX_CACHED_SECTIONS = 200
+const sectionCache = new Map<string, { key: string; sections: Section[] }>()
+
+// A cheap fingerprint of what the sections are built from.
+function fingerprint(item: ToolItem, glyphs: Glyphs): string {
+  const json = JSON.stringify(item.input)
+  let hash = 5381
+  for (let i = 0; i < json.length; i++) hash = ((hash << 5) + hash + json.charCodeAt(i)) | 0
+  const result = item.resultText
+  return `${item.tool}|${json.length}|${hash}|${result === undefined ? -1 : result.length}|${item.isError ? 1 : 0}|${glyphs.dot}${glyphs.ellipsis}${glyphs.taskDone}`
+}
+
+// toolSections kept for the last 200 items: the pane draws again twice a
+// second, and a diff or a numbered Read is not worth computing each time.
+export function cachedSections(item: ToolItem, glyphs: Glyphs = DEFAULT_GLYPHS): Section[] {
+  const key = fingerprint(item, glyphs)
+  const cached = sectionCache.get(item.id)
+  if (cached?.key === key) return cached.sections
+  const sections = toolSections(item, glyphs)
+  sectionCache.delete(item.id)
+  sectionCache.set(item.id, { key, sections })
+  while (sectionCache.size > MAX_CACHED_SECTIONS) sectionCache.delete(sectionCache.keys().next().value as string)
   return sections
 }
 
@@ -1399,6 +1449,29 @@ export function finishedSince(prev: ReadonlyMap<string, AgentStatus>, next: read
     const before = prev.get(a.id)
     return before !== undefined && !isAgentFinished(before) && isAgentFinished(a.status)
   })
+}
+
+// -- Finished workflows -------------------------------------------------------
+
+// Follows the Workflow calls of the latest turn by id. `tracked` holds those
+// seen pending; a tracked call that now has its result is finished. One left
+// pending when the session stops working (an interrupt), gone from the turn
+// or ended interrupted is dropped without being reported.
+export function finishedWorkflows(
+  tracked: ReadonlySet<string>,
+  turn: Turn | undefined,
+  isWorking: boolean,
+): { tracked: Set<string>; finished: string[] } {
+  const calls = new Map<string, ToolItem>()
+  for (const item of turn?.items ?? []) if (item.kind === 'tool' && item.tool === 'Workflow') calls.set(item.id, item)
+  const next = new Set<string>()
+  const finished: string[] = []
+  for (const [id, item] of calls) {
+    if (item.isPending) {
+      if (isWorking) next.add(id)
+    } else if (tracked.has(id) && item.isInterrupted !== true) finished.push(id)
+  }
+  return { tracked: next, finished }
 }
 
 // -- Status line --------------------------------------------------------------
