@@ -508,6 +508,22 @@ async function scrollPane($: EngineInterface, move: EngineScroll): Promise<UiScr
   return {}
 }
 
+// The turn the detail view's scroll belongs to, by its index and prompt, as
+// last drawn: the scroll starts over when the shown turn changes for any
+// reason, a new latest turn no prompt of this session started included.
+let scrolledTurn: string | undefined
+
+// The detail scroll for drawing `turnKey`: kept for the same turn, back to
+// the top (and stored so) for another one.
+async function detailScroll($: EngineInterface, turnKey: string): Promise<number> {
+  const stored = (await read($, paneScroll)).detail
+  const isOtherTurn = scrolledTurn !== undefined && scrolledTurn !== turnKey
+  scrolledTurn = turnKey
+  if (!isOtherTurn || stored === 0) return stored
+  await update($, paneScroll, all => ({ ...all, detail: 0 }))
+  return 0
+}
+
 // Every view's content back to the top: the shown turn or the view changed.
 async function scrollToTop($: EngineInterface): Promise<void> {
   await update($, paneScroll, () => TOP)
@@ -793,6 +809,8 @@ export const register: Register = on => {
       await scrollToTop($)
     }
     const view = await read($, paneView)
+    const turnKey = turn === undefined ? '' : `${turn.index}\u0000${turn.prompt}`
+    const detailTop = await detailScroll($, turnKey)
     const scrolled = await read($, paneScroll)
     const query = await read($, searchQuery)
     const isSearching = view === 'turns' && query.trim() !== ''
@@ -848,7 +866,7 @@ export const register: Register = on => {
         isFocused: e.props.isFocused,
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
-        scrollTop: scrolled[view],
+        scrollTop: view === 'detail' ? detailTop : scrolled[view],
         full: new Set(fullIds),
         view,
         query,
