@@ -190,8 +190,8 @@ describe('live data', () => {
 
     await press($, 'nav-turns')
     const list = await draw($)
-    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('1.0s')
-    expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
+    expect(text(byKey(list, 'turn-0'))).toContain('1.0s')
+    expect(text(byKey(list, 'turn-1'))).toContain('9.0s')
   })
 
   test('identical prompts queued before their rows appear still pair in order', async () => {
@@ -211,8 +211,8 @@ describe('live data', () => {
     await finish('b', 7_000, $)
     await press($, 'nav-turns')
     const list = await draw($)
-    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('2.0s')
-    expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('7.0s')
+    expect(text(byKey(list, 'turn-0'))).toContain('2.0s')
+    expect(text(byKey(list, 'turn-1'))).toContain('7.0s')
   })
 
   test('a delivery queued into a running turn adds no pending index', async () => {
@@ -227,7 +227,7 @@ describe('live data', () => {
     await finish('a', 4_000, $)
     await press($, 'nav-turns')
     const list = await draw($)
-    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('4.0s')
+    expect(text(byKey(list, 'turn-0'))).toContain('4.0s')
   })
 
   test('a dropped prompt leaves no pending index behind', async () => {
@@ -252,8 +252,8 @@ describe('live data', () => {
     }
     await press($, 'nav-turns')
     const list = await draw($)
-    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('1.0s')
-    expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
+    expect(text(byKey(list, 'turn-0'))).toContain('1.0s')
+    expect(text(byKey(list, 'turn-1'))).toContain('9.0s')
   })
 
   test('a dropped or failed prompt leaves the pane and the Workflow badge idle', async () => {
@@ -306,9 +306,9 @@ describe('live data', () => {
     await finish('c', 5_000, $)
     await press($, 'nav-turns')
     const list = await draw($)
-    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('1.0s')
-    expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
-    expect(String(byKey(list, 'turn-2')?.props['label'])).toContain('5.0s')
+    expect(text(byKey(list, 'turn-0'))).toContain('1.0s')
+    expect(text(byKey(list, 'turn-1'))).toContain('9.0s')
+    expect(text(byKey(list, 'turn-2'))).toContain('5.0s')
   })
 
   test('a stat does not move to another turn when old rows leave the window', async () => {
@@ -331,8 +331,8 @@ describe('live data', () => {
 
     await press($, 'nav-turns')
     const list = await draw($)
-    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('9.0s')
-    expect(String(byKey(list, 'turn-1')?.props['label'])).not.toMatch(/\d\.\ds/)
+    expect(text(byKey(list, 'turn-0'))).toContain('9.0s')
+    expect(text(byKey(list, 'turn-1'))).not.toMatch(/\d\.\ds/)
     await press($, 'nav-detail')
     expect(text(await draw($))).not.toContain('9.0s')
   })
@@ -345,7 +345,7 @@ describe('live data', () => {
     await finish('n', 3_000, $)
     await press($, 'nav-turns')
     const list = await draw($)
-    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('3.0s')
+    expect(text(byKey(list, 'turn-0'))).toContain('3.0s')
   })
 
   test('times tool calls and turns, and notes the permission mode', async () => {

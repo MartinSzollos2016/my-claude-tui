@@ -82,6 +82,18 @@ const G = {
 
 // A hovered button reads at full contrast: its idle label is the theme grey.
 const HOVER_TEXT = { color: C.text, bold: true } as const
+// A hover scope the engine accepts: 1 to 64 characters. Ids can be long (a
+// subagent's tool id carries its agent id), so an over-long tail is replaced
+// by a short stable hash (32-bit FNV-1a, base36) of the whole string.
+const SCOPE_MAX = 64
+function scopeOf(prefix: string, id: string): string {
+  const full = `${prefix}${id}`
+  if (full.length <= SCOPE_MAX) return full
+  let hash = 0x811c9dc5
+  for (let i = 0; i < full.length; i++) hash = Math.imul(hash ^ full.charCodeAt(i), 0x01000193) >>> 0
+  const tail = hash.toString(36)
+  return `${full.slice(0, SCOPE_MAX - tail.length - 1)}~${tail}`
+}
 const buttonHover = (scope: string) => ({ scope, ...HOVER_TEXT })
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -312,14 +324,20 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
         )}
         {shown.map(row => (
           <Box key={`turn-row-${row.index}`} flexDirection="column">
-            <Button
-              key={`turn-${row.index}`}
-              plain
-              dimColor
-              label={row.label}
-              hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
-              onPress={() => act.pickTurn(row.index)}
-            />
+            {row.index === data.selected ? (
+              <Text key={`turn-${row.index}`} bold color={C.text}>
+                {row.label}
+              </Text>
+            ) : (
+              <Button
+                key={`turn-${row.index}`}
+                plain
+                dimColor
+                label={row.label}
+                hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
+                onPress={() => act.pickTurn(row.index)}
+              />
+            )}
             {row.snippet !== '' && (
               <Text color={C.muted} wrap="truncate-end">{`      ${sanitizeText(row.snippet)}`}</Text>
             )}
@@ -566,7 +584,14 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
       <Box flexDirection="row">
         <Text color={isOpen ? C.text : C.muted}>{`${isOpen ? G.expanded : G.collapsed} `}</Text>
         <Text color={C.accent}>{`${G.thinking} `}</Text>
-        <Button key={id} plain dimColor hover={buttonHover(`btn:${id}`)} label={label} onPress={() => act.toggle(id)} />
+        <Button
+          key={id}
+          plain
+          dimColor
+          hover={buttonHover(scopeOf('btn:', id))}
+          label={label}
+          onPress={() => act.toggle(id)}
+        />
       </Box>
       {isOpen && (
         <Box flexDirection="column" marginLeft={4} marginBottom={1}>
@@ -628,7 +653,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
   // row toggles it; the label is cut to the room the fixed columns leave.
   const room = width - 2 - 3 - spinner.length - modelText.length - 2 - 7
   const label = truncate(summary ? `${name.padEnd(12)} - ${summary}` : name, Math.max(8, room))
-  const hover = { scope: `row:${item.id}`, backgroundColor: C.rowHover }
+  const hover = { scope: scopeOf('row:', item.id), backgroundColor: C.rowHover }
   const toggle = () => canOpen && act.toggle(item.id)
 
   return (
@@ -750,7 +775,7 @@ function renderFrame(
           key={`copy:${blockId}`}
           plain
           dimColor
-          hover={buttonHover(`btn:copy:${blockId}`)}
+          hover={buttonHover(scopeOf('btn:copy:', blockId))}
           label="copy"
           onPress={press => act.copy(copyText, press.surface)}
         />
@@ -799,7 +824,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
           key={`full:${id}`}
           plain
           dimColor
-          hover={buttonHover(`btn:full:${id}`)}
+          hover={buttonHover(scopeOf('btn:full:', id))}
           label={`${shown.note} – show all`}
           onPress={() => act.toggleFull(id)}
         />
@@ -809,7 +834,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
           key={`full:${id}`}
           plain
           dimColor
-          hover={buttonHover(`btn:full:${id}`)}
+          hover={buttonHover(scopeOf('btn:full:', id))}
           label="show less"
           onPress={() => act.toggleFull(id)}
         />
