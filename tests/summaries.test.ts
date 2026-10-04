@@ -174,4 +174,8 @@ describe('formatting edges', () => {
       expect(help).toContain(name)
     }
   })
+
+  test('helpText names the page keys of the pane', () => {
+    expect(helpText()).toContain('f/b page the pane down/up')
+  })
 })
