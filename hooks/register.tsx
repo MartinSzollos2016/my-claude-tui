@@ -125,6 +125,12 @@ function visibleIds(items: readonly Item[], traces: ReadonlyMap<string, Trace>):
   return ids
 }
 
+// Background work started from a hook: its failure (the session ended, a
+// pane could not open) must not surface as an unhandled rejection.
+function detach(work: Promise<unknown>): void {
+  work.catch(() => undefined)
+}
+
 // Module-local: a reload starts these over, which only costs a missed frame.
 let ticker: Timer | undefined
 let frame = 0
@@ -146,7 +152,7 @@ async function onTick($: EngineInterface): Promise<void> {
 // Redraws twice a second while anything runs: spinners and elapsed times.
 function startTicker($: EngineInterface) {
   if (ticker) return
-  ticker = $.clock.every(TICK_MS, () => void onTick($))
+  ticker = $.clock.every(TICK_MS, () => detach(onTick($)))
 }
 
 // Names the tail-view theme matching the current one; picking it is the
@@ -223,8 +229,8 @@ export const register: Register = on => {
         'Open the tail-claude detail view; bar: info bar, compact: one-line tool results, width N: pane share %, theme: pane theme',
       argumentHint: '[bar|compact|width N|theme]',
     })
-    void refreshGit($)
-    void openPane($, false)
+    detach(refreshGit($))
+    detach(openPane($, false))
     return started
   })
 
@@ -300,7 +306,7 @@ export const register: Register = on => {
       }
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
-      void refreshGit($)
+      detach(refreshGit($))
     }
     await bump($)
     return next(e)
@@ -349,18 +355,18 @@ export const register: Register = on => {
       },
       {
         toggle: id =>
-          void update($, expanded, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED))),
-        prev: () => void setTurn(cur => cur - 1),
-        next: () => void setTurn(cur => cur + 1),
-        latest: () => void setTurn(() => null),
+          detach(update($, expanded, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED)))),
+        prev: () => detach(setTurn(cur => cur - 1)),
+        next: () => detach(setTurn(cur => cur + 1)),
+        latest: () => detach(setTurn(() => null)),
         expandAll: () =>
-          void update($, expanded, ids => [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED)),
+          detach(update($, expanded, ids => [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED))),
         collapseAll: () => {
-          void update($, expanded, () => [])
-          void update($, fullBlocks, () => [])
+          detach(update($, expanded, () => []))
+          detach(update($, fullBlocks, () => []))
         },
         toggleFull: id =>
-          void update($, fullBlocks, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED))),
+          detach(update($, fullBlocks, ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-MAX_EXPANDED)))),
       },
     )
   })
@@ -383,7 +389,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    void autoSize($, e.viewport?.columns)
+    detach(autoSize($, e.viewport?.columns))
     if (e.props.hasSurvey || (await read($, isBarHidden))) return next(e)
     await read($, tick)
 
