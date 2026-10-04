@@ -27,8 +27,8 @@ declare module 'claude-code' {
       tick: number
       // Selected turn index; null follows the latest.
       turn: number | null
-      // What the pane shows: one turn in detail, or the list of turns.
-      view: 'detail' | 'turns'
+      // What the pane shows: one turn in detail, the list of turns, or the team board.
+      view: 'detail' | 'turns' | 'team'
       // Expanded row ids (tool_use_id, output id, agentId/child id).
       expanded: string[]
       // Blocks shown whole instead of previewed (output, input, result ids).

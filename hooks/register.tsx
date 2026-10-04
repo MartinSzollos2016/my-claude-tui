@@ -29,6 +29,8 @@ import {
   sanitizeText,
   searchTurns,
   shortPath,
+  taskBoard,
+  teamMembers,
   thinkingCounts,
   traceItems,
   turnListText,
@@ -36,6 +38,7 @@ import {
   turnText,
   workflowState,
   type Item,
+  type TaskEntry,
   type Turn,
   type TurnMatch,
   type TurnThinking,
@@ -102,6 +105,7 @@ async function refreshGit($: EngineInterface): Promise<void> {
 let turnsCache: Memo<Turn[]> | undefined
 let searchCache: Memo<TurnMatch[]> | undefined
 let thinkingCache: Memo<TurnThinking[]> | undefined
+let tasksCache: Memo<TaskEntry[]> | undefined
 
 // Thinking per turn from the Messages API form, read again only when the
 // transcript's fingerprint moved.
@@ -489,7 +493,8 @@ export const register: Register = on => {
     const selected = chosen === null || chosen > latest ? latest : chosen
     const turn = turns[selected]
     const open = new Set(await read($, expanded))
-    const agents = new Map((await $.agent.list()).map(a => [a.id, a.status] as const))
+    const agentList = await $.agent.list()
+    const agents = new Map(agentList.map(a => [a.id, a.status] as const))
     const traces = await loadTraces($, turn?.items ?? [], open, agents)
     const usage = await $.session.usage()
     const allStats = await read($, turnStats)
@@ -502,6 +507,8 @@ export const register: Register = on => {
 
     const thinkingByTurn = view === 'detail' && turn ? await turnThinking($, turnsMemo.key) : []
     const thinking = alignFromEnd(thinkingByTurn, turns.length, selected)
+    tasksCache = memo(tasksCache, turnsMemo.key, () => taskBoard(turns))
+    const tasks = tasksCache.value
 
     const thinkingIds = turn && thinking && thinking.text !== '' ? [`t${turn.index}:thinking`] : []
 
@@ -530,6 +537,8 @@ export const register: Register = on => {
         query,
         matches: isSearching ? searchCache?.value : undefined,
         stats: turns.map(t => statFor(allStats, t)),
+        members: teamMembers(agentList),
+        tasks,
       },
       {
         toggle: id => update($, expanded, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
@@ -546,6 +555,7 @@ export const register: Register = on => {
         },
         showTurns: () => update($, paneView, () => 'turns' as const).catch(ignore),
         showDetail: () => update($, paneView, () => 'detail' as const).catch(ignore),
+        showTeam: () => update($, paneView, () => 'team' as const).catch(ignore),
         pickTurn: index => pickTurn($, index, latest).catch(ignore),
         search: value => update($, searchQuery, () => value).catch(ignore),
         submitSearch: value => openMatch($, value, turns).catch(ignore),

@@ -54,7 +54,8 @@ export function helpText(): string {
     'tail-view commands:',
     ...lines,
     '',
-    'In the pane: Tab/shift+Tab move, Enter or click expands a row, p/n/l previous/next/latest turn, t turn list,',
-    's search turns, e/c expand/collapse all, "show all" opens a long block, "copy" copies it whole, Esc returns to the prompt.',
+    'In the pane: Tab/shift+Tab move, Enter or click expands a row, p/n/l previous/next/latest turn,',
+    't turn list, s search turns, m team board, e/c expand/collapse all, "show all" opens a long block,',
+    '"copy" copies it whole, Esc returns to the prompt.',
   ].join('\n')
 }

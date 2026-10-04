@@ -10,6 +10,9 @@ import {
   isAgentFinished,
   isAgentRunning,
   searchTurns,
+  taskBoard,
+  taskMark,
+  teamMembers,
   thinkingCounts,
   turnListText,
   turnTail,
@@ -300,5 +303,90 @@ describe('workflowState', () => {
     expect(workflowState(wf('done'), 2, true)).toEqual({ isRunning: false })
     expect(workflowState(buildTurns([prompt('hi')])[0], 0, true)).toEqual({ isRunning: false })
     expect(workflowState(undefined, 0, true)).toEqual({ isRunning: false })
+  })
+})
+
+describe('taskBoard', () => {
+  const use = (id: string, tool: string, input: Record<string, unknown>, text?: string): ToolUseSummary => ({
+    tool_use_id: id,
+    tool,
+    input,
+    ...(text === undefined ? {} : { text }),
+  })
+
+  test('creates, reassigns and completes tasks, the latest state winning', () => {
+    const board = taskBoard(
+      buildTurns([
+        prompt('Plan'),
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            use('c1', 'TaskCreate', { subject: 'Write tests' }, 'Task #1 created successfully: Write tests'),
+            use('c2', 'TaskCreate', { subject: 'Ship' }, 'Task #2 created successfully: Ship'),
+            use('c3', 'TaskCreate', { subject: 'Drop me' }, 'Task #3 created successfully: Drop me'),
+          ],
+        },
+        prompt('Go'),
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            use('u1', 'TaskUpdate', { taskId: '1', status: 'in_progress', owner: 'alice' }, 'Updated task #1'),
+            use('u2', 'TaskUpdate', { taskId: '1', owner: 'bob', subject: 'Write more tests' }, 'ok'),
+            use('u3', 'TaskUpdate', { taskId: '2', status: 'completed' }, 'ok'),
+            use('u4', 'TaskUpdate', { taskId: '3', status: 'deleted' }, 'ok'),
+            use('u5', 'TaskUpdate', { taskId: '7', status: 'in_progress' }, 'ok'),
+            use('u6', 'TaskUpdate', { status: 'completed' }, 'ok'),
+            use('u7', 'TaskCreate', { subject: 'Failed' }, 'boom'),
+          ],
+        },
+      ]),
+    )
+    expect(board).toEqual([
+      { id: '1', subject: 'Write more tests', status: 'in_progress', owner: 'bob' },
+      { id: '2', subject: 'Ship', status: 'completed' },
+      { id: '7', subject: 'Task #7', status: 'in_progress' },
+      { id: '4', subject: 'Failed', status: 'pending' },
+    ])
+  })
+
+  test('skips failed calls and numbers a task whose result has no id', () => {
+    const board = taskBoard(
+      buildTurns([
+        prompt('Plan'),
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            { ...use('c1', 'TaskCreate', { subject: 'Nope' }, 'error'), isError: true },
+            use('c2', 'TaskCreate', {}),
+          ],
+        },
+      ]),
+    )
+    expect(board).toEqual([{ id: '1', subject: 'Untitled task', status: 'pending' }])
+    expect(taskBoard([])).toEqual([])
+  })
+
+  test('marks a task as TodoWrite does', () => {
+    expect(taskMark('pending')).toBe('☐')
+    expect(taskMark('in_progress')).toBe('◐')
+    expect(taskMark('completed')).toBe('☑')
+  })
+})
+
+describe('teamMembers', () => {
+  test('lists teammates only, by the name before @', () => {
+    expect(
+      teamMembers([
+        { id: 'a', description: 'd', type: 'teammate', status: 'idle', teammateId: 'alice@crew' },
+        { id: 'b', description: 'd', type: 'Explore', status: 'running' },
+        { id: 'c', description: 'd', type: 'reviewer', status: 'running', teammateId: 'bo\u001b[31mb@crew' },
+      ]),
+    ).toEqual([
+      { name: 'alice', type: 'teammate', status: 'idle' },
+      { name: 'bob', type: 'reviewer', status: 'running' },
+    ])
   })
 })

@@ -595,6 +595,35 @@ describe('detail pane', () => {
     await press($, 'full:b1:output')
     expect(text(await draw($))).toContain('line 499')
   })
+
+  test('opens the team board with teammates and tasks', async () => {
+    const plain = fakeEngine({ messages: main })
+    expect(byKey(await draw(plain.$), 'nav-team')).toBeUndefined()
+
+    const { $ } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'Plan', toolUses: [] },
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            {
+              tool_use_id: 'c1',
+              tool: 'TaskCreate',
+              input: { subject: 'Write tests' },
+              text: 'Task #1 created successfully: Write tests',
+            },
+          ],
+        },
+      ],
+      agents: [{ id: 'tm1', teammateId: 'alice@crew', description: 'help', type: 'teammate', status: 'running' }],
+    })
+    await press($, 'nav-team')
+    const all = text(await draw($))
+    expect(all).toContain('Team (1)')
+    expect(all).toContain('alice')
+    expect(all).toContain('☐ #1 Write tests')
+  })
 })
 
 describe('compact transcript', () => {

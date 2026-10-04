@@ -120,6 +120,7 @@ const act = {
   toggleFull: (id: string) => calls.push(`full:${id}`),
   showTurns: () => calls.push('showTurns'),
   showDetail: () => calls.push('showDetail'),
+  showTeam: () => calls.push('showTeam'),
   pickTurn: (i: number) => calls.push(`pick:${i}`),
   search: (query: string) => calls.push(`search:${query}`),
   submitSearch: (query: string) => calls.push(`submit:${query}`),
@@ -362,6 +363,27 @@ describe('renderPane', () => {
         'collapseAll',
       ]),
     )
+  })
+
+  test('the team view lists teammates and tasks; its nav button only shows with a team', () => {
+    expect(byKey(renderPane(el, base, act), 'nav-team')).toBeUndefined()
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    const tasks = [
+      { id: '1', subject: 'Write tests', status: 'in_progress', owner: 'alice' },
+      { id: '2', subject: 'Ship', status: 'completed' },
+    ]
+    const detail = renderPane(el, { ...base, members, tasks }, act)
+    ;(byKey(detail, 'nav-team')?.props['onPress'] as () => void)()
+    expect(calls).toContain('showTeam')
+
+    const team = renderPane(el, { ...base, view: 'team', members, tasks }, act)
+    const all = text(team)
+    expect(all).toContain('Team (1)')
+    expect(all).toContain('alice')
+    expect(all).toContain('◐ #1 Write tests  → alice')
+    expect(all).toContain('☑ #2 Ship')
+    expect(nodes(team).some(n => n.props['color'] === 'success' && text(n) === 'running')).toBe(true)
+    expect(text(renderPane(el, { ...base, view: 'team', turns: [] }, act))).toContain('No teammates in this session.')
   })
 })
 

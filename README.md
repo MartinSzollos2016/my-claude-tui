@@ -11,6 +11,8 @@ A Claude Code plugin that brings the detail view and info bar of
   detail is in the pane.
 - **Info bar** above the prompt: project, git branch, permission mode, running agents and a running Workflow,
   context usage and cost.
+- **Team board** (`m` in the pane, in a team session): teammates with their status and the tasks
+  from `TaskCreate` / `TaskUpdate`.
 
 Colors are Claude Code theme keys, so the plugin follows `/theme`.
 
@@ -47,15 +49,16 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 
 ## Keys in the pane
 
-| Key                    | Action                                              |
-| ---------------------- | --------------------------------------------------- |
-| Tab / shift+Tab        | move between rows                                   |
-| Enter / click on a row | expand or collapse, drill into a subagent           |
-| `p` / `n` / `l`        | previous / next / latest turn                       |
-| `t` / `d`              | turn list / back to detail                          |
-| `s`                    | search the turn list (Enter opens the newest match) |
-| `e` / `c`              | expand all / collapse all                           |
-| Esc                    | back to the prompt                                  |
+| Key                    | Action                                                    |
+| ---------------------- | --------------------------------------------------------- |
+| Tab / shift+Tab        | move between rows                                         |
+| Enter / click on a row | expand or collapse, drill into a subagent                 |
+| `p` / `n` / `l`        | previous / next / latest turn                             |
+| `t` / `d`              | turn list / back to detail                                |
+| `s`                    | search the turn list (Enter opens the newest match)       |
+| `m`                    | team board: teammates and tasks (shown in a team session) |
+| `e` / `c`              | expand all / collapse all                                 |
+| Esc                    | back to the prompt                                        |
 
 Long blocks show a preview with **show all** / **show less**; **copy** in a section's frame copies the whole block.
 
