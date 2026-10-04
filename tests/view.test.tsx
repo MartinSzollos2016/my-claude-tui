@@ -1804,3 +1804,69 @@ describe('group and bar regressions', () => {
     expect(text(tree).length).toBeLessThan(100_000)
   })
 })
+
+describe('group status', () => {
+  const three = (extra: Record<string, unknown> = {}) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          { tool_use_id: 's1', tool: 'Read', input: { file_path: '/a' }, text: 'x' },
+          { tool_use_id: 's2', tool: 'Read', input: { file_path: '/b' }, text: 'x', ...extra },
+          { tool_use_id: 's3', tool: 'Read', input: { file_path: '/c' } },
+        ],
+      },
+    ])
+  const glyph = (props: Record<string, unknown>) =>
+    text(byKey(renderPane(el, { ...base, turns: three(), ...props }, act), 'status-group:s1'))
+
+  test('a stale pending member makes the group idle, not a spinner', () => {
+    expect(glyph({ isLatest: false })).toBe('· ')
+    expect(glyph({ isLatest: true, isWorking: false })).toBe('· ')
+  })
+
+  test('a pending member of the live turn keeps the spinner', () => {
+    expect(glyph({ isLatest: true, isWorking: true })).toBe('⠋ ')
+  })
+
+  test('an interrupted member shows interrupted', () => {
+    const turns = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [1, 2, 3].map(n => ({
+          tool_use_id: `i${n}`,
+          tool: 'Read',
+          input: { file_path: `/${n}` },
+          text: 'x',
+          ...(n === 2 ? { interrupted: true } : {}),
+        })),
+      },
+    ])
+    const items = turns[0]!.items.map(it =>
+      it.kind === 'tool' && it.id === 'i2' ? { ...it, isInterrupted: true } : it,
+    )
+    const tree = renderPane(el, { ...base, turns: [{ ...turns[0]!, items }] }, act)
+    expect(text(byKey(tree, 'status-group:i1'))).toBe('⏸ ')
+  })
+
+  test('the bar scale ignores traces of other turns', () => {
+    const other = buildTurns(
+      [{ role: 'assistant', text: '', toolUses: [{ tool_use_id: 'z', tool: 'Bash', input: {}, text: 'x' }] }],
+      'zz/',
+    )[0]!.items
+    const tree = renderPane(
+      el,
+      {
+        ...base,
+        traces: new Map([['zz', { items: other }]]),
+        timings: { ...base.timings, z: { start: 0, end: 900_000 } },
+      },
+      act,
+    )
+    expect(text(nodes(tree).find(n => n.props['key'] === 'bar-a1'))).toBe('████████')
+  })
+})

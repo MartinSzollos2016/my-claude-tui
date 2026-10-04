@@ -250,10 +250,18 @@ function groupDuration(group: GroupItem, data: Timed): number | undefined {
   return times.length === 0 ? undefined : times.reduce((sum, d) => sum + d, 0)
 }
 
+// The loaded traces of the subagents among `items`, nested ones included.
+function tracesOf(items: readonly Item[], traces: PaneData['traces']): Item[][] {
+  return items.filter(isSubagent).flatMap(item => {
+    const trace = traces.get(item.agentId)
+    return trace && 'items' in trace ? [trace.items, ...tracesOf(trace.items, traces)] : []
+  })
+}
+
 // The longest measured row among the turn's and its loaded traces' (a
 // folded run counts as its total).
 function longestCall(input: PaneData, turn: Turn | undefined): number {
-  const lists = [turn?.items ?? [], ...[...input.traces.values()].map(trace => ('items' in trace ? trace.items : []))]
+  const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces)]
   const rows = lists.flatMap(items => groupRuns(items))
   return Math.max(
     0,
@@ -860,11 +868,19 @@ function renderRows(el: El, items: readonly Item[], data: Ctx, act: PaneActions,
 
 // A folded run: `Read ×7 · 4 files` with the total time as one bar. Open, it
 // lists the original rows under tree guides.
+// A group's state from its members, the most telling first.
+const STATUS_ORDER: readonly ItemStatus[] = ['running', 'error', 'interrupted', 'idle', 'done']
+
+function groupStatus(group: GroupItem, data: Ctx): ItemStatus {
+  const states = group.items.map(item => itemStatus(item, { ...data, isAgentRunning: false }))
+  return STATUS_ORDER.find(status => states.includes(status)) ?? 'done'
+}
+
 function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, place?: TreePlace) {
   const { icons } = data
   const { Box } = el
   const isOpen = data.expanded.has(group.id)
-  const status = group.items.some(item => item.isPending) ? 'running' : 'done'
+  const status = groupStatus(group, data)
   const children = isOpen && (
     <Box flexDirection="column">
       {group.items.map((child, i) =>
