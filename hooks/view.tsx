@@ -20,6 +20,7 @@ import {
   contextMeter,
   displayWidth,
   footerLayout,
+  footerPads,
   type FooterLayout,
   clampScroll,
   contentRows,
@@ -826,7 +827,17 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
   // As the engine draws a button: `<key>: <label>`.
   const textOf = (k: FooterKey) => `${k.hotkey}: ${footerLabel(k, layout.labels)}`
   const groupWidth = (group: readonly FooterKey[]) => displayWidth(group.map(textOf).join('  '))
-  const keys = (group: readonly FooterKey[]) => group.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels)))
+  // The gap between keys is part of the key before it (trailing cells of its
+  // label), so the row has no cell a click falls through; given a width, the
+  // last key fills the column up to it.
+  const keys = (group: readonly FooterKey[], width?: number) => {
+    const pads = footerPads(
+      group.map(k => displayWidth(textOf(k))),
+      KEY_GAP,
+      width,
+    )
+    return group.map((k, i) => renderFooterKey(el, k, footerLabel(k, layout.labels), pads[i] ?? 0))
+  }
   const inner = data.columns - STATUS_INSET
   const leftWidth = Math.max(groupWidth(move), groupWidth(views))
   const isTwo = layout.columns === 'two'
@@ -836,14 +847,16 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
   const isPageInRow = (isTwo ? leftWidth + 5 : 0) + groupWidth(expand) + 2 + pageWidth <= inner
   const expandKeys = isPageInRow ? [...expand, ...page] : expand
   const columnsRow = (n: number, left: readonly FooterKey[], right: readonly FooterKey[]) => (
-    <Box key={`footer-row-${n}`} flexDirection="row" gap={2}>
-      <Box key={`footer-left-${n}`} flexDirection="row" gap={2} width={leftWidth} flexShrink={0}>
-        {keys(left)}
+    <Box key={`footer-row-${n}`} flexDirection="row">
+      <Box key={`footer-left-${n}`} flexDirection="row" width={leftWidth + KEY_GAP} flexShrink={0}>
+        {keys(left, leftWidth + KEY_GAP)}
       </Box>
-      <Text key={`footer-sep-${n}`} color={C.muted}>
-        {icons.columnSep}
-      </Text>
-      <Box key={`footer-right-${n}`} flexDirection="row" gap={2}>
+      <Box key={`footer-divider-${n}`} width={1 + KEY_GAP} flexShrink={0}>
+        <Text key={`footer-sep-${n}`} color={C.muted}>
+          {icons.columnSep}
+        </Text>
+      </Box>
+      <Box key={`footer-right-${n}`} flexDirection="row">
         {keys(right)}
       </Box>
     </Box>
@@ -857,7 +870,7 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
   const rows = isTwo
     ? [columnsRow(1, move, cursor), columnsRow(2, views, expandKeys)]
     : stacked.map(([id, group]) => (
-        <Box key={`footer-row-${id}`} flexDirection="row" gap={2}>
+        <Box key={`footer-row-${id}`} flexDirection="row">
           {keys(group)}
         </Box>
       ))
@@ -883,7 +896,7 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout,
         statusBox(inner)
       ) : (
         <Box key="footer-last" flexDirection="row" gap={2} width={inner}>
-          <Box key="footer-page" flexDirection="row" gap={2} flexShrink={0}>
+          <Box key="footer-page" flexDirection="row" flexShrink={0}>
             {keys(page)}
           </Box>
           {statusBox(inner - pageWidth - 2)}
@@ -940,12 +953,15 @@ function footerLabel(k: FooterKey, hasLabels: boolean): string {
   return parts.filter(part => part !== undefined && part !== '').join(' ')
 }
 
+// The cells between two keys of the footer.
+const KEY_GAP = 2
+
 // Every key is a Button with its hotkey, also when it cannot act: a key
 // drawn without one would fall through to the prompt and take the focus
 // from the pane. Out of reach, the press is swallowed and changes nothing.
 const swallow = (): undefined => undefined
 
-function renderFooterKey(el: El, k: FooterKey, label: string) {
+function renderFooterKey(el: El, k: FooterKey, label: string, pad: number) {
   const { Button } = el
   return (
     <Button
@@ -954,7 +970,7 @@ function renderFooterKey(el: El, k: FooterKey, label: string) {
       dimColor
       hover={buttonHover(`btn:${k.key}`)}
       hotkey={k.hotkey}
-      label={label}
+      label={`${label}${' '.repeat(pad)}`}
       onPress={k.isOn ? k.onPress : swallow}
     />
   )

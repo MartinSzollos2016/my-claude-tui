@@ -2065,6 +2065,14 @@ export function footerLayout(columns: number): FooterLayout {
   return { rows: 6, columns: 'stacked', labels: columns >= FOOTER_LABELS_FROM }
 }
 
+// The cells after each key of a row that belong to it, so a click between
+// two keys lands on one: the gap to the next key, and for the last key of a
+// column `width` wide the room up to it.
+export function footerPads(widths: readonly number[], gap: number, width?: number): number[] {
+  const used = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, widths.length - 1)
+  return widths.map((_, i) => (i < widths.length - 1 ? gap : Math.max(0, (width ?? used) - used)))
+}
+
 // -- Own scroll ---------------------------------------------------------------
 //
 // The pane is exactly as tall as its window, so the engine has nothing to
