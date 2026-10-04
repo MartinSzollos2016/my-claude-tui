@@ -33,17 +33,17 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 
 ## Commands
 
-| Command                  | What it does                                                         |
-| ------------------------ | -------------------------------------------------------------------- |
-| `/tail`                  | open the detail pane                                                 |
-| `/tail-turns`            | list the session's turns and open one in the pane                    |
-| `/tail-width <30-80>`    | pane width as % of the terminal (default 80, kept)                   |
-| `/tail-compact`          | toggle the compact transcript (on by default, kept)                  |
-| `/tail-icons [set]`      | icon set: `nerd` (default), `unicode` or `ascii`                     |
-| `/tail-bar`              | show or hide the info bar                                            |
-| `/tail-status [on\|off]` | status line under the prompt while a tool runs (on by default, kept) |
-| `/tail-notify [on\|off]` | toast when a subagent or workflow finishes (off by default, kept)    |
-| `/tail-help`             | list commands and keys                                               |
+| Command                  | What it does                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `/tail`                  | open the detail pane                                                            |
+| `/tail-turns`            | list the session's turns and open one in the pane                               |
+| `/tail-width <30-80>`    | pane width as % of the terminal (default 80, kept)                              |
+| `/tail-compact`          | toggle the compact transcript (on by default, kept)                             |
+| `/tail-icons [set]`      | icon set: `nerd` (default), `unicode` or `ascii`                                |
+| `/tail-bar`              | show or hide the info bar                                                       |
+| `/tail-status [on\|off]` | status line, spinner text and turn counts while tools run (on by default, kept) |
+| `/tail-notify [on\|off]` | toast when a subagent or workflow finishes (off by default, kept)               |
+| `/tail-help`             | list commands and keys                                                          |
 
 `/tail <sub>` works too, e.g. `/tail width 70`.
 
@@ -59,10 +59,11 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 | `t` / `d`              | turn list / back to detail                                |
 | `s`                    | search the turn list (Enter opens the newest match)       |
 | `m`                    | team board: teammates and tasks (shown in a team session) |
+| `j` / `k` / `y`        | cursor down / up a row, copy the row under it             |
 | `e` / `c`              | expand all / collapse all                                 |
 | Esc                    | back to the prompt                                        |
 
-Long blocks show a preview with **show all** / **show less**; **copy** in a section's frame copies the whole block.
+Hovering a collapsed row previews its input in a card. Long blocks show a preview with **show all** / **show less**; **copy** in a section's frame copies the whole block.
 
 ## Pane frame
 
