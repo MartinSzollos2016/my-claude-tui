@@ -406,6 +406,20 @@ describe('live data', () => {
 })
 
 describe('detail pane', () => {
+  test('passes the pane focus the engine reports into the footer', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    const focus = async (isFocused?: boolean) => {
+      const props = { ...PANE_EVENT.props, ...(isFocused === undefined ? {} : { isFocused }) }
+      if (isFocused === undefined) delete (props as { isFocused?: boolean }).isFocused
+      return text(await run('ui.render', $, { ...PANE_EVENT, props }))
+    }
+    expect(await focus(true)).toContain('keys active')
+    expect(await focus(false)).toContain('ctrl+x tab to use keys')
+    const unknown = await focus(undefined)
+    expect(unknown).not.toContain('keys active')
+    expect(unknown).not.toContain('to use keys')
+  })
+
   test('a failing API read leaves the pane drawn without a thinking count', async () => {
     const { $ } = fakeEngine({
       messages: [
