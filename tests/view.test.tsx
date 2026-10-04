@@ -1528,12 +1528,18 @@ describe('own scroll', () => {
     }
   })
 
-  test('the content is absolute in the window and moved up by scrollTop, clamped to the content', () => {
+  // The engine clamps an absolute box at the top of the tree (measured: the
+  // content moved 3 rows for a top of -33), so the content stays in flow in
+  // the clipped window and a negative top margin moves it up.
+  test('the content is in flow in the window and moved up by a negative top margin, clamped to the content', () => {
     const content = byKey(pane({ rows: 10, scrollTop: 2 }), 'pane-content')!
-    expect(content.props).toMatchObject({ position: 'absolute', top: -2, left: 0, width: 100 })
-    expect(byKey(pane(), 'pane-content')?.props['top']).toBe(0)
-    expect(byKey(pane({ scrollTop: 5 }), 'pane-content')?.props['top']).toBe(0)
-    expect(byKey(pane({ rows: 10, scrollTop: 99 }), 'pane-content')?.props['top']).toBe(-4)
+    expect(content.props).toMatchObject({ marginTop: -2, flexShrink: 0, width: 100 })
+    expect(content.props['position']).toBeUndefined()
+    expect(content.props['top']).toBeUndefined()
+    expect(byKey(pane({ rows: 10 }), 'pane-window')?.props['flexDirection']).toBe('column')
+    expect(byKey(pane(), 'pane-content')?.props['marginTop']).toBe(0)
+    expect(byKey(pane({ scrollTop: 5 }), 'pane-content')?.props['marginTop']).toBe(0)
+    expect(byKey(pane({ rows: 10, scrollTop: 99 }), 'pane-content')?.props['marginTop']).toBe(-4)
   })
 
   test('more above and more below show only while the content overflows, muted, inside the window', () => {
@@ -1596,14 +1602,70 @@ describe('own scroll', () => {
       pane({ turns: wrapped, stats: [undefined], columns, expanded: new Set(['t0:o0', 'j1']) })
       return measured[0]!.total
     }
-    // The frames' body is the pane less 2 (frame), 4 (indent) and 4 (border and padding):
-    // blank, message row, its frame and blank, the call row, the command frame, the output frame and blank.
+    // Measured in the engine: a frame's body is the pane less 4 (indent) and 4
+    // (border and padding), and Markdown draws no empty line. Blank, message
+    // row, its frame and blank, the call row, the command frame, the output
+    // frame and blank.
     const least = (inner: number) =>
-      1 + 1 + 3 + (20 * Math.ceil(300 / inner) + 19) + 1 + 1 + 4 + 3 + Math.ceil(8000 / inner) + 1
-    expect(totalAt(80)).toBeGreaterThanOrEqual(least(70))
-    expect(totalAt(80)).toBeLessThanOrEqual(least(70) + 4)
-    expect(totalAt(40)).toBeGreaterThanOrEqual(least(30))
-    expect(totalAt(40)).toBeLessThanOrEqual(least(30) + 4)
+      1 + 1 + 3 + 20 * Math.ceil(300 / inner) + 1 + 1 + 4 + 3 + Math.ceil(8000 / inner) + 1
+    expect(totalAt(80)).toBe(least(72))
+    expect(totalAt(40)).toBe(least(32))
+  })
+
+  test('numbered code gets a gutter of its widest line number and 2 cells, a diff its own', () => {
+    const read = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          {
+            tool_use_id: 'r1',
+            tool: 'Read',
+            input: { file_path: '/a/w.txt' },
+            text: Array.from({ length: 30 }, (_, i) => `${String(i + 1).padStart(6)}→line${i} ${'y'.repeat(240)}`).join(
+              '\n',
+            ),
+          },
+        ],
+      },
+    ])
+    measured.length = 0
+    pane({ turns: read, stats: [undefined], columns: 108, expanded: new Set(['r1']) })
+    // 30 lines of 247 cells beside a 4-cell gutter in a 100-cell body: 3 rows each.
+    const frames = measured[0]!.total - (1 + 1 + 1)
+    expect(frames).toBe(4 + 3 + 30 * 3)
+  })
+
+  // Measured at a 49-column pane: the title of a Bash frame with a long
+  // description wrapped under it, a row the estimate missed.
+  test('a frame title never shrinks; the ascii set counts the rows its uncut meta wraps to', () => {
+    const bash = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          {
+            tool_use_id: 'c1',
+            tool: 'Bash',
+            input: { command: 'find .', description: `Search ${'for the probe file '.repeat(6)}` },
+            text: 'ok',
+          },
+        ],
+      },
+    ])
+    const tree = pane({ turns: bash, stats: [undefined], columns: 49, expanded: new Set(['c1']) })
+    const titles = nodes(tree).filter(
+      n => n.type === 'Box' && n.props['flexShrink'] === 0 && nodes(n.children).some(t => t.props['bold'] === true),
+    )
+    expect(titles.length).toBeGreaterThanOrEqual(2)
+    measured.length = 0
+    pane({ turns: bash, stats: [undefined], columns: 49, expanded: new Set(['c1']) })
+    const unicode = measured[0]!.total
+    measured.length = 0
+    pane({ turns: bash, stats: [undefined], columns: 49, expanded: new Set(['c1']), icons: ICON_SETS.ascii })
+    expect(measured[0]!.total).toBeGreaterThan(unicode)
   })
 
   test('a narrow pane counts the wrapped notes, the empty-pane hint and the trace line', () => {

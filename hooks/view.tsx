@@ -249,9 +249,10 @@ type Ctx = PaneData & {
 // One row of the content (an item row with its id), recorded as it is drawn.
 const LINE: RowBlock = { kind: 'line' }
 
-// The cells a text of the content wraps at: the pane less its frame and
-// padding, and `inset` cells more (indents, borders).
-const wrapWidth = (data: Ctx, inset: number) => Math.max(1, data.columns - STATUS_INSET - inset)
+// The cells a text of the content wraps at: the pane's body less `inset`
+// cells (indents, borders). Measured in the engine: the body is
+// `columns` wide, a frame's body under an open row `columns - 8`.
+const wrapWidth = (data: Ctx, inset: number) => Math.max(1, data.columns - inset)
 
 // A row of text that wraps at the room `inset` leaves; one row where it is cut.
 const textLine = (data: Ctx, text: string, inset: number, isCut = false): RowBlock =>
@@ -263,8 +264,8 @@ const rowInset = (place: TreePlace | undefined) => (place === undefined ? 0 : TR
 // row's frames under it.
 const FRAME_INSET = 4
 const EXPANDED_INDENT = 4
-// What the line numbers of a diff take at most beside its body.
-const DIFF_GUTTER = 12
+// Beside numbered code the engine draws its widest line number and 2 cells.
+const CODE_GUTTER = 2
 
 type PaneActions = {
   copy: (text: string, surface?: RenderSurface) => void
@@ -692,8 +693,9 @@ function renderTeam(el: El, data: Ctx): PaneParts {
 
 // The pane body, painted edge to edge in the theme's background and exactly
 // as tall as the engine's window, so the engine has nothing to scroll: the
-// header stays on top, the content moves by `scrollTop` in a clipped window
-// of its own, and the footer stays in flow under it.
+// header stays on top, the content moves up by `scrollTop` rows (a negative
+// top margin, in flow: the engine clamps an absolute box at the tree's top)
+// in a clipped window of its own, and the footer stays in flow under it.
 function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   const { Box, Text } = el
   const { icons } = data
@@ -727,13 +729,12 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
           ))}
         </Box>
       )}
-      <Box key="pane-window" height={windowRows} flexShrink={0} overflow="hidden">
+      <Box key="pane-window" flexDirection="column" height={windowRows} flexShrink={0} overflow="hidden">
         <Box
           key="pane-content"
           flexDirection="column"
-          position="absolute"
-          top={scrollTop > 0 ? -scrollTop : 0}
-          left={0}
+          marginTop={scrollTop > 0 ? -scrollTop : 0}
+          flexShrink={0}
           width={data.columns}
         >
           {parts.content}
@@ -1492,13 +1493,15 @@ function renderFrame(
   // The frame's own line draws from the pane's budget like its body.
   data.budget.left -= title.length + metaText.length + 'copy'.length
   // Its header row wraps only where the set leaves the meta uncut.
+  const inner = wrapWidth(data, inset + FRAME_INSET)
   data.layout.push({
     kind: 'frame',
     body: body.pieces,
     notes: body.notes,
-    width: wrapWidth(data, inset + FRAME_INSET),
+    width: inner,
     ...(body.gutter === undefined ? {} : { gutter: body.gutter }),
-    ...(isUnicodeCut(data.icons) ? {} : { head: `${title}${metaText}  copy` }),
+    ...(body.format === undefined ? {} : { format: body.format }),
+    ...(isUnicodeCut(data.icons) || metaText === '' ? {} : { headRows: metaRows(title, metaText, inner) }),
   })
   return (
     <Box
@@ -1510,9 +1513,12 @@ function renderFrame(
     >
       <Box flexDirection="row" justifyContent="space-between">
         <Box flexDirection="row" flexShrink={1}>
-          <Text bold color={tone}>
-            {title}
-          </Text>
+          {/* The title keeps its cells (measured: it wrapped under a long meta). */}
+          <Box flexShrink={0}>
+            <Text bold color={tone}>
+              {title}
+            </Text>
+          </Box>
           {metaText !== '' && (
             <Text color={C.muted} wrap={isPathMeta ? middleWrap(data.icons) : endWrap(data.icons)}>
               {metaText}
@@ -1533,6 +1539,11 @@ function renderFrame(
   )
 }
 
+// The rows of a frame header whose meta wraps beside its title and the copy
+// button (the button and the gap before it: 6 cells).
+const metaRows = (title: string, meta: string, width: number) =>
+  Math.max(1, Math.ceil(displayWidth(meta) / Math.max(1, width - displayWidth(title) - 6)))
+
 type LongSpec =
   | { kind: 'text'; isError: boolean }
   | { kind: 'code'; language?: string; path?: string; startLine?: number }
@@ -1541,7 +1552,13 @@ type LongSpec =
 
 // A drawn block: its element, the pieces of text in it and the rows under
 // them (a note, show all, show less, an error line), for the row estimate.
-type Long = { node: RenderElement; pieces: readonly string[]; notes: readonly string[]; gutter?: number }
+type Long = {
+  node: RenderElement
+  pieces: readonly string[]
+  notes: readonly string[]
+  gutter?: number
+  format?: 'markdown' | 'diff'
+}
 
 // A block of any length: previewed by lines and characters until the person
 // asks for all of it, cut into pieces under the per-element limit, and drawn
@@ -1586,7 +1603,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
   // Numbered code and diffs draw their line numbers beside the body.
   const lastLine =
     spec.kind === 'code' && spec.startLine !== undefined ? spec.startLine + shown.text.split('\n').length : 0
-  const gutter = spec.kind === 'diff' ? DIFF_GUTTER : lastLine > 0 ? String(lastLine).length + 3 : undefined
+  const gutter = lastLine > 0 ? String(lastLine).length + CODE_GUTTER : undefined
 
   const node = (
     <Box flexDirection="column">
@@ -1632,7 +1649,14 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
       )}
     </Box>
   )
-  return { node, pieces, notes, ...(gutter === undefined ? {} : { gutter }) }
+  const format = spec.kind === 'markdown' || spec.kind === 'diff' ? spec.kind : undefined
+  return {
+    node,
+    pieces,
+    notes,
+    ...(gutter === undefined ? {} : { gutter }),
+    ...(format === undefined ? {} : { format }),
+  }
 }
 
 function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, place?: TreePlace) {

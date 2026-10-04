@@ -1702,9 +1702,33 @@ describe('contentRows', () => {
 
   test('a frame header and notes wrap at the frame width, a trailing newline adds no row', () => {
     expect(
-      contentRows([{ kind: 'frame', body: ['a\n'], notes: ['n'.repeat(100)], width: 50, head: 'h'.repeat(60) }]).total,
+      contentRows([{ kind: 'frame', body: ['a\n'], notes: ['n'.repeat(100)], width: 50, headRows: 2 }]).total,
     ).toBe(2 + 2 + 1 + 2)
     expect(contentRows([{ kind: 'frame', body: ['tab\there'], notes: [], width: 8 }]).total).toBe(3 + 2)
+  })
+
+  // Calibrated against the real engine (a pyte-rendered session): Code with
+  // language markdown drops empty lines; a diff draws no ---, +++ or @@ line
+  // and puts its line number and the +/- marker in a gutter of digits + 3.
+  test('markdown counts no row for an empty line', () => {
+    const prose = ['p'.repeat(250), '', 'q'.repeat(250), '', '', 'r'].join('\n')
+    expect(contentRows([{ kind: 'frame', body: [prose], notes: [], width: 100, format: 'markdown' }]).total).toBe(
+      3 + 3 + 3 + 1,
+    )
+    expect(contentRows([{ kind: 'frame', body: [prose], notes: [], width: 100 }]).total).toBe(3 + 3 + 1 + 3 + 2 + 1)
+  })
+
+  test('a diff counts only its changed and context lines, beside a gutter of its widest line number', () => {
+    const diff = ['--- a', '+++ b', '@@ -10,2 +10,2 @@', `-${'y'.repeat(247)}`, `+${'z'.repeat(247)}`, ' same'].join(
+      '\n',
+    )
+    // Line numbers up to 11: 2 digits + 3 = 5 cells, 95 left: 247 cells take 3 rows.
+    expect(contentRows([{ kind: 'frame', body: [diff], notes: [], width: 100, format: 'diff' }]).total).toBe(
+      3 + 3 + 3 + 1,
+    )
+    const small = ['--- a', '+++ b', '@@ -1,8 +1,8 @@', `-${'y'.repeat(247)}`].join('\n')
+    // Up to line 8: 1 digit + 3 = 4 cells, 96 left: 3 rows.
+    expect(contentRows([{ kind: 'frame', body: [small], notes: [], width: 100, format: 'diff' }]).total).toBe(3 + 3)
   })
 
   test('a search snippet wraps at its width', () => {
