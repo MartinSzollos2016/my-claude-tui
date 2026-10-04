@@ -249,6 +249,23 @@ type Ctx = PaneData & {
 // One row of the content (an item row with its id), recorded as it is drawn.
 const LINE: RowBlock = { kind: 'line' }
 
+// The cells a text of the content wraps at: the pane less its frame and
+// padding, and `inset` cells more (indents, borders).
+const wrapWidth = (data: Ctx, inset: number) => Math.max(1, data.columns - STATUS_INSET - inset)
+
+// A row of text that wraps at the room `inset` leaves; one row where it is cut.
+const textLine = (data: Ctx, text: string, inset: number, isCut = false): RowBlock =>
+  isCut ? LINE : { kind: 'line', text, width: wrapWidth(data, inset) }
+
+// What a row of the turn or a trace is moved in by: the first trace level.
+const rowInset = (place: TreePlace | undefined) => (place === undefined ? 0 : TRACE_INDENT)
+// A frame's border and padding, both sides, and the indent of an open
+// row's frames under it.
+const FRAME_INSET = 4
+const EXPANDED_INDENT = 4
+// What the line numbers of a diff take at most beside its body.
+const DIFF_GUTTER = 12
+
 type PaneActions = {
   copy: (text: string, surface?: RenderSurface) => void
   toggle: (id: string) => void
@@ -342,7 +359,12 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 
   if (!turn) {
     const sep = data.icons.groupSep
-    data.layout.push(LINE, LINE, LINE)
+    const hint = `Keys: t turns ${sep} s search ${sep} e expand ${sep} ctrl+x tab focuses this pane`
+    data.layout.push(
+      textLine(data, 'No turns yet.', 0),
+      textLine(data, 'Send a prompt; tool calls and subagents appear here.', 0),
+      textLine(data, hint, 0),
+    )
     return paneBody(el, data, act, {
       headerRows: 0,
       content: (
@@ -354,7 +376,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
             Send a prompt; tool calls and subagents appear here.
           </Text>
           <Text key="empty-keys" color={C.muted}>
-            {`Keys: t turns ${sep} s search ${sep} e expand ${sep} ctrl+x tab focuses this pane`}
+            {hint}
           </Text>
         </Box>
       ),
@@ -366,6 +388,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const hasPrompt = turn.prompt !== ''
   const promptRoom = Math.max(8, data.columns - STATUS_INSET - displayWidth(data.icons.prompt) - 1)
   const isEmpty = turn.items.length === 0 && (data.thinking?.text ?? '') === ''
+  const emptyText = data.isWorking && data.isLatest ? `Working${data.icons.ellipsis}` : EMPTY_TURN_TEXT
   // The blank row above the items.
   data.layout.push(LINE)
   return paneBody(el, data, act, {
@@ -382,22 +405,16 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     content: (
       <Box flexDirection="column" marginTop={1}>
         {renderThinking(el, turn, data, act)}
-        {isEmpty &&
-          drawn(
-            data,
-            <Text color={C.muted}>
-              {data.isWorking && data.isLatest ? `Working${data.icons.ellipsis}` : EMPTY_TURN_TEXT}
-            </Text>,
-          )}
+        {isEmpty && drawn(data, <Text color={C.muted}>{emptyText}</Text>, textLine(data, emptyText, 0))}
         {renderRows(el, turn.items, data, act)}
       </Box>
     ),
   })
 }
 
-// Records one row of the content as it is drawn and returns it.
-function drawn<T>(data: Ctx, node: T, id?: string): T {
-  data.layout.push(id === undefined ? LINE : { kind: 'line', id })
+// Records a block of the content as it is drawn and returns it.
+function drawn<T>(data: Ctx, node: T, block: RowBlock): T {
+  data.layout.push(block)
   return node
 }
 
@@ -434,12 +451,20 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
   }
   const hidden = rows.length - shown.length
   const isNoMatch = isFiltered && rows.length === 0
+  const noMatch = `No turn matches "${trunc(sanitizeText(query), 40)}".`
+  const hiddenNote = `${hidden} more turn${hidden === 1 ? '' : 's'}${isFiltered ? ` ${data.icons.dash} refine the search` : ''}`
   data.layout.push(
     LINE,
     ...(rows.length > 0 ? [LINE] : []),
-    ...(isNoMatch ? [LINE, LINE] : []),
-    ...shown.map(row => ({ kind: 'turn' as const, hasSnippet: row.snippet !== '' })),
-    ...(hidden > 0 ? [LINE] : []),
+    ...(isNoMatch ? [textLine(data, noMatch, 0), textLine(data, NO_MATCH_HINT, 0)] : []),
+    ...shown.map((row): RowBlock =>
+      row.snippet === ''
+        ? { kind: 'turn' }
+        : isUnicodeCut(data.icons)
+          ? { kind: 'turn', snippet: row.snippet }
+          : { kind: 'turn', snippet: `${SNIPPET_INDENT}${row.snippet}`, width: wrapWidth(data, 0) },
+    ),
+    ...(hidden > 0 ? [textLine(data, hiddenNote, 0)] : []),
   )
 
   const header = [
@@ -481,9 +506,9 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
         )}
         {isNoMatch && (
           <Box flexDirection="column">
-            <Text color={C.muted}>{`No turn matches "${trunc(sanitizeText(query), 40)}".`}</Text>
+            <Text color={C.muted}>{noMatch}</Text>
             <Text key="empty-search" color={C.muted}>
-              Clear the search or try fewer words.
+              {NO_MATCH_HINT}
             </Text>
           </Box>
         )}
@@ -506,16 +531,15 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
             {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
           </Box>
         ))}
-        {hidden > 0 && (
-          <Text
-            color={C.muted}
-          >{`${hidden} more turn${hidden === 1 ? '' : 's'}${isFiltered ? ` ${data.icons.dash} refine the search` : ''}`}</Text>
-        )}
+        {hidden > 0 && <Text color={C.muted}>{hiddenNote}</Text>}
       </Box>
     </Box>
   )
   return { header, headerRows: Input ? 2 : 1, content }
 }
+
+const SNIPPET_INDENT = '      '
+const NO_MATCH_HINT = 'Clear the search or try fewer words.'
 
 // The line a search hit gets under its turn: the matched part underlined and
 // bold in the accent, the surrounding text muted.
@@ -524,7 +548,7 @@ function renderSnippet(el: El, snippet: string, query: string, data: Ctx) {
   const { before, match, after } = splitMatch(sanitizeText(snippet), query, data.icons.ellipsis)
   return (
     <Text color={C.muted} wrap={endWrap(data.icons)}>
-      {`      ${before}`}
+      {`${SNIPPET_INDENT}${before}`}
       {match !== '' && (
         <Text bold underline color={C.accent}>
           {match}
@@ -537,6 +561,11 @@ function renderSnippet(el: El, snippet: string, query: string, data: Ctx) {
 
 // The team board: each teammate with its type and status, then the tasks
 // with their TodoWrite marks and owners.
+const NO_MEMBERS = 'No teammates in this session.'
+const NO_MEMBERS_HINT = 'Teammates show up once Claude starts a team.'
+const NO_TASKS = 'No tasks yet.'
+const NO_TASKS_HINT = 'Tasks show up when Claude plans with TodoWrite or TaskCreate.'
+
 function renderTeam(el: El, data: Ctx): PaneParts {
   const trunc = cutter(data.icons)
   const { Box, Text } = el
@@ -564,15 +593,19 @@ function renderTeam(el: El, data: Ctx): PaneParts {
   const hiddenMembers = members.length - memberRows.length
   const hiddenTasks = tasks.length - taskRows.length
   // A blank row and the members (or the two empty lines), then a blank row,
-  // the tasks heading and the tasks (or the two empty lines).
-  const lines =
-    1 +
-    (members.length === 0 ? 2 : memberRows.length) +
-    (hiddenMembers > 0 ? 1 : 0) +
-    2 +
-    (tasks.length === 0 ? 2 : taskRows.length) +
-    (hiddenTasks > 0 ? 1 : 0)
-  data.layout.push(...Array.from({ length: lines }, () => LINE))
+  // the tasks heading and the tasks (or the two empty lines), each wrapped.
+  const line = (text: string, isCut = false) => textLine(data, text, 0, isCut)
+  data.layout.push(
+    LINE,
+    ...(members.length === 0 ? [line(NO_MEMBERS), line(NO_MEMBERS_HINT)] : []),
+    ...memberRows.map(row => line(`${data.icons.bullet} ${row.name} ${row.type} ${row.member.status}`)),
+    ...(hiddenMembers > 0 ? [line(`${hiddenMembers} more teammates`)] : []),
+    LINE,
+    LINE,
+    ...(tasks.length === 0 ? [line(NO_TASKS), line(NO_TASKS_HINT)] : []),
+    ...taskRows.map(row => line(row.label, isUnicodeCut(data.icons))),
+    ...(hiddenTasks > 0 ? [line(`${hiddenTasks} more tasks`)] : []),
+  )
 
   const header = (
     <Box key="team-title" flexDirection="row" gap={2}>
@@ -584,9 +617,9 @@ function renderTeam(el: El, data: Ctx): PaneParts {
       <Box flexDirection="column" marginTop={1}>
         {members.length === 0 && (
           <Box flexDirection="column">
-            <Text color={C.muted}>No teammates in this session.</Text>
+            <Text color={C.muted}>{NO_MEMBERS}</Text>
             <Text key="empty-members" color={C.muted}>
-              Teammates show up once Claude starts a team.
+              {NO_MEMBERS_HINT}
             </Text>
           </Box>
         )}
@@ -606,9 +639,9 @@ function renderTeam(el: El, data: Ctx): PaneParts {
         <Text bold color={C.text}>{`Tasks (${tasks.length})`}</Text>
         {tasks.length === 0 && (
           <Box flexDirection="column">
-            <Text color={C.muted}>No tasks yet.</Text>
+            <Text color={C.muted}>{NO_TASKS}</Text>
             <Text key="empty-tasks" color={C.muted}>
-              Tasks show up when Claude plans with TodoWrite or TaskCreate.
+              {NO_TASKS_HINT}
             </Text>
           </Box>
         )}
@@ -980,6 +1013,7 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
       thinking.text,
       data,
       act,
+      EXPANDED_INDENT,
     )
   // The blank row under an open frame.
   if (isOpen) data.layout.push(LINE)
@@ -1167,7 +1201,14 @@ function cardFor(item: Item, data: Ctx, place: TreePlace | undefined): readonly 
 
 // Draws `rows` while the pane's budget holds a row more, each charged its
 // width; the rows that no longer fit are counted on one line instead.
-function fitRows<T>(el: El, rows: readonly T[], data: Ctx, key: string, draw: (row: T, i: number) => RenderElement) {
+function fitRows<T>(
+  el: El,
+  rows: readonly T[],
+  data: Ctx,
+  key: string,
+  inset: number,
+  draw: (row: T, i: number) => RenderElement,
+) {
   const cost = data.columns + ROW_SLACK
   const drawn: RenderElement[] = []
   for (const [i, row] of rows.entries()) {
@@ -1179,7 +1220,7 @@ function fitRows<T>(el: El, rows: readonly T[], data: Ctx, key: string, draw: (r
   if (hidden === 0) return drawn
   const note = `${hidden} more row${hidden === 1 ? '' : 's'} ${data.icons.dash} pane text budget reached; collapse rows to see them`
   data.budget.left -= note.length
-  data.layout.push(LINE)
+  data.layout.push(textLine(data, note, inset))
   const { Text } = el
   return [
     ...drawn,
@@ -1193,7 +1234,7 @@ function fitRows<T>(el: El, rows: readonly T[], data: Ctx, key: string, draw: (r
 // levels): single items, and folded runs of calls.
 function renderRows(el: El, items: readonly Item[], data: Ctx, act: PaneActions, path?: readonly boolean[]) {
   const rows = groupRuns(items)
-  return fitRows(el, rows, data, rows[0]?.id ?? 'rows', (row, i) => {
+  return fitRows(el, rows, data, rows[0]?.id ?? 'rows', path === undefined ? 0 : TRACE_INDENT, (row, i) => {
     const at = path === undefined ? undefined : { path, isLast: i === rows.length - 1 }
     return row.kind === 'group' ? renderGroup(el, row, data, act, at) : renderItem(el, row, data, act, at)
   })
@@ -1217,7 +1258,7 @@ function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, plac
   const children = () =>
     isOpen && (
       <Box flexDirection="column">
-        {fitRows(el, group.items, data, group.id, (child, i) =>
+        {fitRows(el, group.items, data, group.id, TRACE_INDENT, (child, i) =>
           renderItem(el, child, data, act, {
             path: place === undefined ? [] : [...place.path, !place.isLast],
             isLast: i === group.items.length - 1,
@@ -1309,6 +1350,7 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place?:
       item.text,
       data,
       act,
+      rowInset(place) + EXPANDED_INDENT,
     )
     data.layout.push(LINE)
     return (
@@ -1322,11 +1364,12 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place?:
     return renderTrace(el, item, data, act, place)
   }
 
-  return renderSections(el, item, data, act)
+  return renderSections(el, item, data, act, rowInset(place))
 }
 
 // What went in and what came out, each in a frame colored by its kind.
-function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
+// `inset`: the cells left of the sections' box (a trace's indent).
+function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions, inset: number) {
   const { Box } = el
   const frames = cachedSections(item, data.icons).map(section => {
     const id = `${item.id}:${section.kind}`
@@ -1343,6 +1386,7 @@ function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
       section.body,
       data,
       act,
+      inset + EXPANDED_INDENT,
     )
   })
   // The blank row under the frames.
@@ -1368,7 +1412,7 @@ function withFirstError(el: El, body: string, preview: Long, data: Ctx): Long {
   data.budget.left -= line.length
   return {
     ...preview,
-    notes: preview.notes + 1,
+    notes: [isUnicodeCut(data.icons) ? '' : line, ...preview.notes],
     node: (
       <Box flexDirection="column">
         <Text color={C.error} wrap={endWrap(data.icons)}>
@@ -1398,9 +1442,10 @@ function renderFrame(
   copyText: string,
   data: Ctx,
   act: PaneActions,
+  // The cells left of the frame's border: the indents it sits in.
+  inset: number,
 ) {
   const { Box, Button, Text } = el
-  data.layout.push({ kind: 'frame', body: body.pieces, notes: body.notes })
   const trunc = cutter(data.icons)
   const metaText =
     meta === undefined || meta === ''
@@ -1408,6 +1453,15 @@ function renderFrame(
       : `  ${isPathMeta ? truncateMiddle(meta, isUnicodeCut(data.icons) ? 300 : Math.max(8, data.columns - 30), data.icons.ellipsis) : trunc(meta, 300)}`
   // The frame's own line draws from the pane's budget like its body.
   data.budget.left -= title.length + metaText.length + 'copy'.length
+  // Its header row wraps only where the set leaves the meta uncut.
+  data.layout.push({
+    kind: 'frame',
+    body: body.pieces,
+    notes: body.notes,
+    width: wrapWidth(data, inset + FRAME_INSET),
+    ...(body.gutter === undefined ? {} : { gutter: body.gutter }),
+    ...(isUnicodeCut(data.icons) ? {} : { head: `${title}${metaText}  copy` }),
+  })
   return (
     <Box
       key={`frame-${blockId}`}
@@ -1449,7 +1503,7 @@ type LongSpec =
 
 // A drawn block: its element, the pieces of text in it and the rows under
 // them (a note, show all, show less, an error line), for the row estimate.
-type Long = { node: RenderElement; pieces: readonly string[]; notes: number }
+type Long = { node: RenderElement; pieces: readonly string[]; notes: readonly string[]; gutter?: number }
 
 // A block of any length: previewed by lines and characters until the person
 // asks for all of it, cut into pieces under the per-element limit, and drawn
@@ -1486,7 +1540,15 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
     (isBudgetCut ? budgetNote.length : 0) +
     (isPreviewed ? fullLabel.length : 0) +
     (canShrink && !isBudgetCut ? 'show less'.length : 0)
-  const notes = [isBudgetCut, isPreviewed, canShrink && !isBudgetCut].filter(Boolean).length
+  const notes = [
+    ...(isBudgetCut ? [budgetNote] : []),
+    ...(isPreviewed ? [fullLabel] : []),
+    ...(canShrink && !isBudgetCut ? ['show less'] : []),
+  ]
+  // Numbered code and diffs draw their line numbers beside the body.
+  const lastLine =
+    spec.kind === 'code' && spec.startLine !== undefined ? spec.startLine + shown.text.split('\n').length : 0
+  const gutter = spec.kind === 'diff' ? DIFF_GUTTER : lastLine > 0 ? String(lastLine).length + 3 : undefined
 
   const node = (
     <Box flexDirection="column">
@@ -1532,7 +1594,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
       )}
     </Box>
   )
-  return { node, pieces, notes }
+  return { node, pieces, notes, ...(gutter === undefined ? {} : { gutter }) }
 }
 
 function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, place?: TreePlace) {
@@ -1544,8 +1606,9 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
 
   // The line above the trace draws from the pane's budget like a row.
   data.budget.left -= data.columns + ROW_SLACK
-  data.layout.push(LINE)
+  const inset = rowInset(place) + EXPANDED_INDENT
   if (!trace) {
+    data.layout.push(textLine(data, `Loading trace${data.icons.ellipsis}`, inset))
     return (
       <Box marginLeft={4}>
         <Text color={C.muted}>{`Loading trace${data.icons.ellipsis}`}</Text>
@@ -1555,7 +1618,8 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
   if ('denied' in trace) {
     const denied = `Trace unavailable: ${trunc(trace.denied, 300)}`
     data.budget.left -= denied.length
-    const sections = renderSections(el, item, data, act)
+    data.layout.push(textLine(data, denied, inset))
+    const sections = renderSections(el, item, data, act, inset)
     data.layout.push(LINE)
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
@@ -1566,6 +1630,14 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
   }
 
   const stats = traceStats(trace.items)
+  const modelText = model === undefined ? '' : ` ${icons.dot} ${shortModel(model)}`
+  data.layout.push(
+    textLine(
+      data,
+      `${icons.system}  Execution Trace ${icons.dot} ${stats.tools} tool calls, ${stats.messages} messages${modelText}`,
+      inset,
+    ),
+  )
   const traced = (
     <Box flexDirection="column" marginBottom={1}>
       <Box flexDirection="row" marginLeft={4}>

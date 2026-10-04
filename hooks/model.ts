@@ -2071,32 +2071,70 @@ export function footerLayout(columns: number): FooterLayout {
 // scroll: the content sits in a clipped window of its own and moves by
 // `scrollTop` rows. Its height is estimated from what the view draws.
 
-// One block of the content in drawing order: a row (an item row carries its
-// id), a frame with the pieces of its body and its note rows (show all, a
-// budget note, an error line), or a row of the turn list with its snippet.
+// One block of the content in drawing order, with the text that may wrap and
+// the cells it wraps at (`width`); a text without a width is cut to one row.
+// - `line`: one row (an item row carries its id), or a wrapping text.
+// - `frame`: two borders, the header row, the pieces of its body (narrowed by
+//   the `gutter` of numbered code and diffs) and its note rows (show all, a
+//   budget note, an error line), all wrapped at the frame's inner width.
+// - `turn`: a row of the turn list and its search snippet.
 export type RowBlock =
-  | { kind: 'line'; id?: string }
-  | { kind: 'frame'; body: readonly string[]; notes: number }
-  | { kind: 'turn'; hasSnippet: boolean }
+  | { kind: 'line'; id?: string; text?: string; width?: number }
+  | { kind: 'frame'; body: readonly string[]; notes: readonly string[]; width: number; gutter?: number; head?: string }
+  | { kind: 'turn'; snippet?: string; width?: number }
 
 export type ContentRows = { total: number; starts: Readonly<Record<string, number>> }
 
-// Two borders and the header row around a frame's body.
-const FRAME_ROWS = 3
+// The two borders of a frame.
+const FRAME_BORDERS = 2
+// What a tab is drawn as.
+const TAB = '    '
+
+// Measured texts by width: a pane draws the same pieces on every tick.
+const wrapCache = new Map<string, number>()
+const MAX_WRAP_CACHE = 2000
+
+// The rows `text` takes wrapped at `width` cells: each of its lines at least
+// one, a long one a row per `width`; a trailing newline adds none.
+function wrappedRows(text: string, width: number): number {
+  const key = `${width}\u0000${text}`
+  const cached = wrapCache.get(key)
+  if (cached !== undefined) return cached
+  const lines = text.split('\n')
+  if (lines.length > 1 && lines.at(-1) === '') lines.pop()
+  const cells = Math.max(1, width)
+  const rows = lines.reduce(
+    (sum, line) => sum + Math.max(1, Math.ceil(displayWidth(line.replaceAll('\t', TAB)) / cells)),
+    0,
+  )
+  if (wrapCache.size >= MAX_WRAP_CACHE) wrapCache.clear()
+  wrapCache.set(key, rows)
+  return rows
+}
+
+const textRows = (text: string | undefined, width: number | undefined): number =>
+  text === undefined || width === undefined ? 1 : wrappedRows(text, width)
 
 function blockRows(block: RowBlock): number {
   switch (block.kind) {
     case 'line':
-      return 1
+      return textRows(block.text, block.width)
     case 'turn':
-      return block.hasSnippet ? 2 : 1
-    case 'frame':
-      return FRAME_ROWS + block.notes + block.body.reduce((sum, piece) => sum + piece.split('\n').length, 0)
+      return 1 + (block.snippet === undefined ? 0 : textRows(block.snippet, block.width))
+    case 'frame': {
+      const bodyWidth = block.width - (block.gutter ?? 0)
+      return (
+        FRAME_BORDERS +
+        textRows(block.head, block.width) +
+        block.body.reduce((sum, piece) => sum + wrappedRows(piece, bodyWidth), 0) +
+        block.notes.reduce((sum, note) => sum + wrappedRows(note, block.width), 0)
+      )
+    }
   }
 }
 
-// The rows of the content and the row each item row starts on. A long line
-// the terminal wraps counts once, so the estimate may fall short.
+// The rows of the content and the row each item row starts on. Every text
+// is counted as wrapped at the width the view gives it.
 export function contentRows(blocks: readonly RowBlock[]): ContentRows {
   const starts: Record<string, number> = {}
   let total = 0

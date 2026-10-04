@@ -1555,6 +1555,39 @@ describe('own scroll', () => {
     expect(byKey(pane({ rows: 10, icons: ICON_SETS.ascii }), 'nav-pagedown')?.props['label']).toBe('v page')
   })
 
+  test('long prose and one-line JSON count the rows they wrap to, at 80 and 40 columns', () => {
+    const prose = Array.from({ length: 20 }, () => 'x'.repeat(300)).join('\n\n')
+    const json = JSON.stringify({ data: 'y'.repeat(7989) })
+    const wrapped = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: prose,
+        toolUses: [{ tool_use_id: 'j1', tool: 'Bash', input: { command: 'cat x.json' }, text: json }],
+      },
+    ])
+    const totalAt = (columns: number) => {
+      measured.length = 0
+      pane({ turns: wrapped, stats: [undefined], columns, expanded: new Set(['t0:o0', 'j1']) })
+      return measured[0]!.total
+    }
+    // The frames' body is the pane less 2 (frame), 4 (indent) and 4 (border and padding):
+    // blank, message row, its frame and blank, the call row, the command frame, the output frame and blank.
+    const least = (inner: number) =>
+      1 + 1 + 3 + (20 * Math.ceil(300 / inner) + 19) + 1 + 1 + 4 + 3 + Math.ceil(8000 / inner) + 1
+    expect(totalAt(80)).toBeGreaterThanOrEqual(least(70))
+    expect(totalAt(80)).toBeLessThanOrEqual(least(70) + 4)
+    expect(totalAt(40)).toBeGreaterThanOrEqual(least(30))
+    expect(totalAt(40)).toBeLessThanOrEqual(least(30) + 4)
+  })
+
+  test('a narrow pane counts the wrapped notes, the empty-pane hint and the trace line', () => {
+    measured.length = 0
+    pane({ turns: [], columns: 30 })
+    // The keys hint (about 70 characters) wraps to three rows of 28.
+    expect(measured[0]!.total).toBeGreaterThanOrEqual(1 + 2 + 3)
+  })
+
   test('each drawing reports where its window stands, for the scroll of the engine', () => {
     measured.length = 0
     pane({ rows: 10, scrollTop: 99 })
