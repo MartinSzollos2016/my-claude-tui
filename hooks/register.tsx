@@ -87,7 +87,7 @@ import {
 } from './session'
 import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
-import { renderBar, renderPane, type El, type Trace } from './view'
+import { renderBar, renderPane, turnRowId, type El, type Trace } from './view'
 
 const PANE = 'tail'
 const MAX_STATS = 200
@@ -106,6 +106,7 @@ const timings = atom({ plugin: 'tail-view', key: 'timings' } as const, {})
 const turnStats = atom({ plugin: 'tail-view', key: 'turnStats' } as const, [])
 const agentStats = atom({ plugin: 'tail-view', key: 'agentStats' } as const, {})
 const cursor = atom({ plugin: 'tail-view', key: 'cursor' } as const, null)
+const turnCursor = atom({ plugin: 'tail-view', key: 'turnCursor' } as const, null)
 const git = atom({ plugin: 'tail-view', key: 'git' } as const, null)
 const mode = atom({ plugin: 'tail-view', key: 'mode' } as const, null)
 const isWorking = atom({ plugin: 'tail-view', key: 'isWorking' } as const, false)
@@ -491,6 +492,18 @@ async function moveRowCursor(
   await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
 }
 
+// Moves the turn list's cursor one turn along the rows the list draws (newest
+// first), as the detail cursor moves: it enters inside the window, stops at
+// the ends, and the list scrolls to keep its row in view.
+async function moveTurnCursor($: EngineInterface, delta: number, at: ScrollFrame): Promise<void> {
+  const ids = Object.keys(at.starts).filter(id => id.startsWith('turn:'))
+  const landed = await update($, turnCursor, cur => {
+    const id = stepCursor(ids, cur === null ? null : turnRowId(cur), delta, at)
+    return id === null ? null : Number(id.slice('turn:'.length))
+  })
+  await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
+}
+
 // Where each view's window stood at its last drawing; a reload starts over
 // and the next drawing clamps whatever the wheel did meanwhile. Module-level
 // and keyed by view only: the plugin draws one pane (PANE) per session.
@@ -534,6 +547,7 @@ async function scrollToTop($: EngineInterface): Promise<void> {
 
 // Switches what the pane shows, from the top of its content.
 async function showView($: EngineInterface, view: 'detail' | 'turns' | 'team'): Promise<void> {
+  await update($, turnCursor, () => null)
   await update($, paneView, () => view)
   await scrollToTop($)
 }
@@ -884,6 +898,7 @@ export const register: Register = on => {
         cursor: cursorId,
         isFocused: e.props.isFocused,
         isBarShown: !(await read($, isBarHidden)),
+        turnCursor: view === 'turns' ? await read($, turnCursor) : null,
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
         scrollTop: view === 'detail' ? detailTop : scrolled[view],
@@ -912,20 +927,27 @@ export const register: Register = on => {
         showDetail: () => showView($, 'detail').catch(ignore),
         showTeam: () => showView($, 'team').catch(ignore),
         pickTurn: index => pickTurn($, index, latest).catch(ignore),
-        search: value => update($, searchQuery, () => value).catch(ignore),
+        search: value => {
+          update($, turnCursor, () => null).catch(ignore)
+          update($, searchQuery, () => value).catch(ignore)
+        },
         submitSearch: value => openMatch($, value, turns).catch(ignore),
         focusSearch: () => focusSearch($).catch(ignore),
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
-        cursorDown: at => moveRowCursor($, rowIds, 1, at).catch(ignore),
-        cursorUp: at => moveRowCursor($, rowIds, -1, at).catch(ignore),
+        cursorDown: at => (view === 'turns' ? moveTurnCursor($, 1, at) : moveRowCursor($, rowIds, 1, at)).catch(ignore),
+        cursorUp: at => (view === 'turns' ? moveTurnCursor($, -1, at) : moveRowCursor($, rowIds, -1, at)).catch(ignore),
         scroll: top => update($, paneScroll, all => ({ ...all, [view]: top })).catch(ignore),
         measure: at => {
           drawnFrames[view] = at
         },
         cursorOpen: () =>
-          cursorId === null || cursorText === undefined || cursorText === ''
-            ? undefined
-            : update($, expanded, ids => toggleId(ids, cursorId, MAX_EXPANDED)).catch(ignore),
+          view === 'turns'
+            ? read($, turnCursor)
+                .then(index => (index === null ? undefined : pickTurn($, index, latest)))
+                .catch(ignore)
+            : cursorId === null || cursorText === undefined || cursorText === ''
+              ? undefined
+              : update($, expanded, ids => toggleId(ids, cursorId, MAX_EXPANDED)).catch(ignore),
         copyCursor: surface => (cursorText === undefined ? undefined : copyBlock($, cursorText, surface).catch(ignore)),
         toggleFull: id => update($, fullBlocks, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
       },

@@ -2060,9 +2060,12 @@ export type FooterLayout = {
 const FOOTER_TWO_COLUMNS_FROM = 64
 const FOOTER_LABELS_FROM = 40
 
-export function footerLayout(columns: number): FooterLayout {
-  if (columns >= FOOTER_TWO_COLUMNS_FROM) return { rows: 4, columns: 'two', labels: true }
-  return { rows: 6, columns: 'stacked', labels: columns >= FOOTER_LABELS_FROM }
+// `groupRows`: the rows of keys the view draws; by default all of them.
+export function footerLayout(columns: number, groupRows?: number): FooterLayout {
+  const isTwo = columns >= FOOTER_TWO_COLUMNS_FROM
+  const rows = 2 + (groupRows ?? (isTwo ? 2 : 4))
+  if (isTwo) return { rows, columns: 'two', labels: true }
+  return { rows, columns: 'stacked', labels: columns >= FOOTER_LABELS_FROM }
 }
 
 // The cells after each key of a row that belong to it, so a click between
@@ -2101,7 +2104,7 @@ export type RowBlock =
       // in a gutter as wide as its widest number and 3 cells.
       format?: 'markdown' | 'diff'
     }
-  | { kind: 'turn'; snippet?: string; width?: number }
+  | { kind: 'turn'; id?: string; snippet?: string; width?: number }
 
 export type ContentRows = { total: number; starts: Readonly<Record<string, number>> }
 
@@ -2185,7 +2188,7 @@ export function contentRows(blocks: readonly RowBlock[]): ContentRows {
   const starts: Record<string, number> = {}
   let total = 0
   for (const block of blocks) {
-    if (block.kind === 'line' && block.id !== undefined) starts[block.id] = total
+    if ((block.kind === 'line' || block.kind === 'turn') && block.id !== undefined) starts[block.id] = total
     total += blockRows(block)
   }
   return { total, starts }

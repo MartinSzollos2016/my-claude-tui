@@ -440,12 +440,13 @@ describe('detail pane', () => {
     }
     expect(await focus(true)).toContain('keys on')
     // The info bar shows by default and takes the first ctrl+x tab.
-    expect(await focus(false)).toContain('ctrl+x tab twice for keys')
+    expect(await focus(false)).toContain('click or ctrl+x tab ×2')
     await say($, 'tail-bar')
-    expect(await focus(false)).toContain('ctrl+x tab for keys')
+    expect(await focus(false)).toContain('click or ctrl+x tab')
+    expect(await focus(false)).not.toContain('×2')
     const unknown = await focus(undefined)
     expect(unknown).not.toContain('keys on')
-    expect(unknown).not.toContain('for keys')
+    expect(unknown).not.toContain('click or')
   })
 
   test('draws the pane exactly as tall as the engine window, whatever its offset, the footer in flow', async () => {
@@ -610,7 +611,7 @@ describe('detail pane', () => {
     ]
     const { $ } = fakeEngine({ messages: reads })
     const folded = await draw($)
-    expect(String(byKey(folded, 'group:rd1')?.props['label'])).toBe('Read ×4 · 4 files')
+    expect(String(byKey(folded, 'group:rd1')?.props['label']).trimEnd()).toBe('Read ×4 · 4 files')
     expect(byKey(folded, 'rd1')).toBeUndefined()
     await press($, 'group:rd1')
     expect(byKey(await draw($), 'rd1')).toBeDefined()
@@ -1513,5 +1514,59 @@ describe('finish toasts', () => {
     await endTurn($)
     await settle()
     expect(world.toasts).toEqual([])
+  })
+})
+
+describe('turn list cursor', () => {
+  const three: SessionMessage[] = ['one', 'two', 'three'].flatMap(prompt => [
+    { role: 'user' as const, text: prompt, toolUses: [] },
+    { role: 'assistant' as const, text: `re ${prompt}`, toolUses: [] },
+  ])
+  const marks = (tree: unknown) => {
+    const found: string[] = []
+    const walk = (t: unknown) => {
+      if (Array.isArray(t)) t.forEach(walk)
+      else if (t !== null && typeof t === 'object' && 'props' in t) {
+        const n = t as { props: Record<string, unknown>; children?: unknown }
+        if (String(n.props['key']).startsWith('turn-cursor-')) found.push(String(n.props['key']))
+        walk(n.children)
+      }
+    }
+    walk(tree)
+    return found
+  }
+
+  test('j and k move a cursor over the turns, newest first, and stop at the ends; o opens the turn', async () => {
+    const { $ } = fakeEngine({ messages: three })
+    await say($, 'tail-turns')
+    expect(marks(await draw($))).toEqual([])
+    await press($, 'nav-down')
+    expect(marks(await draw($))).toEqual(['turn-cursor-2'])
+    await press($, 'nav-down')
+    expect(marks(await draw($))).toEqual(['turn-cursor-1'])
+    await press($, 'nav-up')
+    await press($, 'nav-up')
+    expect(marks(await draw($))).toEqual(['turn-cursor-2'])
+    await press($, 'nav-down')
+    await press($, 'nav-open')
+    const detail = await draw($)
+    expect(text(detail)).toContain('re two')
+    expect(byKey(detail, 'nav-turns')).toBeDefined()
+    await press($, 'nav-turns')
+    expect(marks(await draw($))).toEqual([])
+  })
+
+  test('a new search query and another view drop the cursor', async () => {
+    const { $ } = fakeEngine({ messages: three })
+    await say($, 'tail-turns')
+    await press($, 'nav-down')
+    const input = byKey(await draw($), 'turn-search')!
+    ;(input.props['onInput'] as (value: string) => void)('t')
+    await settle()
+    expect(marks(await draw($))).toEqual([])
+    await press($, 'nav-down')
+    await press($, 'nav-detail')
+    await press($, 'nav-turns')
+    expect(marks(await draw($))).toEqual([])
   })
 })

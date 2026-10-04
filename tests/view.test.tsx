@@ -1228,13 +1228,15 @@ describe('pane focus', () => {
     const tree = renderPane(el, { ...base, isFocused: false }, act)
     expect(mark(tree)?.props['color']).toBe('inactive')
     expect(mark(tree)?.props['bold']).not.toBe(true)
-    expect(text(last(tree))).toBe('ctrl+x tab for keys')
+    expect(text(last(tree))).toBe('click or ctrl+x tab')
     expect(last(tree)?.props['color']).toBe('inactive')
   })
 
   test('with the info bar shown the hint asks for the chord twice: the bar takes the first', () => {
     const tree = renderPane(el, { ...base, isFocused: false, isBarShown: true }, act)
-    expect(text(last(tree))).toBe('ctrl+x tab twice for keys')
+    expect(text(last(tree))).toBe('click or ctrl+x tab ×2')
+    const ascii = renderPane(el, { ...base, isFocused: false, isBarShown: true, icons: ICON_SETS.ascii }, act)
+    expect(text(last(ascii))).toBe('click or ctrl+x tab x2')
     expect(text(last(renderPane(el, { ...base, isFocused: true, isBarShown: true }, act)))).toBe('keys on')
   })
 
@@ -1243,7 +1245,7 @@ describe('pane focus', () => {
     expect(mark(tree)?.props['color']).toBe('inactive')
     expect(last(tree)).toBeUndefined()
     expect(text(tree)).not.toContain('keys on')
-    expect(text(tree)).not.toContain('for keys')
+    expect(text(tree)).not.toContain('ctrl+x')
   })
 
   test('the note ends the status row, right after the position of the turn', () => {
@@ -1363,7 +1365,9 @@ describe('pinned footer', () => {
 
   // The boxes in the footer that lay out buttons side by side.
   const buttonRows = (footer: Node) =>
-    nodes(footer).filter(n => n.type === 'Box' && kids(n).some(c => c.type === 'Button'))
+    nodes(footer).filter(
+      n => n.type === 'Box' && n.props['display'] !== 'none' && kids(n).some(c => c.type === 'Button'),
+    )
 
   test('a click between two keys lands on a key: the gap is in the label, not the row', () => {
     const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
@@ -1385,7 +1389,8 @@ describe('pinned footer', () => {
     const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
     for (const extra of [{}, { members }, { icons: ICON_SETS.ascii }, { view: 'turns' as const }]) {
       const footer = footerOf(extra)
-      for (const n of [1, 2]) {
+      // In the turn list the first row has no left column (no move keys).
+      for (const n of extra.view === 'turns' ? [2] : [1, 2]) {
         const row = byKey(footer, `footer-row-${n}`)!
         const left = byKey(row, `footer-left-${n}`)!
         const sep = byKey(row, `footer-sep-${n}`)!
@@ -1396,6 +1401,67 @@ describe('pinned footer', () => {
         expect(text(sep)).not.toMatch(/^\s/)
       }
     }
+  })
+
+  const hiddenKeys = (footer: Node) => {
+    const hidden = byKey(footer, 'footer-hidden')
+    return hidden === undefined ? [] : nodes(hidden).filter(n => n.type === 'Button')
+  }
+
+  test('the detail view draws every key and hides none', () => {
+    const footer = footerOf()
+    expect(hiddenKeys(footer)).toEqual([])
+  })
+
+  test('the turn list draws only its keys: the cursor, the views and the page keys', () => {
+    const footer = footerOf({ view: 'turns' })
+    const rows = rowsOf(footer)
+    expect(rows.map(r => r.props['key'])).toEqual(['footer-row-1', 'footer-row-2'])
+    expect(line(rows[0])).toBe('j: ↓  k: ↑  o: open')
+    expect(line(rows[1])).toBe('d: detail  s: search  m: team  │  b: ▲ page  f: ▼ page')
+    const hidden = byKey(footer, 'footer-hidden')!
+    expect(hidden.props['display']).toBe('none')
+    expect(hiddenKeys(footer).map(k => [k.props['key'], k.props['hotkey']])).toEqual([
+      ['nav-prev', 'p'],
+      ['nav-next', 'n'],
+      ['nav-latest', 'l'],
+      ['nav-copy', 'y'],
+      ['nav-expand', 'e'],
+      ['nav-collapse', 'c'],
+    ])
+    for (const k of hiddenKeys(footer)) expect(String(k.props['label'])).not.toMatch(/ $/)
+  })
+
+  test('the team board draws only the views it can switch to and the page keys', () => {
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    const footer = footerOf({ view: 'team', members })
+    const rows = rowsOf(footer)
+    expect(rows.map(r => r.props['key'])).toEqual(['footer-row-2'])
+    expect(line(rows[0])).toBe('d: detail  s: search  │  b: ▲ page  f: ▼ page')
+    expect(hiddenKeys(footer).map(k => k.props['hotkey'])).toEqual(['p', 'n', 'l', 'j', 'k', 'o', 'y', 'm', 'e', 'c'])
+  })
+
+  test('stacked, the turn list and the team board keep only their rows', () => {
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    expect(rowsOf(footerOf({ columns: 60, view: 'turns' })).map(r => r.props['key'])).toEqual([
+      'footer-row-cursor',
+      'footer-row-views',
+      'footer-row-expand',
+    ])
+    expect(line(byKey(footerOf({ columns: 60, view: 'turns' }), 'footer-row-expand'))).toBe('b: ▲ page  f: ▼ page')
+    expect(rowsOf(footerOf({ columns: 60, view: 'team', members })).map(r => r.props['key'])).toEqual([
+      'footer-row-views',
+      'footer-row-expand',
+    ])
+  })
+
+  test('in the turn list j and k act while it has rows, o only with a cursor on a turn', () => {
+    const list = footerOf({ view: 'turns' })
+    expect(acts(list, 'nav-down')).toBe(true)
+    expect(acts(list, 'nav-up')).toBe(true)
+    expect(acts(list, 'nav-open')).toBe(false)
+    expect(acts(footerOf({ view: 'turns', turnCursor: 0 }), 'nav-open')).toBe(true)
+    expect(acts(footerOf({ view: 'turns', turns: [] }), 'nav-down')).toBe(false)
   })
 
   test('stacks every group on its own row under 64 columns and drops the separator', () => {
@@ -1441,8 +1507,18 @@ describe('pinned footer', () => {
     const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
     for (const view of ['turns', 'team'] as const) {
       const footer = footerOf({ view, members, selected: 0, isLatest: false, cursor: 'b1' })
-      for (const name of ['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'expand', 'collapse'])
-        expect(acts(footer, `nav-${name}`), name).toBe(false)
+      // In the turn list j and k move its own cursor (o opens the turn under it).
+      const idle = [
+        'prev',
+        'next',
+        'latest',
+        'open',
+        'copy',
+        'expand',
+        'collapse',
+        ...(view === 'team' ? ['down', 'up'] : []),
+      ]
+      for (const name of idle) expect(acts(footer, `nav-${name}`), name).toBe(false)
       expect(byKey(footer, 'nav-detail')?.props['hotkey']).toBe('d')
       expect(acts(footer, 'nav-search')).toBe(true)
       expect(byKey(footer, 'nav-turns')).toBeUndefined()
@@ -1547,7 +1623,21 @@ describe('own scroll', () => {
         }
         const rows = parts.reduce((sum, part) => sum + Number(part.props['height']), 0)
         expect(header.props['height']).toBe(rows)
-        const footerRows = columns >= 64 ? 4 : 6
+        // Every drawn child of the footer is one row; the hidden keys take none.
+        const footerRows = kids(byKey(tree, 'footer')).filter(n => n.props['key'] !== 'footer-hidden').length
+        expect(footerRows, JSON.stringify(extra)).toBe(
+          extra.view === undefined
+            ? columns >= 64
+              ? 4
+              : 6
+            : extra.view === 'team'
+              ? columns >= 64
+                ? 3
+                : 4
+              : columns >= 64
+                ? 4
+                : 5,
+        )
         expect(byKey(tree, 'pane-window')?.props['height']).toBe(30 - rows - footerRows)
       }
     // A long prompt is cut to the one row it is given.
@@ -1563,7 +1653,8 @@ describe('own scroll', () => {
       [{}, 2, 4],
       [{ columns: 50 }, 2, 6],
       [{ view: 'turns' }, 2, 4],
-      [{ view: 'team', members }, 1, 4],
+      // The team board draws one row of keys: the footer is a row shorter.
+      [{ view: 'team', members }, 1, 3],
       [{ turns: [] }, 0, 4],
     ]
     for (const [extra, headerRows, footerRows] of cases) {
@@ -1788,14 +1879,14 @@ describe('empty states', () => {
     expect(lines(renderPane(el, { ...base, turns: [] }, act))).toEqual([
       { text: 'No turns yet.', color: 'text' },
       { text: 'Send a prompt; tool calls and subagents appear here.', color: 'inactive' },
-      { text: 'Keys: t turns · s search · e expand · ctrl+x tab focuses this pane', color: 'inactive' },
+      { text: 'Keys: t turns · s search · e expand · click or ctrl+x tab for keys', color: 'inactive' },
     ])
     expect(lines(renderPane(el, { ...base, turns: [], view: 'turns' }, act))).toHaveLength(3)
     expect(lines(renderPane(el, { ...base, turns: [], isBarShown: true }, act)).at(-1)?.text).toBe(
-      'Keys: t turns · s search · e expand · ctrl+x tab twice focuses this pane',
+      'Keys: t turns · s search · e expand · click or ctrl+x tab ×2 for keys',
     )
     expect(text(renderPane(el, { ...base, turns: [], icons: ICON_SETS.ascii }, act))).toContain(
-      'Keys: t turns . s search . e expand . ctrl+x tab focuses this pane',
+      'Keys: t turns . s search . e expand . click or ctrl+x tab for keys',
     )
   })
 
@@ -2048,7 +2139,7 @@ describe('display-width alignment', () => {
     const cjk = rowLabel('日本語'.repeat(70))
     expect(displayWidth(cjk)).toBeLessThanOrEqual(75)
     expect(displayWidth(cjk)).toBeGreaterThanOrEqual(74)
-    expect(cjk.endsWith('…')).toBe(true)
+    expect(cjk.trimEnd().endsWith('…')).toBe(true)
   })
 
   test('a wide tool name pads to the same name column as an ASCII one', () => {
@@ -2144,7 +2235,7 @@ describe('grouped runs', () => {
 
   test('a run of three reads is one row with its calls and files, not three rows', () => {
     const tree = renderPane(el, grouped, act)
-    expect(String(byKey(tree, 'group:g0')?.props['label'])).toBe('Read ×3 · 3 files')
+    expect(String(byKey(tree, 'group:g0')?.props['label']).trimEnd()).toBe('Read ×3 · 3 files')
     expect(byKey(tree, 'g0')).toBeUndefined()
     expect(byKey(tree, 'g1')).toBeUndefined()
     expect(text(byKey(tree, 'status-group:g0'))).toBe('✓ ')
@@ -2223,14 +2314,14 @@ describe('grouped runs', () => {
       },
       act,
     )
-    expect(String(byKey(tree, 'group:ag/t1')?.props['label'])).toBe('Grep ×3 · 3 patterns')
+    expect(String(byKey(tree, 'group:ag/t1')?.props['label']).trimEnd()).toBe('Grep ×3 · 3 patterns')
     expect(byKey(tree, 'ag/t2')).toBeDefined()
     expect(text(tree)).toMatch(/└─ /)
   })
 
   test('the ascii set groups with x and draws only ASCII', () => {
     const tree = renderPane(el, { ...grouped, icons: ICON_SETS.ascii, expanded: new Set(['group:g0']) }, act)
-    expect(String(byKey(tree, 'group:g0')?.props['label'])).toBe('Read x3 . 3 files')
+    expect(String(byKey(tree, 'group:g0')?.props['label']).trimEnd()).toBe('Read x3 . 3 files')
     expect(text(tree)).toMatch(/^[\x20-\x7e\n]*$/)
   })
 
@@ -2733,5 +2824,70 @@ describe('hover preview card', () => {
       act,
     )
     expect(cardOf(tree, 'ag/g')?.props['hover']).toEqual({ scope: 'row:ag/g', display: 'flex' })
+  })
+})
+
+describe('turn list cursor', () => {
+  test('every turn row starts where the window can find it', () => {
+    measured.length = 0
+    renderPane(el, { ...base, view: 'turns' }, act)
+    const starts = (measured.at(-1) as unknown as { starts: Record<string, number> }).starts
+    const ids = Object.keys(starts).filter(id => id.startsWith('turn:'))
+    expect(ids).toEqual(base.turns.map(t => `turn:${t.index}`).reverse())
+  })
+
+  test('the row under the cursor has the accent cursor mark in its first cell', () => {
+    const tree = renderPane(el, { ...base, view: 'turns', turnCursor: 0 }, act)
+    const mark = byKey(tree, 'turn-cursor-0')!
+    expect(text(mark)).toBe(ICON_SETS.nerd.cursor)
+    expect(mark.props['color']).toBe(C.accent)
+    expect(nodes(tree).filter(n => String(n.props['key']).startsWith('turn-cursor-'))).toHaveLength(1)
+    expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'turn-cursor-0')).toBeUndefined()
+  })
+})
+
+describe('row hit areas', () => {
+  const press = (n: Node | undefined) => (n?.props['onPress'] as () => void)()
+
+  test('the chevron of a row that opens is a button that toggles it', () => {
+    calls.length = 0
+    const tree = renderPane(el, base, act)
+    const chevron = byKey(tree, 'chevron-b1')!
+    expect(chevron.type).toBe('Button')
+    // Every button is the theme grey: open or closed reads from the glyph.
+    expect(chevron.props).toMatchObject({ plain: true, dimColor: true })
+    press(chevron)
+    const byChevron = calls.at(-1)
+    press(byKey(tree, 'b1'))
+    expect(byChevron).toBeDefined()
+    expect(calls.at(-1)).toBe(byChevron)
+    const opened = byKey(renderPane(el, { ...base, expanded: new Set(['b1']) }, act), 'chevron-b1')
+    expect(opened?.props['label']).toBe(`${ICON_SETS.nerd.expanded} `)
+    expect(chevron.props['label']).toBe(`${ICON_SETS.nerd.collapsed} `)
+  })
+
+  test('the label of a row fills the room up to the model and duration columns', () => {
+    const tree = renderPane(el, base, act)
+    const labels = ['b1', 'e1'].map(id => String(byKey(tree, id)?.props['label']))
+    expect(displayWidth(labels[0]!)).toBe(displayWidth(labels[1]!))
+    expect(labels.some(label => / {2}$/.test(label))).toBe(true)
+  })
+
+  test('a row with nothing to open keeps its chevron as text', () => {
+    const bare = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'n1', tool: 'Bash', input: {} }] },
+    ])
+    const tree = renderPane(el, { ...base, turns: bare }, act)
+    expect(byKey(tree, 'n1')?.type).not.toBe('Button')
+    expect(byKey(tree, 'chevron-n1')).toBeUndefined()
+  })
+
+  test('the thinking row has a chevron button and a label as wide as the row allows', () => {
+    calls.length = 0
+    const tree = renderPane(el, { ...base, thinking: { count: 1, text: 'short' } }, act)
+    press(byKey(tree, 'chevron-t0:thinking'))
+    expect(calls).toEqual(['toggle:t0:thinking'])
+    expect(displayWidth(String(byKey(tree, 't0:thinking')?.props['label']))).toBe(base.columns - 6)
   })
 })
