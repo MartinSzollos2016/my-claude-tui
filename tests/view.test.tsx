@@ -4,10 +4,10 @@
 import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
-import { buildTurns, displayWidth, resetSectionCache, rowText, sectionCacheSize } from '../hooks/model'
-import { renderBar, renderPane, type El } from '../hooks/view'
 import { ICON_SETS } from '../hooks/icons'
 import { C, modelColor } from '../hooks/theme'
+import { buildTurns, displayWidth, resetSectionCache, rowText, sectionCacheSize } from '../hooks/model'
+import { renderBar, renderPane, type El } from '../hooks/view'
 
 type Node = { type: string; props: Record<string, unknown>; children: unknown }
 

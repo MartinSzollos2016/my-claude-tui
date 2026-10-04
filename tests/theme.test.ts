@@ -1,8 +1,8 @@
 import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
-import { buildTurns, sanitizeText, sanitizeValue } from '../hooks/model'
 import { agentStatusColor, C, contextColor, modeColor, modelColor, THEME_KEYS, TONE } from '../hooks/theme'
+import { buildTurns, sanitizeText, sanitizeValue } from '../hooks/model'
 
 const keys = new Set<string>(THEME_KEYS)
 

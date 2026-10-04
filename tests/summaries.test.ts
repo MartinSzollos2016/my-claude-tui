@@ -4,16 +4,15 @@ import { helpText } from '../hooks/commands'
 import {
   clampText,
   compactCall,
-  formatClock,
   itemName,
   itemSummary,
   resultLine,
-  shortMode,
   toolCategory,
   toolSummary,
   traceStats,
   type Item,
 } from '../hooks/model'
+import { formatClock, shortMode } from '../hooks/model/format'
 
 const cases: [string, Record<string, unknown>, string][] = [
   ['Read', {}, 'Read'],

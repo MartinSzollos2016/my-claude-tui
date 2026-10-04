@@ -2,7 +2,6 @@
 // reports, search, thinking, Workflow state and the team board.
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
-
 import {
   alignFromEnd,
   buildTurns,
@@ -15,9 +14,9 @@ import {
   teamMembers,
   thinkingCounts,
   turnListText,
+  turnsKey,
   turnTail,
   turnText,
-  turnsKey,
   workflowState,
   type ApiLike,
 } from '../hooks/model'

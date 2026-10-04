@@ -1,5 +1,4 @@
 import type { AgentStatus } from 'claude-code'
-
 import type { SectionKind } from './model'
 
 // Colors as Claude Code theme keys. The engine resolves a key against the

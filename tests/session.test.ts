@@ -2,7 +2,6 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { ToolTiming } from '../types'
-import { buildTurns } from '../hooks/model'
 import {
   MAX_TIMINGS,
   isTextOnly,
@@ -24,6 +23,7 @@ import {
   dropPending,
   discardStale,
 } from '../hooks/session'
+import { buildTurns } from '../hooks/model'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
 
