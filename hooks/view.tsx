@@ -31,6 +31,7 @@ import {
   sanitizeText,
   shortMode,
   shortModel,
+  splitMatch,
   taskMark,
   toolCategory,
   toolSections,
@@ -340,9 +341,7 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
                 onPress={() => act.pickTurn(row.index)}
               />
             )}
-            {row.snippet !== '' && (
-              <Text color={C.muted} wrap="truncate-end">{`      ${sanitizeText(row.snippet)}`}</Text>
-            )}
+            {row.snippet !== '' && renderSnippet(el, row.snippet, query)}
           </Box>
         ))}
         {hidden > 0 && (
@@ -352,6 +351,24 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
         )}
       </Box>
     </Box>
+  )
+}
+
+// The line a search hit gets under its turn: the matched part underlined and
+// bold in the accent, the surrounding text muted.
+function renderSnippet(el: El, snippet: string, query: string) {
+  const { Text } = el
+  const { before, match, after } = splitMatch(sanitizeText(snippet), query)
+  return (
+    <Text color={C.muted} wrap="truncate-end">
+      {`      ${before}`}
+      {match !== '' && (
+        <Text bold underline color={C.accent}>
+          {match}
+        </Text>
+      )}
+      {after}
+    </Text>
   )
 }
 

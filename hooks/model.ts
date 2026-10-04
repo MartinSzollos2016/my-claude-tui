@@ -893,22 +893,47 @@ function searchable(turn: Turn): string[] {
   return texts
 }
 
-// Cuts by code point, so no surrogate pair is split. `at` is an offset into
-// the lowercased text, whose length can differ from `text`'s, so it is mapped
-// back to a code point of `text` first.
-function snippetAt(text: string, at: number): string {
-  const chars = [...text]
+// The index of the code point of `chars` that holds offset `at` of their
+// lowercased text, whose length can differ from the original's.
+function charIndexAt(chars: readonly string[], at: number): number {
   let hit = 0
   for (let pos = 0; hit < chars.length - 1; hit++) {
     pos += chars[hit]!.toLowerCase().length
     if (pos > at) break
   }
+  return hit
+}
+
+// Cuts by code point, so no surrogate pair is split. `at` is an offset into
+// the lowercased text, mapped back to a code point of `text` first.
+function snippetAt(text: string, at: number): string {
+  const chars = [...text]
+  const hit = charIndexAt(chars, at)
   const start = Math.max(0, Math.min(hit - 20, chars.length - SNIPPET))
   const end = Math.min(chars.length, start + SNIPPET)
   const head = start > 0 ? '…' : ''
   const tail = end < chars.length ? '…' : ''
   const body = chars.slice(start + head.length, end - tail.length).join('')
   return head + body.replaceAll('\n', ' ') + tail
+}
+
+// A snippet in three parts around the first hit of `query` (case-insensitive,
+// offsets mapped as snippetAt does): what precedes it, the hit as written, and
+// what follows. No hit leaves the whole snippet in `before`.
+export function splitMatch(snippet: string, query: string): { before: string; match: string; after: string } {
+  const needle = query.trim().toLowerCase()
+  const at = needle === '' ? -1 : snippet.toLowerCase().indexOf(needle)
+  if (at < 0) return { before: snippet, match: '', after: '' }
+  const chars = [...snippet]
+  const start = charIndexAt(chars, at)
+  let end = start
+  for (let covered = 0; end < chars.length && covered < needle.length; end++)
+    covered += chars[end]!.toLowerCase().length
+  return {
+    before: chars.slice(0, start).join(''),
+    match: chars.slice(start, end).join(''),
+    after: chars.slice(end).join(''),
+  }
 }
 
 // -- Thinking -----------------------------------------------------------------

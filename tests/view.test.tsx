@@ -401,6 +401,11 @@ describe('renderPane', () => {
       renderPane(el, { ...base, view: 'turns', stats: [base.turnStat, undefined] }, act),
       renderPane(el, { ...base, view: 'turns', query: 'callers', matches: [{ index: 0, snippet: 'a' }] }, act),
       renderPane(el, { ...base, view: 'turns', query: 'zzz', matches: [] }, act),
+      renderPane(
+        el,
+        { ...base, view: 'turns', query: 'callers', matches: [{ index: 0, snippet: 'Find callers' }] },
+        act,
+      ),
       renderPane(el, { ...base, view: 'team', members, tasks }, act),
       renderPane(el, { ...base, view: 'team', turns: [] }, act),
       renderPane(el, { ...base, icons: ICON_SETS.ascii, expanded: open, thinking }, act),
@@ -551,6 +556,28 @@ describe('renderPane', () => {
     expect(byKey(all, 'turn-0')).toBeDefined()
     expect(byKey(all, 'turn-1')).toBeDefined()
     expect(byKey(all, 'search-clear')).toBeUndefined()
+  })
+
+  test('the matched part of a snippet is underlined bold in the accent, the rest muted', () => {
+    const tree = renderPane(
+      el,
+      { ...base, view: 'turns', query: 'CALLERS', matches: [{ index: 0, snippet: 'Explore - Find callers now' }] },
+      act,
+    )
+    const hit = nodes(tree).find(n => n.type === 'Text' && n.props['underline'] === true)
+    expect(text(hit)).toBe('callers')
+    expect(hit?.props['bold']).toBe(true)
+    expect(hit?.props['color']).toBe(C.accent)
+    const row = nodes(tree).find(n => n.type === 'Text' && text(n).includes('Explore - Find '))
+    expect(row?.props['color']).toBe(C.muted)
+    expect(text(row)).toBe('      Explore - Find callers now')
+    // A snippet with no match stays one muted line.
+    const plain = renderPane(
+      el,
+      { ...base, view: 'turns', query: 'zzz', matches: [{ index: 0, snippet: 'no hit here' }] },
+      act,
+    )
+    expect(nodes(plain).some(n => n.props['underline'] === true)).toBe(false)
   })
 
   test('a filtered row keeps the real tail, and the echoed query is sanitized and cut', () => {
