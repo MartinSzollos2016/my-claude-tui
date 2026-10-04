@@ -44,3 +44,24 @@ export const tool = (over: Partial<ToolItem>): ToolItem => ({
   isPending: false,
   ...over,
 })
+
+export const main: SessionMessage[] = [
+  prompt('Fix the bug'),
+  {
+    role: 'assistant',
+    text: 'Looking.',
+    toolUses: [
+      { tool_use_id: 'r1', tool: 'Read', input: { file_path: '/a/b/main.go' }, text: 'package main' },
+      {
+        tool_use_id: 'a1',
+        tool: 'Agent',
+        input: { subagent_type: 'Explore', description: 'Find callers' },
+        agentId: 'agent-1',
+        text: 'done',
+        durationMs: 4200,
+      },
+      { tool_use_id: 'x1', tool: 'Bash', input: { command: 'false' }, text: 'boom', isError: true },
+      { tool_use_id: 'p1', tool: 'Bash', input: { command: 'sleep 9' } },
+    ],
+  },
+]

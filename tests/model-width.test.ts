@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
-import { compactCall, searchTurns, splitMatch, turnTail } from '../hooks/model'
+import { compactCall, searchTurns, splitMatch } from '../hooks/model'
 import { clampText } from '../hooks/model/clamp'
 import { toolSections } from '../hooks/model/sections'
 import { toolSummary } from '../hooks/model/summaries'
 import { taskMark } from '../hooks/model/team'
+import { turnTail } from '../hooks/model/transcript'
 import { buildTurns } from '../hooks/model/turns'
 import type { ToolItem } from '../hooks/model/types'
 import {

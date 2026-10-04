@@ -17,13 +17,11 @@ import { agentStatusColor, C, contextColor, modeColor, modelColor, TONE, type Th
 import {
   clampScroll,
   contentRows,
-  EMPTY_TURN_TEXT,
   footerLayout,
   footerPads,
   overflowRows,
   pageScroll,
   splitMatch,
-  turnTable,
   type FooterLayout,
   type RowBlock,
   type ScrollFrame,
@@ -48,6 +46,7 @@ import { sanitizeText } from './model/sanitize'
 import { cachedSections, firstErrorLine, pieceStarts, reserveSections, type Section } from './model/sections'
 import { itemName, itemSummary, toolCategory } from './model/summaries'
 import { taskMark, type TaskEntry, type TeamMember } from './model/team'
+import { EMPTY_TURN_TEXT, turnTable } from './model/turn-table'
 import { isAgentRunning, isSubagent, itemStatus, traceStats, type ItemStatus } from './model/turns'
 import type { Item, ToolItem, Turn } from './model/types'
 import {
