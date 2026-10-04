@@ -234,7 +234,22 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   if (data.view === 'team') return paneBody(el, data, renderTeam(el, data, act))
 
   if (!turn) {
-    return paneBody(el, data, <Text color={C.muted}>No turns yet. Send a prompt and the detail view fills in.</Text>)
+    const sep = data.icons.groupSep
+    return paneBody(
+      el,
+      data,
+      <Box flexDirection="column">
+        <Text key="empty-title" color={C.text}>
+          No turns yet.
+        </Text>
+        <Text key="empty-send" color={C.muted}>
+          Send a prompt; tool calls and subagents appear here.
+        </Text>
+        <Text key="empty-keys" color={C.muted}>
+          {`Keys: t turns ${sep} s search ${sep} e expand ${sep} ctrl+x tab focuses this pane`}
+        </Text>
+      </Box>,
+    )
   }
   if (data.view === 'turns') return paneBody(el, data, renderTurnList(el, data, act))
 
@@ -347,7 +362,12 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
       )}
       <Box flexDirection="column" marginTop={1}>
         {isFiltered && rows.length === 0 && (
-          <Text color={C.muted}>{`No turn matches "${trunc(sanitizeText(query), 40)}".`}</Text>
+          <Box flexDirection="column">
+            <Text color={C.muted}>{`No turn matches "${trunc(sanitizeText(query), 40)}".`}</Text>
+            <Text key="empty-search" color={C.muted}>
+              Clear the search or try fewer words.
+            </Text>
+          </Box>
         )}
         {shown.map(row => (
           <Box key={`turn-row-${row.index}`} flexDirection="column">
@@ -440,7 +460,14 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
         />
       </Box>
       <Box flexDirection="column" marginTop={1}>
-        {members.length === 0 && <Text color={C.muted}>No teammates in this session.</Text>}
+        {members.length === 0 && (
+          <Box flexDirection="column">
+            <Text color={C.muted}>No teammates in this session.</Text>
+            <Text key="empty-members" color={C.muted}>
+              Teammates show up once Claude starts a team.
+            </Text>
+          </Box>
+        )}
         {memberRows.map((row, i) => (
           <Box key={`member-${i}`} flexDirection="row">
             <Text color={agentStatusColor(row.member.status)}>{`${data.icons.bullet} `}</Text>
@@ -455,7 +482,14 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
       </Box>
       <Box flexDirection="column" marginTop={1}>
         <Text bold color={C.text}>{`Tasks (${tasks.length})`}</Text>
-        {tasks.length === 0 && <Text color={C.muted}>No tasks yet.</Text>}
+        {tasks.length === 0 && (
+          <Box flexDirection="column">
+            <Text color={C.muted}>No tasks yet.</Text>
+            <Text key="empty-tasks" color={C.muted}>
+              Tasks show up when Claude plans with TodoWrite or TaskCreate.
+            </Text>
+          </Box>
+        )}
         {taskRows.map(row => (
           <Text
             key={`task-${row.task.id}`}

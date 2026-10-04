@@ -416,6 +416,7 @@ describe('renderPane', () => {
       renderPane(el, { ...ascii, view: 'turns', query: 'zzz', matches: [] }, act),
       renderPane(el, { ...ascii, view: 'team', members, tasks }, act),
       renderPane(el, { ...ascii, turns: [] }, act),
+      renderPane(el, { ...ascii, view: 'team' }, act),
       renderPane(el, { ...ascii, selected: 1, isLatest: true }, act),
       renderPane(el, { ...ascii, isFocused: true }, act),
       renderPane(el, { ...ascii, isFocused: false }, act),
@@ -602,6 +603,8 @@ describe('renderPane', () => {
       renderPane(el, { ...base, selected: 1, isLatest: true, icons: ICON_SETS.ascii }, act),
       renderPane(el, { ...base, isFocused: true }, act),
       renderPane(el, { ...base, isFocused: false }, act),
+      renderPane(el, { ...base, view: 'team' }, act),
+      renderPane(el, { ...base, turns: [], icons: ICON_SETS.unicode }, act),
     ]
     const allowed: unknown[] = [...Object.values(C), ...['fable', 'opus', 'sonnet', 'haiku'].map(m => modelColor(m))]
     let texts = 0
@@ -1075,6 +1078,42 @@ describe('pane focus', () => {
     const footer = byKey(renderPane(el, { ...base, isFocused: true }, act), 'footer')
     const parts = (footer?.children as Node[]).filter(Boolean)
     expect(parts.at(-1)?.props['key']).toBe('focus-note')
+  })
+})
+
+describe('empty states', () => {
+  const lines = (tree: unknown) =>
+    nodes(tree)
+      .filter(n => n.type === 'Text' && String(n.props['key']).startsWith('empty-'))
+      .map(n => ({ text: text(n), color: n.props['color'] }))
+
+  test('no turns: a three line block with the keys', () => {
+    expect(lines(renderPane(el, { ...base, turns: [] }, act))).toEqual([
+      { text: 'No turns yet.', color: 'text' },
+      { text: 'Send a prompt; tool calls and subagents appear here.', color: 'inactive' },
+      { text: 'Keys: t turns · s search · e expand · ctrl+x tab focuses this pane', color: 'inactive' },
+    ])
+    expect(lines(renderPane(el, { ...base, turns: [], view: 'turns' }, act))).toHaveLength(3)
+    expect(text(renderPane(el, { ...base, turns: [], icons: ICON_SETS.ascii }, act))).toContain(
+      'Keys: t turns . s search . e expand . ctrl+x tab focuses this pane',
+    )
+  })
+
+  test('no turn matches the search: one line on what to do', () => {
+    const tree = renderPane(el, { ...base, view: 'turns', query: 'zzz', matches: [] }, act)
+    expect(lines(tree)).toEqual([{ text: 'Clear the search or try fewer words.', color: 'inactive' }])
+    expect(text(tree)).toContain('No turn matches "zzz".')
+  })
+
+  test('no teammates and no tasks: one hint line each', () => {
+    const tree = renderPane(el, { ...base, view: 'team' }, act)
+    expect(lines(tree).map(l => l.text)).toEqual([
+      'Teammates show up once Claude starts a team.',
+      'Tasks show up when Claude plans with TodoWrite or TaskCreate.',
+    ])
+    for (const l of lines(tree)) expect(l.color).toBe('inactive')
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    expect(lines(renderPane(el, { ...base, view: 'team', members }, act))).toHaveLength(1)
   })
 })
 
