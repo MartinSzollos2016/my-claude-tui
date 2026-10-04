@@ -1,10 +1,10 @@
 // The turn list: a table of the session's turns with search, its snippets, and
 // the row ids its cursor walks.
+import { C } from '../theme'
 import { sanitizeText } from '../model/sanitize'
 import type { RowBlock } from '../model/scroll'
 import { splitMatch } from '../model/search'
 import { turnTable } from '../model/turn-table'
-import { C } from '../theme'
 import {
   INPUT_ROWS,
   LINE,
