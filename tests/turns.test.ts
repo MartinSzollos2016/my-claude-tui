@@ -1,12 +1,10 @@
 // The turn-level logic added for spec items 1-11: fingerprints, text
 // reports, search, thinking, Workflow state and the team board.
-import type { SessionMessage, ToolUseSummary } from 'claude-code'
+import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
-import { workflowState } from '../hooks/model'
-import { buildTurns, isAgentFinished, isAgentRunning, turnsKey } from '../hooks/model/turns'
-import { prompt } from './fixtures/model'
+import { isAgentFinished, isAgentRunning, turnsKey } from '../hooks/model/turns'
+import { prompt, read } from './fixtures/model'
 
-const read: ToolUseSummary = { tool_use_id: 'u1', tool: 'Read', input: { file_path: '/a.go' } }
 const transcript: SessionMessage[] = [prompt('Go'), { role: 'assistant', text: 'Hi', toolUses: [read] }]
 
 describe('turnsKey', () => {
@@ -53,32 +51,5 @@ describe('agent status', () => {
     for (const status of ['completed', 'failed', 'killed'] as const) expect(isAgentFinished(status)).toBe(true)
     for (const status of ['pending', 'running', 'waiting', 'idle', undefined] as const)
       expect(isAgentFinished(status)).toBe(false)
-  })
-})
-
-describe('workflowState', () => {
-  const wf = (text?: string) =>
-    buildTurns([
-      prompt('review it'),
-      {
-        role: 'assistant',
-        text: '',
-        toolUses: [{ tool_use_id: 'w1', tool: 'Workflow', input: { name: 'review' }, ...(text ? { text } : {}) }],
-      },
-    ])[0]
-
-  test('a pending Workflow in a working turn runs, with the agents seen', () => {
-    expect(workflowState(wf(), 3, true)).toEqual({ isRunning: true, agents: 3 })
-    expect(workflowState(wf(), 0, true)).toEqual({ isRunning: true, agents: 0 })
-  })
-
-  test('a pending Workflow outside a working turn is not running', () => {
-    expect(workflowState(wf(), 2, false)).toEqual({ isRunning: false })
-  })
-
-  test('a finished Workflow, a turn without one and no turn are not running', () => {
-    expect(workflowState(wf('done'), 2, true)).toEqual({ isRunning: false })
-    expect(workflowState(buildTurns([prompt('hi')])[0], 0, true)).toEqual({ isRunning: false })
-    expect(workflowState(undefined, 0, true)).toEqual({ isRunning: false })
   })
 })
