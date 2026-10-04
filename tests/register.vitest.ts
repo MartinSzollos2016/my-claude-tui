@@ -540,7 +540,10 @@ describe('detail pane', () => {
     expect(text(await draw($))).toContain('turn 2/3')
     await press($, 'nav-prev')
     expect(text(await draw($))).toContain('turn 1/3')
-    expect(byKey(await draw($), 'nav-prev')).toBeUndefined()
+    // p on the first turn is still the pane's key and changes nothing.
+    expect(byKey(await draw($), 'nav-prev')?.props['hotkey']).toBe('p')
+    await press($, 'nav-prev')
+    expect(text(await draw($))).toContain('turn 1/3')
     await press($, 'nav-next')
     expect(text(await draw($))).toContain('turn 2/3')
     await press($, 'nav-latest')
@@ -731,7 +734,8 @@ describe('detail pane', () => {
 
   test('opens the team board with teammates and tasks', async () => {
     const plain = fakeEngine({ messages: main })
-    expect(byKey(await draw(plain.$), 'nav-team')).toBeUndefined()
+    await press(plain.$, 'nav-team')
+    expect(text(await draw(plain.$))).not.toContain('Team (')
 
     const { $ } = fakeEngine({
       messages: [
@@ -830,8 +834,9 @@ describe('keyboard cursor', () => {
     expect(markOf(await draw($))).toHaveLength(1)
     await press($, 'nav-prev')
     expect(markOf(await draw($))).toEqual([])
-    expect(byKey(await draw($), 'nav-copy')).toBeUndefined()
+    await press($, 'nav-copy')
     expect(world.copies).toEqual([])
+    expect(world.toasts).toEqual([])
   })
 })
 
@@ -860,20 +865,20 @@ describe('own scroll', () => {
     await settle()
   }
 
-  test('f pages the content down and b back up, muted at the ends', async () => {
+  test('f pages the content down and b back up, a no-op at the ends', async () => {
     const { $ } = fakeEngine({ messages: long })
     expect(await topOf($)).toBe(0)
-    expect(byKey(await drawSmall($), 'nav-pageup')).toBeUndefined()
+    await pressSmall($, 'nav-pageup')
+    expect(await topOf($)).toBe(0)
     await pressSmall($, 'nav-pagedown')
     expect(await topOf($)).toBe(-4)
     await pressSmall($, 'nav-pagedown')
     expect(await topOf($)).toBe(-8)
     await pressSmall($, 'nav-pageup')
     expect(await topOf($)).toBe(-4)
-    for (let i = 0; i < 5; i++) if (byKey(await drawSmall($), 'nav-pagedown')) await pressSmall($, 'nav-pagedown')
+    for (let i = 0; i < 5; i++) await pressSmall($, 'nav-pagedown')
     expect(await topOf($)).toBe(-18)
-    expect(byKey(await drawSmall($), 'nav-pagedown')).toBeUndefined()
-    expect(byKey(await drawSmall($), 'nav-pagedown-off')).toBeDefined()
+    expect(text(byKey(await drawSmall($), 'footer-status'))).toContain('end')
   })
 
   test('j past the bottom of the window scrolls the cursor row into view, k past the top back', async () => {
@@ -888,6 +893,19 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(-2)
     await pressSmall($, 'nav-up')
     expect(await topOf($)).toBe(-1)
+  })
+
+  test('every key out of reach is still the pane key: pressing it keeps the state', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    const before = text(await drawSmall($))
+    for (const key of ['nav-prev', 'nav-next', 'nav-latest', 'nav-open', 'nav-copy', 'nav-team', 'nav-pageup']) {
+      expect(byKey(await drawSmall($), key)?.type, key).toBe('Button')
+      expect(typeof byKey(await drawSmall($), key)?.props['hotkey'], key).toBe('string')
+      await pressSmall($, key)
+    }
+    expect(text(await drawSmall($))).toBe(before)
+    expect(world.copies).toEqual([])
+    expect(world.focused).toEqual([])
   })
 
   test('a change of view, of turn or a new prompt scrolls back to the top', async () => {

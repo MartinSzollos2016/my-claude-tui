@@ -51,6 +51,16 @@ function text(tree: unknown): string {
 
 const byKey = (tree: unknown, key: string) => nodes(tree).find(n => n.props['key'] === key)
 
+// Presses the footer key `key` (always a Button with its hotkey) and says
+// whether it reached an action; a key out of reach swallows the press.
+function acts(tree: unknown, key: string): boolean {
+  const button = byKey(tree, key)
+  if (button?.type !== 'Button' || typeof button.props['hotkey'] !== 'string') throw new Error(`no key ${key}`)
+  const before = calls.length
+  ;(button.props['onPress'] as (e: unknown) => void)({ surface: 'terminal' })
+  return calls.length > before
+}
+
 const messages: SessionMessage[] = [
   { role: 'user', text: 'Fix the bug', toolUses: [] },
   {
@@ -212,18 +222,15 @@ describe('renderPane', () => {
     expect(byKey(tree, 'b1')?.props['label']).toContain('Run tests')
     expect(all).toContain('2.5s')
     expect(all).toContain('haiku4.5')
-    expect(byKey(tree, 'nav-prev')).toBeUndefined()
-    expect(byKey(tree, 'nav-prev-off')?.type).toBe('Text')
-    expect(byKey(tree, 'nav-latest')?.type).toBe('Button')
+    expect(acts(tree, 'nav-prev')).toBe(false)
+    expect(acts(tree, 'nav-latest')).toBe(true)
     const mid = renderPane(el, { ...base, selected: 1 }, act)
-    expect(byKey(mid, 'nav-prev')?.type).toBe('Button')
-    expect(byKey(mid, 'nav-next')).toBeUndefined()
-    expect(byKey(mid, 'nav-next-off')?.type).toBe('Text')
+    expect(acts(mid, 'nav-prev')).toBe(true)
+    expect(acts(mid, 'nav-next')).toBe(false)
     const last = renderPane(el, { ...base, selected: 1, isLatest: true }, act)
-    expect(byKey(last, 'nav-prev')?.type).toBe('Button')
-    expect(byKey(last, 'nav-next')).toBeUndefined()
-    expect(byKey(last, 'nav-latest')).toBeUndefined()
-    expect(byKey(last, 'nav-latest-off')?.type).toBe('Text')
+    expect(acts(last, 'nav-prev')).toBe(true)
+    expect(acts(last, 'nav-next')).toBe(false)
+    expect(acts(last, 'nav-latest')).toBe(false)
   })
 
   test('every tool row starts with a status glyph, outputs and thinking keep the column blank', () => {
@@ -999,8 +1006,8 @@ describe('renderPane', () => {
     )
   })
 
-  test('the team view lists teammates and tasks; its nav button only shows with a team', () => {
-    expect(byKey(renderPane(el, base, act), 'nav-team')).toBeUndefined()
+  test('the team view lists teammates and tasks; its nav key acts only with a team', () => {
+    expect(acts(renderPane(el, base, act), 'nav-team')).toBe(false)
     const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
     const tasks = [
       { id: '1', subject: 'Write tests', status: 'in_progress', owner: 'alice' },
@@ -1313,27 +1320,25 @@ describe('pinned footer', () => {
     }
   })
 
-  test('an unavailable key is a muted text with the same label and no hotkey', () => {
+  test('a key out of reach is the same plain dim Button with its hotkey, and pressing it does nothing', () => {
     const first = renderPane(el, { ...base, selected: 0, isLatest: false, cursor: null }, act)
-    for (const [key, label] of [
-      ['nav-prev', 'p: ‹ prev'],
-      ['nav-open', 'o: open'],
-      ['nav-copy', 'y: copy'],
-      ['nav-team', 'm: team'],
+    for (const [key, hotkey, label] of [
+      ['nav-prev', 'p', '‹ prev'],
+      ['nav-open', 'o', 'open'],
+      ['nav-copy', 'y', 'copy'],
+      ['nav-team', 'm', 'team'],
+      ['nav-pageup', 'b', '▲ page'],
+      ['nav-pagedown', 'f', '▼ page'],
     ] as const) {
-      expect(byKey(first, key)).toBeUndefined()
-      const off = byKey(first, `${key}-off`)
-      expect(off?.type).toBe('Text')
-      expect(off?.props['color']).toBe(C.muted)
-      expect(off?.props['hotkey']).toBeUndefined()
-      expect(text(off)).toBe(label)
+      expect(byKey(first, key)?.props).toMatchObject({ hotkey, label, plain: true, dimColor: true })
+      expect(byKey(first, `${key}-off`)).toBeUndefined()
+      expect(acts(first, key)).toBe(false)
     }
+    expect(nodes(first).some(n => String(n.props['key']).endsWith('-off'))).toBe(false)
     const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
-    expect(byKey(renderPane(el, { ...base, members }, act), 'nav-team')?.type).toBe('Button')
+    expect(acts(renderPane(el, { ...base, members }, act), 'nav-team')).toBe(true)
     const bare = renderPane(el, { ...base, turns: buildTurns([{ role: 'user', text: 'hi', toolUses: [] }]) }, act)
-    expect(byKey(bare, 'nav-expand-off')?.type).toBe('Text')
-    expect(byKey(bare, 'nav-collapse-off')?.type).toBe('Text')
-    expect(byKey(bare, 'nav-down-off')?.type).toBe('Text')
+    for (const key of ['nav-expand', 'nav-collapse', 'nav-down', 'nav-up']) expect(acts(bare, key)).toBe(false)
   })
 
   test('a button keeps the label and hotkey and is plain and dim', () => {
@@ -1372,33 +1377,28 @@ describe('pinned footer', () => {
     for (const extra of [{}, { view: 'turns' as const }, { view: 'team' as const }, { members }, { cursor: null }])
       for (const icons of [ICON_SETS.nerd, ICON_SETS.unicode, ICON_SETS.ascii]) {
         const footer = footerOf({ columns: 36, isLatest: false, icons, ...extra })
-        const keys = nodes(footer).filter(n => n.type === 'Button' || String(n.props['key']).endsWith('-off'))
-        expect(keys.length).toBeGreaterThan(8)
+        const keys = nodes(footer).filter(n => n.type === 'Button')
+        expect(keys.length).toBe(14)
         for (const k of keys) {
-          const shown = k.type === 'Button' ? String(k.props['label']) : text(k).replace(/^.: /, '')
+          const shown = String(k.props['label'])
           expect(shown, String(k.props['key'])).not.toBe('')
           if (icons === ICON_SETS.ascii) expect(shown).toMatch(/^[\x20-\x7e]+$/)
         }
       }
   })
 
-  test('outside the detail view the keys of the detail turn are muted text with no hotkey', () => {
+  test('outside the detail view the keys of the detail turn keep their hotkeys and do nothing', () => {
     const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
     for (const view of ['turns', 'team'] as const) {
       const footer = footerOf({ view, members, selected: 0, isLatest: false, cursor: 'b1' })
-      for (const name of ['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'expand', 'collapse']) {
-        expect(byKey(footer, `nav-${name}`), name).toBeUndefined()
-        const off = byKey(footer, `nav-${name}-off`)
-        expect(off?.type).toBe('Text')
-        expect(off?.props['color']).toBe(C.muted)
-        expect(off?.props['hotkey']).toBeUndefined()
-      }
+      for (const name of ['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'expand', 'collapse'])
+        expect(acts(footer, `nav-${name}`), name).toBe(false)
       expect(byKey(footer, 'nav-detail')?.props['hotkey']).toBe('d')
-      expect(byKey(footer, 'nav-search')?.type).toBe('Button')
+      expect(acts(footer, 'nav-search')).toBe(true)
       expect(byKey(footer, 'nav-turns')).toBeUndefined()
     }
-    expect(byKey(footerOf({ view: 'turns', members }), 'nav-team')?.type).toBe('Button')
-    expect(byKey(footerOf({ view: 'team', members }), 'nav-team-off')?.type).toBe('Text')
+    expect(acts(footerOf({ view: 'turns', members }), 'nav-team')).toBe(true)
+    expect(acts(footerOf({ view: 'team', members }), 'nav-team')).toBe(false)
   })
 
   test('the team board has no header button of its own, the footer holds d', () => {
@@ -1528,11 +1528,10 @@ describe('own scroll', () => {
     expect(text(byKey(ascii, 'more-below'))).toBe('v 1 more below')
   })
 
-  test('f and b page the window, muted at the end and at the top', () => {
+  test('f and b page the window, and do nothing at the end and at the top', () => {
     const top = pane({ rows: 10 })
-    expect(byKey(top, 'nav-pageup')).toBeUndefined()
-    expect(byKey(top, 'nav-pageup-off')?.props['color']).toBe(C.muted)
-    expect(text(byKey(top, 'nav-pageup-off'))).toBe('b: ▲ page')
+    expect(byKey(top, 'nav-pageup')?.props['hotkey']).toBe('b')
+    expect(acts(top, 'nav-pageup')).toBe(false)
     const f = byKey(top, 'nav-pagedown')!
     expect(f.props).toMatchObject({ hotkey: 'f', label: '▼ page', plain: true, dimColor: true })
     expect((f.props['hover'] as { scope?: string }).scope).toBe('btn:nav-pagedown')
@@ -1540,17 +1539,30 @@ describe('own scroll', () => {
     press(f)
     expect(calls).toEqual(['scroll:2'])
     const end = pane({ rows: 10, scrollTop: 4 })
-    expect(byKey(end, 'nav-pagedown')).toBeUndefined()
-    expect(text(byKey(end, 'nav-pagedown-off'))).toBe('f: ▼ page')
+    expect(byKey(end, 'nav-pagedown')?.props['hotkey']).toBe('f')
+    expect(acts(end, 'nav-pagedown')).toBe(false)
     expect(byKey(end, 'nav-pageup')?.props['hotkey']).toBe('b')
     press(byKey(end, 'nav-pageup'))
     expect(calls.at(-1)).toBe('scroll:2')
     for (const view of [{}, { view: 'turns' as const }, { view: 'team' as const, members }]) {
       const fits = pane(view)
-      expect(byKey(fits, 'nav-pageup-off')).toBeDefined()
-      expect(byKey(fits, 'nav-pagedown-off')).toBeDefined()
+      expect(acts(fits, 'nav-pageup')).toBe(false)
+      expect(acts(fits, 'nav-pagedown')).toBe(false)
     }
     expect(byKey(pane({ rows: 10, icons: ICON_SETS.ascii }), 'nav-pagedown')?.props['label']).toBe('v page')
+  })
+
+  test('the status row says top or end while the content overflows', () => {
+    const status = (extra: Record<string, unknown>) => text(byKey(pane({ isFocused: true, ...extra }), 'footer-status'))
+    expect(status({ rows: 10 })).toBe('turn 1/2 · top · keys on')
+    expect(status({ rows: 10, scrollTop: 2 })).toBe('turn 1/2 · keys on')
+    expect(status({ rows: 10, scrollTop: 4 })).toBe('turn 1/2 · end · keys on')
+    expect(status({})).toBe('turn 1/2 · keys on')
+    expect(text(byKey(pane({ rows: 10, isFocused: true, icons: ICON_SETS.ascii }), 'footer-status'))).toBe(
+      'turn 1/2 . top . keys on',
+    )
+    const place = byKey(pane({ rows: 10 }), 'scroll-place')
+    expect(place?.props['color']).toBe(C.muted)
   })
 
   test('the page keys move to the status row where the views row has no room for them', () => {
@@ -1561,7 +1573,7 @@ describe('own scroll', () => {
     expect(byKey(last, 'nav-pagedown')).toBeDefined()
     const status = byKey(last, 'footer-status')!
     expect(status.props['width']).toBe(70 - 2 - 20 - 2)
-    expect(text(status)).toBe('turn 1/2 · keys on')
+    expect(text(status)).toBe('turn 1/2 · top · keys on')
     expect(byKey(pane({ columns: 44 }), 'footer-last')).toBeDefined()
     expect(byKey(pane({ columns: 100 }), 'footer-last')).toBeUndefined()
   })
@@ -2258,15 +2270,13 @@ describe('keyboard cursor', () => {
     }
   })
 
-  test('y shows only with a cursor, nothing shows for a turn without rows', () => {
+  test('y and o act only with a cursor, j nothing for a turn without rows', () => {
     const idle = renderPane(el, base, act)
-    expect(buttons(idle, 'nav-down')).toBeDefined()
-    expect(buttons(idle, 'nav-copy')).toBeUndefined()
-    expect(buttons(idle, 'nav-open')).toBeUndefined()
-    expect(byKey(idle, 'nav-copy-off')?.type).toBe('Text')
+    expect(acts(idle, 'nav-down')).toBe(true)
+    expect(acts(idle, 'nav-copy')).toBe(false)
+    expect(acts(idle, 'nav-open')).toBe(false)
     const empty = renderPane(el, { ...base, turns: buildTurns([{ role: 'user', text: 'hi', toolUses: [] }]) }, act)
-    expect(buttons(empty, 'nav-down')).toBeUndefined()
-    expect(byKey(empty, 'nav-down-off')?.type).toBe('Text')
+    expect(acts(empty, 'nav-down')).toBe(false)
   })
 
   test('the buttons call the actions, y passes the surface of the press', () => {

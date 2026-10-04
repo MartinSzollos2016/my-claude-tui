@@ -248,6 +248,34 @@ describe('detail pane', () => {
     }
   })
 
+  test('a key out of reach is handled by the plugin and keeps the state', async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: main }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    const before = textsOf(await ui.drawn()).join('')
+    // One turn: p, n and l are out of reach, the content fits so b and f are too.
+    for (const [key, hotkey] of [
+      ['nav-prev', 'p'],
+      ['nav-next', 'n'],
+      ['nav-latest', 'l'],
+      ['nav-pageup', 'b'],
+      ['nav-pagedown', 'f'],
+      ['nav-team', 'm'],
+    ] as const) {
+      const button = findKey(await ui.drawn(), key)
+      expect(button?.type, key).toBe('Button')
+      expect(button?.props?.['hotkey'], key).toBe(hotkey)
+      expect((await ui.press({ key }))?.element, key).toBe(key)
+    }
+    expect(textsOf(await ui.drawn()).join('')).toBe(before)
+    await ui.unmount()
+  })
+
   test('lists the turn items and drills into a subagent trace', async ($, on) => {
     mock.store(on)
     mock.clock(on, { now: 1_700_000_000_000 })
@@ -413,7 +441,10 @@ describe('detail pane', () => {
     const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
     const marks = async () => textsOf(await ui.drawn()).filter(t => t === '\u258c').length
     expect(await marks()).toBe(0)
-    expect(findKey(await ui.drawn(), 'nav-copy')).toBeUndefined()
+    // y without a cursor is still the pane's key: the press is the plugin's and copies nothing.
+    expect(findKey(await ui.drawn(), 'nav-copy')?.props?.['hotkey']).toBe('y')
+    expect((await ui.press({ key: 'nav-copy' }))?.element).toBe('nav-copy')
+    expect(await marks()).toBe(0)
     expect(findKey(await ui.drawn(), 'nav-down')?.props?.['hotkey']).toBe('j')
     expect(findKey(await ui.drawn(), 'nav-up')?.props?.['hotkey']).toBe('k')
     await ui.press({ key: 'nav-down' })
