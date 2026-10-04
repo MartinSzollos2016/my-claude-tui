@@ -14,21 +14,11 @@ import type {
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import { ICON_SETS, type Icons } from './icons'
 import { agentStatusColor, C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
-import {
-  clampScroll,
-  contentRows,
-  footerLayout,
-  footerPads,
-  overflowRows,
-  pageScroll,
-  type FooterLayout,
-  type RowBlock,
-  type ScrollFrame,
-} from './model'
 import type { WorkflowState } from './model/activity'
 import { groupLabel, hoverCard } from './model/card'
 import { chunkText, clampText } from './model/clamp'
 import { clampDiff, splitDiff } from './model/diff'
+import { footerLayout, footerPads, type FooterLayout } from './model/footer'
 import {
   contextMeter,
   formatClock,
@@ -40,6 +30,7 @@ import {
 } from './model/format'
 import { groupRuns, type GroupItem } from './model/groups'
 import { sanitizeText } from './model/sanitize'
+import { clampScroll, contentRows, overflowRows, pageScroll, type RowBlock, type ScrollFrame } from './model/scroll'
 import { splitMatch, type TurnMatch } from './model/search'
 import { cachedSections, firstErrorLine, pieceStarts, reserveSections, type Section } from './model/sections'
 import { itemName, itemSummary, toolCategory } from './model/summaries'

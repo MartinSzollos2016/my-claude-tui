@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { buildTurns, itemStatus, traceItems } from '../hooks/model/turns'
+import type { SessionMessage } from 'claude-code'
+import { buildTurns, isAgentFinished, isAgentRunning, itemStatus, traceItems, turnsKey } from '../hooks/model/turns'
 import type { ToolItem } from '../hooks/model/types'
-import { transcript } from './fixtures/model'
+import { prompt, read, transcript } from './fixtures/model'
 
 describe('buildTurns', () => {
   test('groups assistant rows under the prompt that opened them', () => {
@@ -90,5 +91,54 @@ describe('itemStatus', () => {
   test('a call ended by the user is interrupted, not an error', () => {
     const stopped = tool({ isError: true, resultText: '[Request interrupted by user for tool use]' })
     expect(itemStatus(stopped, quiet)).toBe('interrupted')
+  })
+})
+
+const goTranscript: SessionMessage[] = [prompt('Go'), { role: 'assistant', text: 'Hi', toolUses: [read] }]
+
+describe('turnsKey', () => {
+  test('stays the same while nothing happened', () => {
+    expect(turnsKey([...goTranscript])).toBe(turnsKey(goTranscript))
+    expect(turnsKey([])).toBe('0')
+  })
+
+  test('changes on a new message, a tool answer and grown text', () => {
+    const key = turnsKey(goTranscript)
+    expect(turnsKey([...goTranscript, prompt('More')])).not.toBe(key)
+    expect(
+      turnsKey([goTranscript[0]!, { role: 'assistant', text: 'Hi', toolUses: [{ ...read, text: 'x' }] }]),
+    ).not.toBe(key)
+    expect(turnsKey([goTranscript[0]!, { role: 'assistant', text: 'Hi there', toolUses: [read] }])).not.toBe(key)
+    const answered: SessionMessage = {
+      role: 'user',
+      text: '',
+      toolUses: [],
+      toolResults: [{ tool_use_id: 'u1', text: 'ok', isError: false }],
+    }
+    expect(turnsKey([...goTranscript, answered])).not.toBe(key)
+  })
+
+  test('changes when a capped goTranscript fills a result in place', () => {
+    const capped: SessionMessage[] = Array.from({ length: 4096 }, (_, i) =>
+      i % 2 === 0 ? prompt(`p${i}`) : { role: 'assistant', text: '', toolUses: [{ ...read, tool_use_id: `u${i}` }] },
+    )
+    const last = capped.at(-1)!
+    const filled = [...capped.slice(0, -1), { ...last, toolUses: [{ ...last.toolUses[0]!, text: 'done' }] }]
+    expect(filled.length).toBe(capped.length)
+    expect(turnsKey(filled)).not.toBe(turnsKey(capped))
+  })
+})
+
+describe('agent status', () => {
+  test('running is running, pending or waiting', () => {
+    for (const status of ['running', 'pending', 'waiting'] as const) expect(isAgentRunning(status)).toBe(true)
+    for (const status of ['completed', 'failed', 'killed', 'idle', undefined] as const)
+      expect(isAgentRunning(status)).toBe(false)
+  })
+
+  test('finished is completed, failed or killed', () => {
+    for (const status of ['completed', 'failed', 'killed'] as const) expect(isAgentFinished(status)).toBe(true)
+    for (const status of ['pending', 'running', 'waiting', 'idle', undefined] as const)
+      expect(isAgentFinished(status)).toBe(false)
   })
 })

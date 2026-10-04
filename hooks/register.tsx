@@ -40,7 +40,6 @@ import {
 } from './session'
 import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
-import { engineScroll, scrollToRow, stepCursor, type EngineScroll, type ScrollFrame } from './model'
 import {
   callInput,
   compactCall,
@@ -58,6 +57,7 @@ import { gitDirFrom, parseGitHead } from './model/git'
 import { groupRuns } from './model/groups'
 import { turnListText, turnText } from './model/reports'
 import { sanitizePrompt, sanitizeText } from './model/sanitize'
+import { engineScroll, scrollToRow, stepCursor, type EngineScroll, type ScrollFrame } from './model/scroll'
 import { searchTurns, type TurnMatch } from './model/search'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
 import { alignFromEnd, thinkingCounts, type TurnThinking } from './model/thinking'
