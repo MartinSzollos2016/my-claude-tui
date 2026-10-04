@@ -411,3 +411,46 @@ export function clampText(text: string, maxLines: number, maxChars = MAX_BLOCK_C
   }
   return hiddenLines > 0 ? { text: kept, note: `… (${hiddenLines} lines hidden)` } : { text }
 }
+
+// Splits text into pieces of at most `size` characters, at a newline when
+// one falls in the second half of a piece, so each piece stays under the
+// engine's per-element limit while a long output can still be shown whole.
+// Joining the pieces with '\n' where the cut fell on a newline restores the
+// text; a hard cut (no newline) joins with ''.
+export function chunkText(text: string, size: number): string[] {
+  const chunks: string[] = []
+  let rest = text
+  while (rest.length > size) {
+    const cut = rest.lastIndexOf('\n', size)
+    if (cut >= size / 2) {
+      chunks.push(rest.slice(0, cut))
+      rest = rest.slice(cut + 1)
+    } else {
+      chunks.push(rest.slice(0, size))
+      rest = rest.slice(size)
+    }
+  }
+  chunks.push(rest)
+  return chunks
+}
+
+const FENCE = /^\s*(```|~~~)/
+
+// chunkText for Markdown: a piece cut inside a code fence closes it, and the
+// next piece reopens it with the same opening line, so each piece renders
+// on its own. Pieces may run `fence` characters over `size`.
+export function chunkMarkdown(text: string, size: number): string[] {
+  const chunks: string[] = []
+  let reopen = ''
+  for (const raw of chunkText(text, Math.max(1, size - 8))) {
+    const piece = reopen ? `${reopen}\n${raw}` : raw
+    let open = ''
+    for (const line of piece.split('\n')) {
+      if (FENCE.test(line)) open = open ? '' : line.trim()
+    }
+    const closer = open.startsWith('~~~') ? '~~~' : '```'
+    chunks.push(open ? `${piece}\n${closer}` : piece)
+    reopen = open
+  }
+  return chunks
+}
