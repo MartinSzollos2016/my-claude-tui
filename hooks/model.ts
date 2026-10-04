@@ -288,12 +288,61 @@ export function truncate(s: string, max: number): string {
   return chars.length <= max ? one : chars.slice(0, max - 1).join('') + '…'
 }
 
+// Cuts to `max` code points from the middle, keeping more of the end (a path's
+// file name) than of the start; "…" marks the cut. Never splits a surrogate pair.
+export function truncateMiddle(s: string, max: number): string {
+  const one = s.replaceAll('\n', ' ')
+  const chars = [...one]
+  if (chars.length <= max) return one
+  if (max <= 0) return ''
+  if (max === 1) return '…'
+  const keep = max - 1
+  const head = Math.floor(keep / 3)
+  return `${chars.slice(0, head).join('')}…${chars.slice(chars.length - (keep - head)).join('')}`
+}
+
 export function shortPath(path: string, n: number): string {
   const segments = path.replaceAll('\\', '/').split('/').filter(Boolean)
   return segments.slice(-n).join('/')
 }
 
 const basename = (p: string) => shortPath(p, 1)
+
+// The file or directory a tool call works on, '' when it has none.
+export function pathOf(item: ToolItem): string {
+  const f = item.input
+  switch (item.tool) {
+    case 'Read':
+    case 'Write':
+    case 'Edit':
+      return str(f, 'file_path')
+    case 'NotebookEdit':
+      return str(f, 'notebook_path')
+    case 'Grep':
+    case 'Glob':
+      return str(f, 'path')
+    default:
+      return ''
+  }
+}
+
+const PATH_SEGMENTS = 6
+
+// A summary cut to `max` code points. Where it names a path, the path is
+// widened to its last few segments and cut in the middle, so the file name
+// stays; the rest of the summary (line range, edit size) is kept whole.
+// Everything else is cut at the end.
+export function fitPath(item: ToolItem, summary: string, max: number): string {
+  const path = pathOf(item)
+  const known = [shortPath(path, 2), shortPath(path, 1)].find(k => k !== '' && summary.includes(k))
+  if (path === '' || known === undefined) return truncate(summary, max)
+  const at = summary.lastIndexOf(known)
+  const prefix = summary.slice(0, at)
+  const suffix = summary.slice(at + known.length)
+  const room = max - [...prefix].length - [...suffix].length
+  if (room < 4) return truncate(summary, max)
+  return prefix + truncateMiddle(shortPath(path, PATH_SEGMENTS), room) + suffix
+}
 
 // -- Tool summaries (agent-ouija claude/tools/summary.go) ---------------------
 
@@ -545,6 +594,8 @@ export type Section = {
   kind: SectionKind
   title: string
   meta?: string
+  // The meta is a file path: the view cuts it in the middle.
+  isPathMeta?: true
   body: string
   format: SectionFormat
 }
@@ -631,6 +682,7 @@ function inputSections(item: ToolItem): Section[] {
           kind: 'diff',
           title: 'diff',
           meta: str(f, 'file_path'),
+          isPathMeta: true,
           body: diff,
           format: { kind: 'code', language: 'diff' },
         },
@@ -642,6 +694,7 @@ function inputSections(item: ToolItem): Section[] {
           kind: 'file',
           title: 'write',
           meta: str(f, 'file_path'),
+          isPathMeta: true,
           body: str(f, 'content'),
           format: codeOrText(str(f, 'file_path')),
         },

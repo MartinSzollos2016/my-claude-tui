@@ -256,6 +256,29 @@ describe('renderPane', () => {
     expect(bar(ICON_SETS.ascii)).toBe('tail . ^ main')
   })
 
+  test('a path in a row is cut in the middle, file name last; path-only headers truncate in the middle', () => {
+    const path = '/home/dev/project/src/server/auth/session.ts'
+    const long = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          { tool_use_id: 'r9', tool: 'Read', input: { file_path: path }, text: 'x' },
+          { tool_use_id: 'w9', tool: 'Write', input: { file_path: path, content: 'x' }, text: 'ok' },
+        ],
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: long, columns: 50, expanded: new Set(['w9']) }, act)
+    const label = String(byKey(tree, 'r9')?.props['label'])
+    expect(label).toContain('…')
+    expect(label.endsWith('session.ts')).toBe(true)
+    const wide = renderPane(el, { ...base, turns: long, columns: 120 }, act)
+    expect(String(byKey(wide, 'r9')?.props['label'])).toContain('dev/project/src/server/auth/session.ts')
+    const meta = nodes(tree).find(n => n.type === 'Text' && text(n).trim() === path)
+    expect(meta?.props['wrap']).toBe('truncate-middle')
+  })
+
   test('the trace of a subagent carries status glyphs too', () => {
     const trace = buildTurns(
       [

@@ -19,6 +19,7 @@ import {
   formatClock,
   EMPTY_TURN_TEXT,
   formatDuration,
+  fitPath,
   formatTokens,
   isAgentRunning,
   isSubagent,
@@ -26,6 +27,7 @@ import {
   itemStatus,
   type ItemStatus,
   itemSummary,
+  pathOf,
   sanitizeText,
   shortMode,
   shortModel,
@@ -38,6 +40,7 @@ import {
   type TeamMember,
   traceStats,
   truncate,
+  truncateMiddle,
   type Item,
   type ToolItem,
   type Turn,
@@ -604,6 +607,7 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
             id,
             'thinking',
             undefined,
+            false,
             C.accent,
             renderLong(el, id, thinking.text, { kind: 'markdown' }, data, act),
             thinking.text,
@@ -660,7 +664,11 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
   // One button carries name and summary, so a click or Enter anywhere on the
   // row toggles it; the label is cut to the room the fixed columns leave.
   const room = width - 2 - 3 - 2 - modelText.length - 2 - 7
-  const label = truncate(summary ? `${name.padEnd(12)} - ${summary}` : name, Math.max(8, room))
+  const prefix = `${name.padEnd(12)} - `
+  const label =
+    summary && item.kind === 'tool' && pathOf(item) !== ''
+      ? prefix + fitPath(item, summary, Math.max(8, room - prefix.length))
+      : truncate(summary ? prefix + summary : name, Math.max(8, room))
   const hover = { scope: scopeOf('row:', item.id), backgroundColor: C.rowHover }
   const toggle = () => canOpen && act.toggle(item.id)
 
@@ -713,6 +721,7 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, depth: 
           item.id,
           'message',
           undefined,
+          false,
           C.accent,
           renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act),
           item.text,
@@ -740,6 +749,7 @@ function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
           `${item.id}:${section.kind}`,
           section.title,
           section.meta,
+          section.isPathMeta === true,
           TONE[section.kind],
           renderLong(el, `${item.id}:${section.kind}`, section.body, longSpec(section), data, act),
           section.body,
@@ -762,6 +772,7 @@ function renderFrame(
   blockId: string,
   title: string,
   meta: string | undefined,
+  isPathMeta: boolean,
   tone: ThemeKey,
   body: RenderElement,
   copyText: string,
@@ -776,7 +787,9 @@ function renderFrame(
             {title}
           </Text>
           {meta !== undefined && meta !== '' && (
-            <Text color={C.muted} wrap="truncate-end">{`  ${truncate(meta, 300)}`}</Text>
+            <Text color={C.muted} wrap={isPathMeta ? 'truncate-middle' : 'truncate-end'}>
+              {`  ${isPathMeta ? truncateMiddle(meta, 300) : truncate(meta, 300)}`}
+            </Text>
           )}
         </Box>
         <Button

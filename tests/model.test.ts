@@ -9,6 +9,7 @@ import {
   chunkText,
   clampText,
   formatDuration,
+  fitPath,
   formatTokens,
   gitDirFrom,
   parseGitHead,
@@ -25,6 +26,7 @@ import {
   shortModel,
   toolSummary,
   traceItems,
+  truncateMiddle,
 } from '../hooks/model'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
@@ -169,6 +171,7 @@ describe('toolSections', () => {
       kind: 'diff',
       title: 'diff',
       meta: '/a.ts',
+      isPathMeta: true,
       body: '-a\n+b',
       format: { kind: 'code', language: 'diff' },
     })
@@ -180,6 +183,7 @@ describe('toolSections', () => {
       kind: 'file',
       title: 'write',
       meta: '/x/y.py',
+      isPathMeta: true,
       body: 'print(1)',
       format: { kind: 'code', language: 'python' },
     })
@@ -424,5 +428,75 @@ describe('icon sets', () => {
     expect(ICON_SETS.ascii.spinner).toEqual(['|', '/', '-', '\\'])
     expect(ICON_SETS.ascii.done).toBe('+')
     expect(ICON_SETS.ascii.error).toBe('x')
+  })
+})
+
+describe('truncateMiddle', () => {
+  test('keeps both ends and favours the end, the file name', () => {
+    expect(truncateMiddle('src/a/b/auth/session.ts', 16)).toBe('src/a…session.ts')
+    expect(truncateMiddle('src/session.ts', 20)).toBe('src/session.ts')
+    expect(truncateMiddle('abcdefghij', 5)).toBe('a…hij')
+    expect(truncateMiddle('abcdef', 1)).toBe('…')
+    expect(truncateMiddle('abcdef', 0)).toBe('')
+    expect(truncateMiddle('a\nb\ncdefgh', 6)).toBe('a…efgh')
+  })
+
+  test('counts code points and never splits a surrogate pair', () => {
+    const out = truncateMiddle('😀'.repeat(10) + 'end', 7)
+    expect([...out]).toHaveLength(7)
+    expect(out).toBe('😀😀…😀end')
+    expect(out).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/)
+  })
+})
+
+describe('fitPath', () => {
+  const item = (tool: string, input: Record<string, unknown>): ToolItem => ({
+    kind: 'tool',
+    id: 'x',
+    tool,
+    input,
+    summary: toolSummary(tool, input),
+    isError: false,
+    isPending: false,
+  })
+  const file = '/home/dev/project/src/server/auth/session.ts'
+
+  test('a path summary is cut in the middle and keeps the file name', () => {
+    const read = item('Read', { file_path: file })
+    const fitted = fitPath(read, read.summary, 28)
+    expect([...fitted].length).toBeLessThanOrEqual(28)
+    expect(fitted).toContain('…')
+    expect(fitted.endsWith('auth/session.ts')).toBe(true)
+  })
+
+  test('room to spare shows more of the path, and the rest of the summary stays', () => {
+    const read = item('Read', { file_path: file, offset: 3, limit: 7 })
+    expect(fitPath(read, read.summary, 80)).toBe('dev/project/src/server/auth/session.ts - lines 3-9')
+    const tight = fitPath(read, read.summary, 36)
+    expect(tight.endsWith(' - lines 3-9')).toBe(true)
+    expect([...tight].length).toBeLessThanOrEqual(36)
+    expect(tight).toContain('…')
+  })
+
+  test('covers Write, Edit, NotebookEdit and Grep/Glob with a path', () => {
+    for (const [tool, input] of [
+      ['Write', { file_path: file, content: 'x' }],
+      ['Edit', { file_path: file, old_string: 'a', new_string: 'b' }],
+      ['NotebookEdit', { notebook_path: file, edit_mode: 'insert' }],
+      ['Grep', { pattern: 'x', path: file }],
+      ['Glob', { pattern: 'x', path: file }],
+    ] as const) {
+      const it = item(tool, input)
+      const fitted = fitPath(it, it.summary, 30)
+      expect(fitted, tool).toContain('…')
+      expect([...fitted].length, tool).toBeLessThanOrEqual(30)
+    }
+  })
+
+  test('other text is still cut at the end', () => {
+    const bash = item('Bash', { command: 'x'.repeat(100) })
+    expect(fitPath(bash, bash.summary, 10)).toBe('xxxxxxxxx…')
+    const grep = item('Grep', { pattern: 'x' })
+    expect(fitPath(grep, grep.summary, 30)).toBe('"x"')
   })
 })
