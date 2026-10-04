@@ -42,6 +42,9 @@ export type Icons = {
   taskActive: string
   taskTodo: string
   border: 'round' | 'classic'
+  // The context meter's full and empty cells.
+  meterFull: string
+  meterEmpty: string
 }
 
 const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -80,6 +83,8 @@ const nerd: Icons = {
   taskActive: '◐',
   taskTodo: '☐',
   border: 'round',
+  meterFull: '▰',
+  meterEmpty: '▱',
 }
 
 const unicode: Icons = {
@@ -137,6 +142,8 @@ const ascii: Icons = {
   taskActive: '[~]',
   taskTodo: '[ ]',
   border: 'classic',
+  meterFull: '#',
+  meterEmpty: '-',
 }
 
 export const ICON_SETS: Record<IconSetName, Icons> = { nerd, unicode, ascii }

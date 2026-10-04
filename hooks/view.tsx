@@ -16,6 +16,7 @@ import {
   chunkMarkdown,
   chunkText,
   clampText,
+  contextMeter,
   formatClock,
   EMPTY_TURN_TEXT,
   formatDuration,
@@ -88,6 +89,10 @@ const cutter = (icons: Icons) => (text: string, max: number) => truncate(text, m
 const isUnicodeCut = (icons: Icons) => icons.ellipsis === ICON_SETS.nerd.ellipsis
 const endWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-end' : 'wrap')
 const middleWrap = (icons: Icons) => (isUnicodeCut(icons) ? 'truncate-middle' : 'wrap')
+
+// The context meter's length, and the info bar width it needs to show.
+const METER_CELLS = 10
+const BAR_METER_COLUMNS = 100
 
 const buttonHover = (scope: string) => ({ scope, ...HOVER_TEXT })
 
@@ -502,7 +507,9 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
           <Text color={C.muted}>{`${icons.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}  `}</Text>
         )}
         {data.isLatest && data.contextPercent !== undefined && (
-          <Text color={contextColor(data.contextPercent)}>{`ctx ${Math.round(data.contextPercent)}%  `}</Text>
+          <Text
+            color={contextColor(data.contextPercent)}
+          >{`ctx ${contextMeter(data.contextPercent, METER_CELLS, icons)} ${Math.round(data.contextPercent)}%  `}</Text>
         )}
         {stat && <Text color={C.muted}>{`${icons.clock} ${formatDuration(stat.durationMs)}  `}</Text>}
         {data.isLatest && data.isWorking && (
@@ -1025,7 +1032,9 @@ export function renderBar(el: El, data: BarData) {
       <Box flexDirection="row" flexShrink={0}>
         {data.contextTokens !== undefined && <Text dimColor>{`${formatTokens(data.contextTokens)} ctx `}</Text>}
         {data.contextPercent !== undefined && (
-          <Text color={contextColor(data.contextPercent)}>{`${Math.round(data.contextPercent)}%`}</Text>
+          <Text color={contextColor(data.contextPercent)}>
+            {`${data.columns >= BAR_METER_COLUMNS ? `${contextMeter(data.contextPercent, METER_CELLS, icons)} ` : ''}${Math.round(data.contextPercent)}%`}
+          </Text>
         )}
         {data.costUsd !== undefined && <Text dimColor>{`  $${data.costUsd.toFixed(2)}`}</Text>}
       </Box>
