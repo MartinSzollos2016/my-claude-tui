@@ -413,8 +413,10 @@ describe('detail pane', () => {
     await ui.press({ key: 'nav-down' })
     await ui.press({ key: 'nav-down' })
     expect(await marks()).toBe(1)
-    const found = findKey(await ui.drawn(), 'nav-copy')
-    expect(found?.props?.['hotkey']).toBe('y')
+    expect(findKey(await ui.drawn(), 'nav-copy')?.props?.['hotkey']).toBe('y')
+    expect(findKey(await ui.drawn(), 'nav-open')?.props?.['hotkey']).toBe('o')
+    await ui.press({ key: 'nav-open' })
+    expect(textsOf(await ui.drawn()).join('')).toContain('/a/b/main.go')
     await ui.unmount()
   })
 

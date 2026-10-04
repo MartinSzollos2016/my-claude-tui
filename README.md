@@ -59,7 +59,7 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 | `t` / `d`              | turn list / back to detail                                |
 | `s`                    | search the turn list (Enter opens the newest match)       |
 | `m`                    | team board: teammates and tasks (shown in a team session) |
-| `j` / `k` / `y`        | cursor down / up a row, copy the row under it             |
+| `j` / `k` / `o` / `y`  | cursor down / up a row, open or close it, copy it         |
 | `e` / `c`              | expand all / collapse all                                 |
 | Esc                    | back to the prompt                                        |
 

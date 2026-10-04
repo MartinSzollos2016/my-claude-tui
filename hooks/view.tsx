@@ -242,6 +242,8 @@ type PaneActions = {
   focusSearch: () => void
   cursorDown: () => void
   cursorUp: () => void
+  // Expands or collapses the row under the cursor.
+  cursorOpen: () => void
   // Copies the whole text of the row under the cursor.
   copyCursor: (surface?: RenderSurface) => void
 }
@@ -694,6 +696,7 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
       buttons: [
         hasRows && button('nav-down', 'j', 'down', act.cursorDown),
         hasRows && button('nav-up', 'k', 'up', act.cursorUp),
+        hasRows && hasCursor && button('nav-open', 'o', 'open', act.cursorOpen),
         hasRows && hasCursor && button('nav-copy', 'y', 'copy', press => act.copyCursor(press.surface)),
       ],
     },
