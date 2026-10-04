@@ -242,7 +242,8 @@ describe('detail pane', () => {
       expect(root.type).toBe('Box')
       expect(root.props['backgroundColor']).toBe('inverseText')
       expect(root.props['width']).toBe(PANE.props.bodyColumns)
-      expect(root.props['minHeight']).toBe(PANE.props.scroll.bodyRows)
+      expect(root.props['height']).toBe(PANE.props.scroll.bodyRows)
+      expect(root.props['minHeight']).toBeUndefined()
       await ui.unmount()
     }
   })

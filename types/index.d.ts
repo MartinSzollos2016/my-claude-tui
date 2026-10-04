@@ -38,6 +38,9 @@ declare module 'claude-code' {
       turn: number | null
       // What the pane shows: one turn in detail, the list of turns, or the team board.
       view: 'detail' | 'turns' | 'team'
+      // How many rows each view's content is scrolled up in the pane's own window;
+      // all back to 0 when the shown turn or the view changes.
+      scroll: Record<'detail' | 'turns' | 'team', number>
       // Expanded row ids (tool_use_id, output id, agentId/child id).
       expanded: string[]
       // Blocks shown whole instead of previewed (output, input, result ids).

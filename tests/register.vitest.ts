@@ -422,16 +422,20 @@ describe('detail pane', () => {
     expect(unknown).not.toContain('for keys')
   })
 
-  test('pins the footer to the last visible row from the scroll offset and rows of the engine', async () => {
+  test('draws the pane exactly as tall as the engine window, whatever its offset, the footer in flow', async () => {
     const { $ } = fakeEngine({ messages: main })
-    const footerTop = async (offset: number, bodyRows: number) => {
-      const scroll = { offset, bodyRows }
-      const tree = await run('ui.render', $, { ...PANE_EVENT, props: { ...PANE_EVENT.props, scroll } })
-      return byKey(tree, 'footer')?.props['top']
+    for (const scroll of [
+      { offset: 0, bodyRows: 40 },
+      { offset: 14, bodyRows: 40 },
+      { offset: 0, bodyRows: 12 },
+    ]) {
+      const tree = (await run('ui.render', $, { ...PANE_EVENT, props: { ...PANE_EVENT.props, scroll } })) as {
+        props: Record<string, unknown>
+      }
+      expect(tree.props['height']).toBe(scroll.bodyRows)
+      expect(byKey(tree, 'pane-window')?.props['height']).toBe(scroll.bodyRows - 2 - 4)
+      expect(byKey(tree, 'footer')?.props['top']).toBeUndefined()
     }
-    expect(await footerTop(0, 40)).toBe(36)
-    expect(await footerTop(14, 40)).toBe(50)
-    expect(await footerTop(5, 2)).toBe(3)
   })
 
   test('a failing API read leaves the pane drawn without a thinking count', async () => {
@@ -828,6 +832,80 @@ describe('keyboard cursor', () => {
     expect(markOf(await draw($))).toEqual([])
     expect(byKey(await draw($), 'nav-copy')).toBeUndefined()
     expect(world.copies).toEqual([])
+  })
+})
+
+describe('own scroll', () => {
+  // Twenty calls under one prompt: 22 rows of content in a window of six.
+  const long: SessionMessage[] = [
+    { role: 'user', text: 'Run many', toolUses: [] },
+    {
+      role: 'assistant',
+      text: 'Ran.',
+      toolUses: Array.from({ length: 20 }, (_, i) => ({
+        tool_use_id: `b${i}`,
+        tool: 'Bash',
+        input: { command: `echo ${i}` },
+        text: `${i}`,
+      })),
+    },
+  ]
+  const SMALL = { ...PANE_EVENT, props: { ...PANE_EVENT.props, scroll: { offset: 0, bodyRows: 12 } } }
+  const drawSmall = ($: Parameters<typeof run>[1]) => run('ui.render', $, SMALL)
+  const topOf = async ($: Parameters<typeof run>[1]) => byKey(await drawSmall($), 'pane-content')?.props['top']
+  async function pressSmall($: Parameters<typeof run>[1], key: string) {
+    const button = byKey(await drawSmall($), key)
+    if (!button) throw new Error(`no button ${key}`)
+    ;(button.props['onPress'] as (e: unknown) => void)({ surface: 'terminal' })
+    await settle()
+  }
+
+  test('f pages the content down and b back up, muted at the ends', async () => {
+    const { $ } = fakeEngine({ messages: long })
+    expect(await topOf($)).toBe(0)
+    expect(byKey(await drawSmall($), 'nav-pageup')).toBeUndefined()
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-4)
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-8)
+    await pressSmall($, 'nav-pageup')
+    expect(await topOf($)).toBe(-4)
+    for (let i = 0; i < 5; i++) if (byKey(await drawSmall($), 'nav-pagedown')) await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-18)
+    expect(byKey(await drawSmall($), 'nav-pagedown')).toBeUndefined()
+    expect(byKey(await drawSmall($), 'nav-pagedown-off')).toBeDefined()
+  })
+
+  test('j past the bottom of the window scrolls the cursor row into view, k past the top back', async () => {
+    const { $ } = fakeEngine({ messages: long })
+    for (let i = 0; i < 4; i++) await pressSmall($, 'nav-down')
+    expect(await topOf($)).toBe(0)
+    await pressSmall($, 'nav-down')
+    expect(await topOf($)).toBe(-1)
+    await pressSmall($, 'nav-down')
+    expect(await topOf($)).toBe(-2)
+    for (let i = 0; i < 3; i++) await pressSmall($, 'nav-up')
+    expect(await topOf($)).toBe(-2)
+    await pressSmall($, 'nav-up')
+    expect(await topOf($)).toBe(-1)
+  })
+
+  test('a change of view, of turn or a new prompt scrolls back to the top', async () => {
+    const { $ } = fakeEngine({ messages: [...long, ...long] })
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-4)
+    await pressSmall($, 'nav-turns')
+    await pressSmall($, 'nav-detail')
+    expect(await topOf($)).toBe(0)
+    await pressSmall($, 'nav-pagedown')
+    await pressSmall($, 'nav-prev')
+    expect(await topOf($)).toBe(0)
+    await pressSmall($, 'nav-pagedown')
+    await pressSmall($, 'nav-latest')
+    expect(await topOf($)).toBe(0)
+    await pressSmall($, 'nav-pagedown')
+    await run('prompt.submit', $, { text: 'more' }, async e => e)
+    expect(await topOf($)).toBe(0)
   })
 })
 

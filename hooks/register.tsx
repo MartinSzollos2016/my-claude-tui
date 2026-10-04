@@ -25,6 +25,7 @@ import {
   cursorRows,
   moveCursor,
   rowText,
+  scrollToRow,
   finishedSince,
   finishedWorkflows,
   gitDirFrom,
@@ -53,6 +54,7 @@ import {
   workflowState,
   type Item,
   type RunningTool,
+  type ScrollFrame,
   type TaskEntry,
   type Turn,
   type TurnMatch,
@@ -92,6 +94,8 @@ const TICK_MS = 500
 const tick = atom({ plugin: 'tail-view', key: 'tick' } as const, 0)
 const selectedTurn = atom({ plugin: 'tail-view', key: 'turn' } as const, null)
 const paneView = atom({ plugin: 'tail-view', key: 'view' } as const, 'detail')
+const TOP = { detail: 0, turns: 0, team: 0 } as const
+const paneScroll = atom({ plugin: 'tail-view', key: 'scroll' } as const, TOP)
 const expanded = atom({ plugin: 'tail-view', key: 'expanded' } as const, [])
 const fullBlocks = atom({ plugin: 'tail-view', key: 'full' } as const, [])
 const searchQuery = atom({ plugin: 'tail-view', key: 'query' } as const, '')
@@ -433,7 +437,7 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
     case 'turns': {
       const surfaces = await $.session.surfaces()
       if (isTextOnly(surfaces)) return { text: await turnsReport($, true) }
-      await update($, paneView, () => 'turns' as const)
+      await showView($, 'turns')
       await openPane($, true, e.presentation.columns)
       return { text: 'Turn list opened: Enter or click a turn to see it in detail.' }
     }
@@ -470,20 +474,34 @@ async function copyBlock($: EngineInterface, text: string, surface?: RenderSurfa
 // Moves the keyboard cursor one row along `ids`. The engine's focus ring is
 // not used: it draws the focused button in reverse video of the terminal's
 // own colors, which can be unreadable under the other theme.
-async function stepCursor($: EngineInterface, ids: readonly string[], delta: number): Promise<void> {
-  await update($, cursor, cur => moveCursor(ids, cur, delta))
+// The detail view's content scrolls so the row the cursor lands on stays in
+// the window (`at`: the window as drawn).
+async function stepCursor($: EngineInterface, ids: readonly string[], delta: number, at: ScrollFrame): Promise<void> {
+  const landed = await update($, cursor, cur => moveCursor(ids, cur, delta))
+  await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
+}
+
+// Every view's content back to the top: the shown turn or the view changed.
+async function scrollToTop($: EngineInterface): Promise<void> {
+  await update($, paneScroll, () => TOP)
+}
+
+// Switches what the pane shows, from the top of its content.
+async function showView($: EngineInterface, view: 'detail' | 'turns' | 'team'): Promise<void> {
+  await update($, paneView, () => view)
+  await scrollToTop($)
 }
 
 // Shows one turn in the detail view; the latest one follows new turns.
 async function pickTurn($: EngineInterface, index: number, latest: number) {
   await update($, cursor, () => null)
   await update($, selectedTurn, () => (index >= latest ? null : index))
-  await update($, paneView, () => 'detail' as const)
+  await showView($, 'detail')
 }
 
 // The search key: opens the turn list and puts the cursor in its field.
 async function focusSearch($: EngineInterface): Promise<void> {
-  await update($, paneView, () => 'turns' as const)
+  await showView($, 'turns')
   await $.ui.focus({ requestId: PANE, key: 'turn-search' })
 }
 
@@ -653,6 +671,7 @@ export const register: Register = on => {
     await update($, isWorking, () => true)
     await update($, selectedTurn, () => null)
     await update($, cursor, () => null)
+    await scrollToTop($)
     startTicker($)
     let result
     try {
@@ -744,8 +763,10 @@ export const register: Register = on => {
     const step = async (delta: number | null) => {
       await update($, cursor, () => null)
       await update($, selectedTurn, cur => nextSelectedTurn(cur, latest, delta))
+      await scrollToTop($)
     }
     const view = await read($, paneView)
+    const scrolled = await read($, paneScroll)
     const query = await read($, searchQuery)
     const isSearching = view === 'turns' && query.trim() !== ''
     const icons = await currentIcons($)
@@ -800,7 +821,7 @@ export const register: Register = on => {
         isFocused: e.props.isFocused,
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
-        offset: e.props.scroll.offset,
+        scrollTop: scrolled[view],
         full: new Set(fullIds),
         view,
         query,
@@ -822,16 +843,17 @@ export const register: Register = on => {
           update($, expanded, () => []).catch(ignore)
           update($, fullBlocks, () => []).catch(ignore)
         },
-        showTurns: () => update($, paneView, () => 'turns' as const).catch(ignore),
-        showDetail: () => update($, paneView, () => 'detail' as const).catch(ignore),
-        showTeam: () => update($, paneView, () => 'team' as const).catch(ignore),
+        showTurns: () => showView($, 'turns').catch(ignore),
+        showDetail: () => showView($, 'detail').catch(ignore),
+        showTeam: () => showView($, 'team').catch(ignore),
         pickTurn: index => pickTurn($, index, latest).catch(ignore),
         search: value => update($, searchQuery, () => value).catch(ignore),
         submitSearch: value => openMatch($, value, turns).catch(ignore),
         focusSearch: () => focusSearch($).catch(ignore),
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
-        cursorDown: () => stepCursor($, rowIds, 1).catch(ignore),
-        cursorUp: () => stepCursor($, rowIds, -1).catch(ignore),
+        cursorDown: at => stepCursor($, rowIds, 1, at).catch(ignore),
+        cursorUp: at => stepCursor($, rowIds, -1, at).catch(ignore),
+        scroll: top => update($, paneScroll, all => ({ ...all, [view]: top })).catch(ignore),
         cursorOpen: () =>
           cursorId === null || cursorText === undefined || cursorText === ''
             ? undefined
