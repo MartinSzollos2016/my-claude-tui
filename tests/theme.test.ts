@@ -2,7 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { buildTurns, sanitizeText, sanitizeValue } from '../hooks/model'
-import { C, contextColor, modeColor, modelColor, THEME_KEYS, toggleTailTheme, TONE } from '../hooks/theme'
+import { C, contextColor, modeColor, modelColor, THEME_KEYS, tailThemeAdvice, TAIL_THEMES, TONE } from '../hooks/theme'
 
 const keys = new Set<string>(THEME_KEYS)
 
@@ -36,18 +36,22 @@ describe('theme', () => {
   })
 })
 
-describe('toggleTailTheme', () => {
-  test('switches a built-in theme to its tail-view variant and back', () => {
-    for (const base of ['dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi']) {
-      expect(toggleTailTheme(base)).toBe(`custom:tail-view:${base}`)
-      expect(toggleTailTheme(`custom:tail-view:${base}`)).toBe(base)
-    }
+describe('tailThemeAdvice', () => {
+  test('names the tail-view variant of the current built-in theme', () => {
+    expect(tailThemeAdvice('dark-daltonized')).toContain('"Tail Dark (colorblind-friendly)"')
+    expect(tailThemeAdvice('light')).toContain('"Tail Light"')
+    for (const base of Object.keys(TAIL_THEMES)) expect(tailThemeAdvice(base)).toContain('/theme')
   })
 
-  test('leaves auto and other custom themes to /theme', () => {
-    expect(toggleTailTheme('auto')).toBe(undefined)
-    expect(toggleTailTheme('custom:mine')).toBe(undefined)
-    expect(toggleTailTheme('custom:tail-view:unknown')).toBe(undefined)
+  test('recognizes a tail-view theme already in use', () => {
+    expect(tailThemeAdvice('custom:tail-view:dark-ansi')).toContain('Already using "Tail Dark (ANSI colors only)"')
+  })
+
+  test('lists the variants for auto and other custom themes', () => {
+    for (const current of ['auto', 'custom:mine']) {
+      const advice = tailThemeAdvice(current)
+      for (const name of Object.values(TAIL_THEMES)) expect(advice).toContain(name)
+    }
   })
 })
 
