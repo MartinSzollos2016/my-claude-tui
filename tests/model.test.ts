@@ -63,10 +63,8 @@ import {
   turnTable,
   turnTail,
   unifiedDiff,
-  type Item,
-  type ToolItem,
-  type Turn,
 } from '../hooks/model'
+import type { Item, ToolItem, Turn } from '../hooks/model/types'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
 

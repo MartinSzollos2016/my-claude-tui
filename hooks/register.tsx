@@ -78,15 +78,14 @@ import {
   turnText,
   workflowState,
   type EngineScroll,
-  type Item,
   type RunningTool,
   type ScrollFrame,
   type TaskEntry,
-  type Turn,
   type TurnMatch,
   type TurnThinking,
 } from './model'
 import { engineDuration } from './model/format'
+import type { Item, Turn } from './model/types'
 import { renderBar, renderPane, turnRowId, type El, type Trace } from './view'
 
 const PANE = 'tail'

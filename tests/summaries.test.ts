@@ -10,9 +10,9 @@ import {
   toolCategory,
   toolSummary,
   traceStats,
-  type Item,
 } from '../hooks/model'
 import { formatClock, shortMode } from '../hooks/model/format'
+import type { Item } from '../hooks/model/types'
 
 const cases: [string, Record<string, unknown>, string][] = [
   ['Read', {}, 'Read'],

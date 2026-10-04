@@ -6,36 +6,8 @@ import type { AgentInfo, AgentStatus, SessionMessage } from 'claude-code'
 import type { TurnStat } from '../types'
 import type { Icons } from './icons'
 import { DEFAULT_GLYPHS, formatDuration, formatTokens, shortModel, type Glyphs, type TaskMarks } from './model/format'
-
-type OutputItem = { kind: 'output'; id: string; text: string }
-
-export type ToolItem = {
-  kind: 'tool'
-  id: string
-  tool: string
-  input: Record<string, unknown>
-  summary: string
-  resultText?: string
-  isError: boolean
-  isPending: boolean
-  // The tool's own record says an abort ended it (Bash: result.interrupted).
-  isInterrupted?: boolean
-  agentId?: string
-  durationMs?: number
-}
-
-export type Item = OutputItem | ToolItem
-
-export type Turn = {
-  index: number
-  prompt: string
-  items: Item[]
-  toolCount: number
-  outputCount: number
-  subagentCount: number
-}
-
-const SUBAGENT_TOOLS = new Set(['Agent', 'Task'])
+import { SUBAGENT_TOOLS, type Item, type ToolItem, type Turn } from './model/types'
+import { lineCount, num, str } from './model/values'
 
 // -- Untrusted text -----------------------------------------------------------
 //
@@ -438,13 +410,6 @@ export function fitPath(item: ToolItem, summary: string, max: number, ellipsis =
 }
 
 // -- Tool summaries (agent-ouija claude/tools/summary.go) ---------------------
-
-const str = (f: Record<string, unknown>, key: string): string => (typeof f[key] === 'string' ? (f[key] as string) : '')
-
-const num = (f: Record<string, unknown>, key: string): number =>
-  typeof f[key] === 'number' ? Math.trunc(f[key] as number) : 0
-
-const lineCount = (s: string) => s.split('\n').length
 
 export function toolSummary(name: string, f: Record<string, unknown>): string {
   switch (name) {
