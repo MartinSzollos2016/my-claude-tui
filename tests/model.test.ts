@@ -8,6 +8,7 @@ import {
   chunkMarkdown,
   chunkText,
   clampText,
+  firstErrorLine,
   formatDuration,
   fitPath,
   formatTokens,
@@ -533,5 +534,28 @@ describe('splitMatch', () => {
     expect(split.match).toBe('needle')
     expect(split.before.startsWith('…')).toBe(true)
     expect(split.after.endsWith('…')).toBe(true)
+  })
+})
+
+describe('firstErrorLine', () => {
+  test('is the first line that names an error, trimmed', () => {
+    expect(firstErrorLine('compiling\n\n   src/a.ts:3: error TS2304: nope  \nError: later')).toBe(
+      'src/a.ts:3: error TS2304: nope',
+    )
+    expect(firstErrorLine('ok\n--- FAIL: TestX (0.00s)\nmore')).toBe('--- FAIL: TestX (0.00s)')
+    expect(firstErrorLine('running\npanic: nil pointer\n')).toBe('panic: nil pointer')
+    expect(firstErrorLine('trace\njava.lang.NullPointerException at x')).toBe('java.lang.NullPointerException at x')
+  })
+
+  test('without a match it is the first non-empty line, and empty text gives nothing', () => {
+    expect(firstErrorLine('\n \n  command not found \nsecond')).toBe('command not found')
+    expect(firstErrorLine('')).toBe('')
+    expect(firstErrorLine(' \n\t\n')).toBe('')
+  })
+
+  test('stays linear on one huge line', () => {
+    const started = performance.now()
+    expect(firstErrorLine('x'.repeat(2_000_000)).length).toBe(2_000_000)
+    expect(performance.now() - started).toBeLessThan(200)
   })
 })

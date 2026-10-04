@@ -279,6 +279,42 @@ describe('renderPane', () => {
     expect(meta?.props['wrap']).toBe('truncate-middle')
   })
 
+  test('an error frame is titled with a red bold cross and shows the first error line above the preview', () => {
+    const failed = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          {
+            tool_use_id: 'f1',
+            tool: 'Bash',
+            input: { command: 'tsc' },
+            text: 'compiling\nsrc/a.ts:3: error TS2304: nope\nmore output',
+            isError: true,
+          },
+        ],
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: failed, expanded: new Set(['f1']) }, act)
+    const frame = nodes(tree).find(n => n.type === 'Box' && n.props['borderColor'] === 'error')
+    const title = nodes(frame).find(n => n.type === 'Text' && n.props['bold'] === true)
+    expect(text(title)).toBe('✗ error')
+    expect(title?.props['color']).toBe(C.error)
+    const lines = nodes(frame).filter(n => n.type === 'Text' && n.props['color'] === C.error)
+    expect(lines.map(n => text(n))).toEqual([
+      '✗ error',
+      'src/a.ts:3: error TS2304: nope',
+      expect.stringContaining('compiling'),
+    ])
+    expect(lines[1]?.props['wrap']).toBe('truncate-end')
+    const ascii = renderPane(el, { ...base, turns: failed, expanded: new Set(['f1']), icons: ICON_SETS.ascii }, act)
+    expect(text(ascii)).toContain('x error')
+    // A succeeded call gets neither.
+    const ok = renderPane(el, { ...base, expanded: new Set(['b1']) }, act)
+    expect(text(ok)).not.toContain('✗ error')
+  })
+
   test('the trace of a subagent carries status glyphs too', () => {
     const trace = buildTurns(
       [
