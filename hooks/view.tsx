@@ -23,6 +23,8 @@ import {
   isAgentRunning,
   isSubagent,
   itemName,
+  itemStatus,
+  type ItemStatus,
   itemSummary,
   sanitizeText,
   shortMode,
@@ -97,6 +99,22 @@ function scopeOf(prefix: string, id: string): string {
 const buttonHover = (scope: string) => ({ scope, ...HOVER_TEXT })
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+// The state of a tool call as a glyph, so it reads without color too.
+function statusMark(status: ItemStatus, frame: number): { glyph: string; color: ThemeKey } {
+  switch (status) {
+    case 'done':
+      return { glyph: '✓', color: C.ongoing }
+    case 'error':
+      return { glyph: '✗', color: C.error }
+    case 'running':
+      return { glyph: SPINNER[frame % SPINNER.length]!, color: C.ongoing }
+    case 'interrupted':
+      return { glyph: '⏸', color: C.interrupted }
+    case 'idle':
+      return { glyph: G.dot, color: C.muted }
+  }
+}
 
 function itemIcon(item: Item): { glyph: string; color?: ThemeKey } {
   if (item.kind === 'output') return { glyph: G.output, color: C.accent }
@@ -583,6 +601,7 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
     <Box key={`item-${id}`} flexDirection="column">
       <Box flexDirection="row">
         <Text color={isOpen ? C.text : C.muted}>{`${isOpen ? G.expanded : G.collapsed} `}</Text>
+        <Text color={C.muted}>{'  '}</Text>
         <Text color={C.accent}>{`${G.thinking} `}</Text>
         <Button
           key={id}
@@ -638,10 +657,12 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
         ? G.expanded
         : G.collapsed
 
-  const status = item.kind === 'tool' && item.agentId ? data.agents.get(item.agentId) : undefined
-  const isRunning =
-    isAgentRunning(status) || (item.kind === 'tool' && item.isPending && data.isLatest && data.isWorking)
-  const spinner = isRunning ? `${SPINNER[data.frame % SPINNER.length]} ` : '  '
+  // Tool rows lead with their state; output rows keep the column blank.
+  const agent = item.kind === 'tool' && item.agentId ? data.agents.get(item.agentId) : undefined
+  const mark =
+    item.kind === 'tool'
+      ? statusMark(itemStatus(item, { ...data, isAgentRunning: isAgentRunning(agent) }), data.frame)
+      : undefined
 
   const duration = itemDuration(item, data)
   const model = item.kind === 'tool' && item.agentId ? data.agentStats[item.agentId]?.model : undefined
@@ -651,7 +672,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
 
   // One button carries name and summary, so a click or Enter anywhere on the
   // row toggles it; the label is cut to the room the fixed columns leave.
-  const room = width - 2 - 3 - spinner.length - modelText.length - 2 - 7
+  const room = width - 2 - 3 - 2 - modelText.length - 2 - 7
   const label = truncate(summary ? `${name.padEnd(12)} - ${summary}` : name, Math.max(8, room))
   const hover = { scope: scopeOf('row:', item.id), backgroundColor: C.rowHover }
   const toggle = () => canOpen && act.toggle(item.id)
@@ -660,6 +681,9 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
     <Box key={`item-${item.id}`} flexDirection="column" marginLeft={depth * 4}>
       <Box flexDirection="row" width={width}>
         <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${chevron} `}</Text>
+        <Text key={`status-${item.id}`} color={mark?.color ?? C.muted} hover={hover}>
+          {mark === undefined ? '  ' : `${mark.glyph} `}
+        </Text>
         <Text color={icon.color ?? C.muted} hover={hover}>
           {`${icon.glyph} `}
         </Text>
@@ -672,9 +696,6 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
             </Text>
           )}
         </Box>
-        <Text color={C.ongoing} hover={hover}>
-          {spinner}
-        </Text>
         <Box flexShrink={0}>
           {modelText !== '' && model !== undefined && (
             <Text color={modelColor(model) ?? C.text} hover={hover}>

@@ -68,6 +68,24 @@ export function sanitizeValue(value: unknown, depth = 0): unknown {
 export const isSubagent = (item: Item): item is ToolItem & { agentId: string } =>
   item.kind === 'tool' && SUBAGENT_TOOLS.has(item.tool) && item.agentId !== undefined
 
+export type ItemStatus = 'done' | 'error' | 'running' | 'idle' | 'interrupted'
+
+const INTERRUPTED = /interrupted by user/i
+
+// Where a tool call stands. A pending call runs only on the latest turn while
+// the session works (rule P6), else it waits; a subagent whose agent runs
+// always runs. The session rows carry no interrupt flag, so an interrupted
+// call is told by the error text Claude Code stores for it.
+export function itemStatus(
+  item: ToolItem,
+  ctx: { isLatest: boolean; isWorking: boolean; isAgentRunning?: boolean },
+): ItemStatus {
+  if (ctx.isAgentRunning === true) return 'running'
+  if (item.isPending) return ctx.isLatest && ctx.isWorking ? 'running' : 'idle'
+  if (!item.isError) return 'done'
+  return INTERRUPTED.test(item.resultText ?? '') ? 'interrupted' : 'error'
+}
+
 // Groups the transcript into turns: a turn opens on a user prompt and holds
 // every assistant message up to the next one. Tool-result rows carry nothing
 // new (each toolUses entry already has its result), so they are skipped.
