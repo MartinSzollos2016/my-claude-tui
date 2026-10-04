@@ -63,6 +63,16 @@ export type Icons = {
   cursorDown: string
   cursorUp: string
   columnSep: string
+  // The footer's keys under 40 columns, where only a glyph stands for the word.
+  keyLatest: string
+  keyOpen: string
+  keyCopy: string
+  keyExpand: string
+  keyCollapse: string
+  keyTurns: string
+  keySearch: string
+  keyTeam: string
+  keyDetail: string
   // The duration bar's steps from one to eight eighths of a cell, and the
   // sign of a group's call count.
   bar: readonly string[]
@@ -118,6 +128,15 @@ const nerd: Icons = {
   cursorDown: '↓',
   cursorUp: '↑',
   columnSep: '│',
+  keyLatest: '»',
+  keyOpen: '+',
+  keyCopy: '⧉',
+  keyExpand: '⊞',
+  keyCollapse: '⊟',
+  keyTurns: '≡',
+  keySearch: '⌕',
+  keyTeam: '☺',
+  keyDetail: '◂',
   bar: ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'],
   times: '×',
 }
@@ -190,6 +209,15 @@ const ascii: Icons = {
   cursorDown: 'v',
   cursorUp: '^',
   columnSep: '|',
+  keyLatest: '>>',
+  keyOpen: '+',
+  keyCopy: 'c',
+  keyExpand: '+',
+  keyCollapse: '-',
+  keyTurns: '=',
+  keySearch: '?',
+  keyTeam: '@',
+  keyDetail: '<',
   bar: ['-', '-', '-', '-', '-', '-', '-', '='],
   times: 'x',
 }

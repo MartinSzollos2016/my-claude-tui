@@ -318,7 +318,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces)]
   reserveSections(lists.reduce((sum, items) => sum + items.length, 0))
   const trunc = cutter(data.icons)
-  if (data.view === 'team') return paneBody(el, data, act, renderTeam(el, data, act))
+  if (data.view === 'team') return paneBody(el, data, act, renderTeam(el, data))
 
   if (!turn) {
     const sep = data.icons.groupSep
@@ -487,9 +487,9 @@ function renderSnippet(el: El, snippet: string, query: string, data: Ctx) {
 
 // The team board: each teammate with its type and status, then the tasks
 // with their TodoWrite marks and owners.
-function renderTeam(el: El, data: Ctx, act: PaneActions) {
+function renderTeam(el: El, data: Ctx) {
   const trunc = cutter(data.icons)
-  const { Box, Button, Text } = el
+  const { Box, Text } = el
   const members = data.members ?? []
   const tasks = data.tasks ?? []
 
@@ -518,15 +518,6 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
     <Box flexDirection="column">
       <Box flexDirection="row" gap={2}>
         <Text bold color={C.brand}>{`Team (${members.length})`}</Text>
-        <Button
-          key="nav-detail"
-          plain
-          dimColor
-          hover={buttonHover('btn:nav-detail')}
-          hotkey="d"
-          label="back to detail"
-          onPress={act.showDetail}
-        />
       </Box>
       <Box flexDirection="column" marginTop={1}>
         {members.length === 0 && (
@@ -651,6 +642,8 @@ type FooterKey = {
   glyph?: string
   // The glyph comes after the label, not before it.
   isGlyphAfter?: boolean
+  // What stands for the key when the pane has no room for words.
+  short: string
   label: string
   isOn: boolean
   onPress: (e: { surface?: RenderSurface }) => void
@@ -745,7 +738,7 @@ function footerStatus(data: Ctx) {
 // The label of a key: glyph and words in the order they read; the glyph alone
 // when the pane is too narrow for words.
 function footerLabel(k: FooterKey, hasLabels: boolean): string {
-  if (!hasLabels) return k.glyph ?? ''
+  if (!hasLabels) return k.short
   const parts = k.isGlyphAfter === true ? [k.label, k.glyph] : [k.glyph, k.label]
   return parts.filter(part => part !== undefined && part !== '').join(' ')
 }
@@ -779,10 +772,12 @@ function footerGroups(data: Ctx, act: PaneActions): { id: string; keys: FooterKe
   const hasTeam = (data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0
   const hasRows = (data.turns[data.selected]?.items.length ?? 0) > 0
   const hasCursor = hasRows && data.cursor !== undefined && data.cursor !== null
+  const isDetail = data.view === 'detail'
   const key = (
     name: string,
     hotkey: string,
     label: string,
+    short: string,
     isOn: boolean,
     onPress: FooterKey['onPress'],
     glyph?: string,
@@ -791,44 +786,47 @@ function footerGroups(data: Ctx, act: PaneActions): { id: string; keys: FooterKe
     key: `nav-${name}`,
     hotkey,
     label,
+    short,
     isOn,
     onPress,
     ...(glyph === undefined ? {} : { glyph }),
     ...(isGlyphAfter === true ? { isGlyphAfter } : {}),
   })
+  // Keys that act on the detail turn are muted in the turn list and the team
+  // board, which do not show it.
   return [
     {
       id: 'move',
       keys: [
-        key('prev', 'p', 'prev', data.selected > 0, act.prev, icons.navPrev),
-        key('next', 'n', 'next', data.selected < total - 1, act.next, icons.navNext, true),
-        key('latest', 'l', 'latest', !data.isLatest, act.latest),
+        key('prev', 'p', 'prev', icons.navPrev, isDetail && data.selected > 0, act.prev, icons.navPrev),
+        key('next', 'n', 'next', icons.navNext, isDetail && data.selected < total - 1, act.next, icons.navNext, true),
+        key('latest', 'l', 'latest', icons.keyLatest, isDetail && !data.isLatest, act.latest),
       ],
     },
     {
       id: 'cursor',
       keys: [
-        key('down', 'j', '', hasRows, act.cursorDown, icons.cursorDown),
-        key('up', 'k', '', hasRows, act.cursorUp, icons.cursorUp),
-        key('open', 'o', 'open', hasCursor, act.cursorOpen),
-        key('copy', 'y', 'copy', hasCursor, press => act.copyCursor(press.surface)),
+        key('down', 'j', '', icons.cursorDown, isDetail && hasRows, act.cursorDown, icons.cursorDown),
+        key('up', 'k', '', icons.cursorUp, isDetail && hasRows, act.cursorUp, icons.cursorUp),
+        key('open', 'o', 'open', icons.keyOpen, isDetail && hasCursor, act.cursorOpen),
+        key('copy', 'y', 'copy', icons.keyCopy, isDetail && hasCursor, press => act.copyCursor(press.surface)),
       ],
     },
     {
       id: 'views',
       keys: [
-        data.view === 'turns'
-          ? key('detail', 'd', 'detail', true, act.showDetail)
-          : key('turns', 't', 'turns', true, act.showTurns),
-        key('search', 's', 'search', true, act.focusSearch),
-        key('team', 'm', 'team', hasTeam, act.showTeam),
+        isDetail
+          ? key('turns', 't', 'turns', icons.keyTurns, true, act.showTurns)
+          : key('detail', 'd', 'detail', icons.keyDetail, true, act.showDetail),
+        key('search', 's', 'search', icons.keySearch, true, act.focusSearch),
+        key('team', 'm', 'team', icons.keyTeam, hasTeam && data.view !== 'team', act.showTeam),
       ],
     },
     {
       id: 'expand',
       keys: [
-        key('expand', 'e', 'expand', hasRows, act.expandAll),
-        key('collapse', 'c', 'collapse', hasRows, act.collapseAll),
+        key('expand', 'e', 'expand', icons.keyExpand, isDetail && hasRows, act.expandAll),
+        key('collapse', 'c', 'collapse', icons.keyCollapse, isDetail && hasRows, act.collapseAll),
       ],
     },
   ]

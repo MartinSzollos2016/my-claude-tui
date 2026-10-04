@@ -1368,12 +1368,59 @@ describe('pinned footer', () => {
 
   test('shows only keys and glyphs under 40 columns', () => {
     const footer = footerOf({ columns: 36, isLatest: false })
-    expect(line(rowsOf(footer)[0])).toBe('p: ‹  n: ›  l: ')
-    expect(line(rowsOf(footer)[1])).toBe('j: ↓  k: ↑  o:   y: ')
+    expect(line(rowsOf(footer)[0])).toBe('p: ‹  n: ›  l: »')
+    expect(line(rowsOf(footer)[1])).toBe('j: ↓  k: ↑  o: +  y: ⧉')
+    expect(line(rowsOf(footer)[2])).toBe('t: ≡  s: ⌕  m: ☺')
+    expect(line(rowsOf(footer)[3])).toBe('e: ⊞  c: ⊟')
     expect(byKey(footer, 'nav-prev')?.props['label']).toBe('‹')
-    expect(byKey(footer, 'nav-latest')?.props['label']).toBe('')
-    expect(byKey(footer, 'nav-open')?.props['label']).toBe('')
-    expect(text(byKey(footerOf({ columns: 36, cursor: null }), 'nav-open-off'))).toBe('o: ')
+  })
+
+  test('under 40 columns no key has an empty label, enabled or not, in every view and set', () => {
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    for (const extra of [{}, { view: 'turns' as const }, { view: 'team' as const }, { members }, { cursor: null }])
+      for (const icons of [ICON_SETS.nerd, ICON_SETS.unicode, ICON_SETS.ascii]) {
+        const footer = footerOf({ columns: 36, isLatest: false, icons, ...extra })
+        const keys = nodes(footer).filter(n => n.type === 'Button' || String(n.props['key']).endsWith('-off'))
+        expect(keys.length).toBeGreaterThan(8)
+        for (const k of keys) {
+          const shown = k.type === 'Button' ? String(k.props['label']) : text(k).replace(/^.: /, '')
+          expect(shown, String(k.props['key'])).not.toBe('')
+          if (icons === ICON_SETS.ascii) expect(shown).toMatch(/^[\x20-\x7e]+$/)
+        }
+      }
+  })
+
+  test('outside the detail view the keys of the detail turn are muted text with no hotkey', () => {
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    for (const view of ['turns', 'team'] as const) {
+      const footer = footerOf({ view, members, selected: 0, isLatest: false, cursor: 'b1' })
+      for (const name of ['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'expand', 'collapse']) {
+        expect(byKey(footer, `nav-${name}`), name).toBeUndefined()
+        const off = byKey(footer, `nav-${name}-off`)
+        expect(off?.type).toBe('Text')
+        expect(off?.props['color']).toBe(C.muted)
+        expect(off?.props['hotkey']).toBeUndefined()
+      }
+      expect(byKey(footer, 'nav-detail')?.props['hotkey']).toBe('d')
+      expect(byKey(footer, 'nav-search')?.type).toBe('Button')
+      expect(byKey(footer, 'nav-turns')).toBeUndefined()
+    }
+    expect(byKey(footerOf({ view: 'turns', members }), 'nav-team')?.type).toBe('Button')
+    expect(byKey(footerOf({ view: 'team', members }), 'nav-team-off')?.type).toBe('Text')
+  })
+
+  test('the team board has no header button of its own, the footer holds d', () => {
+    const tree = renderPane(el, { ...base, view: 'team' }, act)
+    expect(nodes(tree).filter(n => n.props['key'] === 'nav-detail')).toHaveLength(1)
+    expect(byKey(footerOf({ view: 'team' }), 'nav-detail')).toBeDefined()
+  })
+
+  test('the status row stays inside the frame on stacked panes too', () => {
+    for (const columns of [40, 63]) {
+      const status = byKey(footerOf({ columns, isFocused: false }), 'footer-status')!
+      expect(status.props['width']).toBe(columns - 2)
+      expect(displayWidth(text(status))).toBeLessThanOrEqual(columns - 2)
+    }
   })
 
   test('uses the ASCII glyphs of the ascii set and stays ASCII only', () => {
