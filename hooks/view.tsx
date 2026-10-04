@@ -13,6 +13,7 @@ import type {
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import {
+  cachedSections,
   chunkMarkdown,
   chunkText,
   clampDiff,
@@ -39,7 +40,6 @@ import {
   splitMatch,
   taskMark,
   toolCategory,
-  toolSections,
   treePrefix,
   turnTail,
   type Section,
@@ -845,7 +845,7 @@ function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
   const { Box } = el
   return (
     <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-      {toolSections(item, data.icons).map(section => {
+      {cachedSections(item, data.icons).map(section => {
         const id = `${item.id}:${section.kind}`
         const preview = renderLong(el, id, section.body, longSpec(section), data, act)
         const isError = section.kind === 'error'

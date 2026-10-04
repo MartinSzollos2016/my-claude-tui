@@ -13,6 +13,8 @@ import {
   compactCall,
   contextMeter,
   finishedSince,
+  finishedWorkflows,
+  cachedSections,
   firstErrorLine,
   formatDuration,
   fitPath,
@@ -1028,5 +1030,102 @@ describe('finishedSince', () => {
   test('carries the description with the id', () => {
     const found = finishedSince(new Map([['a', 'running' as const]]), [agent('a', 'completed')])
     expect(found).toEqual([{ id: 'a', status: 'completed', description: 'job a' }])
+  })
+})
+
+describe('fix round 1: model', () => {
+  const many = (n: number, tag: string) => Array.from({ length: n }, (_, i) => `${tag}${i}`).join('\n')
+
+  test('a changed middle over the cell cap is not diffed, one under it is', () => {
+    expect(unifiedDiff(many(600, 'a'), many(600, 'b'))).toBeNull()
+    expect(unifiedDiff(many(400, 'a'), many(400, 'b'))).not.toBeNull()
+    // The common head and tail do not count against the cap.
+    const shared = many(1500, 's')
+    expect(unifiedDiff(`${shared}\nold`, `${shared}\nnew`)).not.toBeNull()
+  })
+
+  test('a big edit falls back to the plain - and + lines', () => {
+    const [diff] = toolSections(
+      tool({ tool: 'Edit', input: { file_path: '/a.ts', old_string: many(600, 'a'), new_string: many(600, 'b') } }),
+    )
+    expect(diff?.format).toEqual({ kind: 'code', language: 'diff' })
+    expect(diff?.body.startsWith('-a0\n-a1')).toBe(true)
+  })
+
+  test('splitDiff of a very long hunk is linear', () => {
+    const diff = `@@ -0,0 +1,20000 @@\n${Array.from({ length: 20000 }, (_, i) => `+line ${i}`).join('\n')}`
+    const started = Date.now()
+    const pieces = splitDiff(diff, Infinity, 8000)
+    expect(Date.now() - started).toBeLessThan(400)
+    expect(pieces.length).toBeGreaterThan(20)
+    for (const piece of pieces) expect(piece.length).toBeLessThanOrEqual(8000)
+  })
+
+  test('editStartLine matches the whole new block, not a first line seen earlier', () => {
+    const [diff] = toolSections(
+      tool({
+        tool: 'Edit',
+        input: { file_path: '/a.ts', old_string: '}\nold', new_string: '}\nnew' },
+        resultText: 'Updated:\n     3\t}\n     4\tx\n    10\t}\n    11\tnew\n    12\ty',
+      }),
+    )
+    expect(diff?.body.startsWith('@@ -10,2 +10,2 @@')).toBe(true)
+  })
+
+  test('parseNumbered survives CRLF lines and a trailing blank tab line', () => {
+    expect(parseNumbered('1\ta\r\n2\tb\r')).toEqual({ startLine: 1, body: 'a\nb' })
+    expect(parseNumbered('1\ta\n2\tb\n3')).toEqual({ startLine: 1, body: 'a\nb\n' })
+    expect(parseNumbered('1\ta\u2028b\n2\tc')).toEqual({ startLine: 1, body: 'a\u2028b\nc' })
+    expect(parseNumbered('5')).toBeNull()
+    expect(parseNumbered('1\n2\n3')).toBeNull()
+  })
+
+  test('cachedSections returns the same sections until the item changes', () => {
+    const item = tool({ id: 'cache-1', tool: 'Edit', input: { file_path: '/a.ts', old_string: 'a', new_string: 'b' } })
+    const first = cachedSections(item, ICON_SETS.nerd)
+    expect(cachedSections({ ...item }, ICON_SETS.nerd)).toBe(first)
+    const changed = { ...item, input: { file_path: '/a.ts', old_string: 'a', new_string: 'c' } }
+    expect(cachedSections(changed, ICON_SETS.nerd)).not.toBe(first)
+    expect(cachedSections(changed, ICON_SETS.ascii)).not.toBe(cachedSections(changed, ICON_SETS.nerd))
+    expect(cachedSections({ ...item, resultText: 'ok' }, ICON_SETS.nerd)).not.toBe(first)
+  })
+
+  test('cachedSections keeps at most 200 items', () => {
+    const first = cachedSections(tool({ id: 'cap-0', input: { command: 'ls' } }), ICON_SETS.nerd)
+    for (let i = 1; i <= 200; i++) cachedSections(tool({ id: `cap-${i}`, input: { command: 'ls' } }), ICON_SETS.nerd)
+    expect(cachedSections(tool({ id: 'cap-0', input: { command: 'ls' } }), ICON_SETS.nerd)).not.toBe(first)
+  })
+})
+
+describe('finishedWorkflows', () => {
+  const wf = (id: string, over: Partial<ToolItem> = {}): ToolItem =>
+    tool({ id, tool: 'Workflow', isPending: true, ...over })
+  const turn = (...items: ToolItem[]) => ({
+    index: 0,
+    prompt: '',
+    items,
+    toolCount: items.length,
+    outputCount: 0,
+    subagentCount: 0,
+  })
+
+  test('tracks pending Workflow calls while the session works', () => {
+    expect(finishedWorkflows(new Set(), turn(wf('w1')), true)).toEqual({ tracked: new Set(['w1']), finished: [] })
+  })
+
+  test('a tracked call that got its result is finished, once', () => {
+    const done = finishedWorkflows(new Set(['w1']), turn(wf('w1', { isPending: false, resultText: 'ok' })), true)
+    expect(done).toEqual({ tracked: new Set(), finished: ['w1'] })
+  })
+
+  test('a call left pending when the session stops working is dropped without a toast', () => {
+    expect(finishedWorkflows(new Set(['w1']), turn(wf('w1')), false)).toEqual({ tracked: new Set(), finished: [] })
+  })
+
+  test('a call that left the latest turn or ended interrupted is dropped without a toast', () => {
+    expect(finishedWorkflows(new Set(['w1']), turn(), true)).toEqual({ tracked: new Set(), finished: [] })
+    const stopped = wf('w1', { isPending: false, isInterrupted: true })
+    expect(finishedWorkflows(new Set(['w1']), turn(stopped), true)).toEqual({ tracked: new Set(), finished: [] })
+    expect(finishedWorkflows(new Set(), undefined, true)).toEqual({ tracked: new Set(), finished: [] })
   })
 })
