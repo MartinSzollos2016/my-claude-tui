@@ -442,12 +442,14 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       if (isTextOnly(surfaces)) return { text: await turnsReport($, true) }
       await showView($, 'turns')
       await openPane($, true, e.presentation.columns)
+      claimFocus($).catch(ignore)
       return { text: 'Turn list opened: Enter or click a turn to see it in detail.' }
     }
     case 'open': {
       const surfaces = await $.session.surfaces()
       if (isTextOnly(surfaces)) return { text: await turnsReport($, false) }
       await openPane($, true, e.presentation.columns)
+      claimFocus($).catch(ignore)
       return { text: 'Detail view opened. /tail-help lists the commands and keys.' }
     }
   }
@@ -597,6 +599,22 @@ async function openPane($: EngineInterface, focus: boolean, terminalColumns?: nu
     ...(focus ? { focus: true as const } : {}),
     ...(columns === undefined ? {} : { columns }),
   })
+}
+
+// The engine grants a pane the keyboard only over an empty composer, and
+// while a command runs the composer still holds it: once the command is
+// done, ask again a few times until the pane has the keys. Text the person
+// types meanwhile makes the engine refuse, so nothing is taken from them.
+const FOCUS_TRIES = 5
+const FOCUS_RETRY_MS = 100
+
+async function claimFocus($: EngineInterface): Promise<void> {
+  for (let i = 0; i < FOCUS_TRIES; i++) {
+    await $.clock.sleep(FOCUS_RETRY_MS)
+    const pane = (await $.ui.panes()).find(p => p.id === PANE)
+    if (pane === undefined || !pane.isPlaced || pane.isFocused) return
+    await openPane($, true)
+  }
 }
 
 // The pane opened at session start before any width was known: size it
@@ -865,6 +883,7 @@ export const register: Register = on => {
         traces,
         cursor: cursorId,
         isFocused: e.props.isFocused,
+        isBarShown: !(await read($, isBarHidden)),
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
         scrollTop: view === 'detail' ? detailTop : scrolled[view],
