@@ -143,19 +143,54 @@ export function traceStats(items: readonly Item[]): { tools: number; messages: n
   return { tools, messages }
 }
 
+// The text between the first `open` at or after `from` and the next `close`,
+// trimmed. indexOf rather than a regex: prompts are untrusted, and the
+// regexes this replaced backtracked cubically on long runs of whitespace.
+function between(text: string, open: string, close: string, from = 0): string | undefined {
+  const start = text.indexOf(open, from)
+  if (start < 0) return undefined
+  const end = text.indexOf(close, start + open.length)
+  return end < 0 ? undefined : text.slice(start + open.length, end).trim()
+}
+
+function stripBlocks(text: string, open: string, close: string): string {
+  let out = ''
+  let at = 0
+  for (;;) {
+    const start = text.indexOf(open, at)
+    if (start < 0) return out + text.slice(at)
+    const end = text.indexOf(close, start + open.length)
+    if (end < 0) return out + text.slice(at)
+    out += text.slice(at, start)
+    at = end + close.length
+  }
+}
+
 // Turns XML-ish wrappers the engine injects into a readable one-liner.
 export function sanitizePrompt(text: string): string {
-  const command = /<command-name>\s*([^<]+?)\s*<\/command-name>/.exec(text)
-  if (command) {
-    const args = /<command-args>\s*([^<]*?)\s*<\/command-args>/.exec(text)?.[1] ?? ''
-    return args ? `${command[1]} ${args}` : command[1]!
+  const command = between(text, '<command-name>', '</command-name>')
+  if (command && !command.includes('<')) {
+    const args = between(text, '<command-args>', '</command-args>') ?? ''
+    return args && !args.includes('<') ? `${command} ${args}` : command
   }
-  const task = /<task-notification>[\s\S]*?<summary>\s*([^<]+?)\s*<\/summary>/.exec(text)
-  if (task) return `Task notification: ${task[1]}`
-  return text
-    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
-    .replace(/<[^>]+>/g, '')
-    .trim()
+  const notification = text.indexOf('<task-notification>')
+  const summary = notification < 0 ? undefined : between(text, '<summary>', '</summary>', notification)
+  if (summary && !summary.includes('<')) return `Task notification: ${summary}`
+  return stripTags(stripBlocks(text, '<system-reminder>', '</system-reminder>')).trim()
+}
+
+// Drops every `<...>` tag; a `<` with no `>` after it ends the scan.
+function stripTags(text: string): string {
+  let out = ''
+  let at = 0
+  for (;;) {
+    const start = text.indexOf('<', at)
+    if (start < 0) return out + text.slice(at)
+    const end = text.indexOf('>', start + 1)
+    if (end < 0) return out + text.slice(at)
+    out += text.slice(at, start)
+    at = end + 1
+  }
 }
 
 // -- Formatters (tail-claude format.go) --------------------------------------
