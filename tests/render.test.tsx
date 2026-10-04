@@ -373,6 +373,54 @@ describe('detail pane', () => {
     await ui.unmount()
   })
 
+  test('lists the turns, newest first, and switches to the one picked', async ($, on) => {
+    const three: SessionMessage[] = [
+      ...main,
+      { role: 'user', text: 'Now add tests', toolUses: [] },
+      {
+        role: 'assistant',
+        text: 'Added.',
+        toolUses: [{ tool_use_id: 'w1', tool: 'Write', input: { file_path: '/t.go', content: 'x' }, text: 'ok' }],
+      },
+      { role: 'user', text: 'Thanks', toolUses: [] },
+      { role: 'assistant', text: 'You are welcome.', toolUses: [] },
+    ]
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', (_$, e) => ({ value: e.agentId ? child : three }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      expect(await ui.find({ text: /turn 3\/3/ })).toBeDefined()
+
+      await ui.press({ key: 'nav-turns' })
+      expect(await ui.find({ text: /Turns \(3\)/ })).toBeDefined()
+      const labels = (await ui.findAll({ type: 'Button' }))
+        .filter(b => String(b.key ?? '').startsWith('turn-'))
+        .map(b => String(b.props['label']))
+      expect(labels.length).toBe(3)
+      expect(labels[0]).toContain('#3')
+      expect(labels[0]).toContain('Thanks')
+      expect(labels[2]).toContain('#1')
+      expect(labels[2]).toContain('Fix the bug')
+      expect(labels[2]).toContain('1 tool · 1 agent')
+      expect(labels[2]).toContain('1 agent')
+
+      await ui.press({ key: 'turn-0' })
+      expect(await ui.find({ text: /Turns \(3\)/ })).toBeUndefined()
+      expect(await ui.find({ text: /turn 1\/3/ })).toBeDefined()
+      expect(await ui.find({ text: /Fix the bug/ })).toBeDefined()
+
+      await ui.press({ key: 'nav-turns' })
+      await ui.press({ key: 'nav-detail' })
+      expect(await ui.find({ text: /turn 1\/3/ })).toBeDefined()
+      await ui.press({ key: 'nav-latest' })
+      await ui.unmount()
+    }
+  })
+
   test('shows an empty state before the first prompt', async ($, on) => {
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.messages', () => ({ value: [] }))
@@ -560,13 +608,21 @@ describe('commands', () => {
     on('ui.open', () => ({ value: { isPlaced: false as const, reason: 'test' } }))
     on('session.start', (_$, e) => ({ cwd: e.cwd }))
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true } as never)
-    expect(names.sort()).toEqual(['tail', 'tail-bar', 'tail-compact', 'tail-help', 'tail-theme', 'tail-width'])
+    expect(names.sort()).toEqual([
+      'tail',
+      'tail-bar',
+      'tail-compact',
+      'tail-help',
+      'tail-theme',
+      'tail-turns',
+      'tail-width',
+    ])
   })
 
   test('/tail-help and /tail help list every command', async ($, on) => {
     mock.store(on)
     for (const ran of [await $.command.run(run('tail-help')), await $.command.run(run('tail', 'help'))]) {
-      for (const name of ['/tail-theme', '/tail-width', '/tail-compact', '/tail-bar', '/tail-help'])
+      for (const name of ['/tail-turns', '/tail-theme', '/tail-width', '/tail-compact', '/tail-bar', '/tail-help'])
         expect(ran.text).toContain(name)
     }
   })

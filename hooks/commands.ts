@@ -1,7 +1,7 @@
 // The slash commands tail-view registers. Each subcommand is its own command
 // so the slash menu lists it; `/tail <sub>` stays as a shorthand.
 
-export type Subcommand = 'bar' | 'compact' | 'width' | 'theme' | 'help'
+export type Subcommand = 'turns' | 'bar' | 'compact' | 'width' | 'theme' | 'help'
 
 export type CommandSpec = {
   name: string
@@ -14,8 +14,9 @@ export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'tail',
     description: 'Open the tail-view detail pane (tool calls, subagents)',
-    argumentHint: '[bar|compact|width N|theme|help]',
+    argumentHint: '[turns|bar|compact|width N|theme|help]',
   },
+  { name: 'tail-turns', description: 'List the turns of this session and switch the detail pane to one', sub: 'turns' },
   {
     name: 'tail-width',
     description: 'Set the detail pane width as a share of the terminal (30-80 %)',
@@ -53,7 +54,7 @@ export function helpText(): string {
     'tail-view commands:',
     ...lines,
     '',
-    'In the pane: Tab/shift+Tab move, Enter or click expands a row, p/n/l previous/next/latest turn,',
+    'In the pane: Tab/shift+Tab move, Enter or click expands a row, p/n/l previous/next/latest turn, t turn list,',
     'e/c expand/collapse all, "show all" opens a long block, Esc returns to the prompt.',
   ].join('\n')
 }

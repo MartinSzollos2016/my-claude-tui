@@ -34,6 +34,7 @@ const TICK_MS = 500
 
 const tick = atom({ plugin: 'tail-view', key: 'tick' } as const, 0)
 const selectedTurn = atom({ plugin: 'tail-view', key: 'turn' } as const, null)
+const paneView = atom({ plugin: 'tail-view', key: 'view' } as const, 'detail')
 const expanded = atom({ plugin: 'tail-view', key: 'expanded' } as const, [])
 const fullBlocks = atom({ plugin: 'tail-view', key: 'full' } as const, [])
 const timings = atom({ plugin: 'tail-view', key: 'timings' } as const, {})
@@ -173,6 +174,12 @@ function startTicker($: EngineInterface) {
 
 // Names the tail-view theme matching the current one; picking it is the
 // person's, in /theme (the config API only accepts built-in themes).
+// Shows one turn in the detail view; the latest one follows new turns.
+async function pickTurn($: EngineInterface, index: number, latest: number) {
+  await update($, selectedTurn, () => (index >= latest ? null : index))
+  await update($, paneView, () => 'detail' as const)
+}
+
 async function themeAdvice($: EngineInterface): Promise<string> {
   const row = (await $.config.list()).find(r => r.key === 'theme')
   return tailThemeAdvice(sanitizeText(typeof row?.value === 'string' ? row.value : ''))
@@ -269,6 +276,10 @@ export const register: Register = on => {
         return { text: await setWidth($, parsed.arg, e.presentation.columns) }
       case 'help':
         return { text: helpText() }
+      case 'turns':
+        await update($, paneView, () => 'turns' as const)
+        await openPane($, true, e.presentation.columns)
+        return { text: 'Turn list opened: Enter or click a turn to see it in detail.' }
       case 'open':
         await openPane($, true, e.presentation.columns)
         return { text: 'Detail view opened. /tail-help lists the commands and keys.' }
@@ -356,6 +367,7 @@ export const register: Register = on => {
     const traces = await loadTraces($, turn?.items ?? [], open)
     const agents = new Map((await $.agent.list()).map(a => [a.id, a.status] as const))
     const usage = await $.session.usage()
+    const allStats = await read($, turnStats)
 
     const setTurn = (fn: (cur: number) => number | null) =>
       update($, selectedTurn, cur => {
@@ -370,7 +382,7 @@ export const register: Register = on => {
         selected: Math.max(0, selected),
         expanded: open,
         timings: await read($, timings),
-        turnStat: statFor(await read($, turnStats), turn),
+        turnStat: statFor(allStats, turn),
         sessionModel: await $.session.model(),
         contextPercent: usage.context.percent,
         isLatest: selected === latest,
@@ -383,6 +395,8 @@ export const register: Register = on => {
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
         full: new Set(await read($, fullBlocks)),
+        view: await read($, paneView),
+        stats: turns.map(t => statFor(allStats, t)),
       },
       {
         toggle: id =>
@@ -404,6 +418,9 @@ export const register: Register = on => {
           detach(update($, expanded, () => []))
           detach(update($, fullBlocks, () => []))
         },
+        showTurns: () => detach(update($, paneView, () => 'turns' as const)),
+        showDetail: () => detach(update($, paneView, () => 'detail' as const)),
+        pickTurn: index => detach(pickTurn($, index, latest)),
         toggleFull: id =>
           detach(
             update($, fullBlocks, ids =>
