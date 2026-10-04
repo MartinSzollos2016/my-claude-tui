@@ -13,3 +13,4 @@ LICENSE
 
 # Subagent-driven-development scratch workspace (briefs, reports)
 .superpowers/
+.claude/
