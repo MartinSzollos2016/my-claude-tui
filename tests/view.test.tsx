@@ -150,8 +150,10 @@ const act = {
   search: (query: string) => calls.push(`search:${query}`),
   submitSearch: (query: string) => calls.push(`submit:${query}`),
   focusSearch: () => calls.push('focusSearch'),
-  cursorDown: () => calls.push('down'),
+  cursorDown: (at: { scrollTop: number; windowRows: number; total: number; starts: Record<string, number> }) =>
+    calls.push(`down:${at.scrollTop}/${at.windowRows}/${at.total}/${at.starts['b1']}/${at.starts['e1']}`),
   cursorUp: () => calls.push('up'),
+  scroll: (top: number) => calls.push(`scroll:${top}`),
   cursorOpen: () => calls.push('open'),
   copyCursor: (surface?: string) => calls.push(`copyCursor:${surface}`),
 }
@@ -1255,26 +1257,15 @@ describe('pinned footer', () => {
   }
   const rowsOf = (footer: Node) => kids(footer).filter(n => String(n.props['key']).startsWith('footer-row'))
 
-  test('is an absolute box on the last rows of the window, over a pane background', () => {
-    const footer = footerOf({ rows: 30, offset: 14 })
-    expect(footer.props['position']).toBe('absolute')
-    expect(footer.props['left']).toBe(0)
+  test('is in flow under the window, as wide as the pane, over a pane background', () => {
+    const footer = footerOf({ rows: 30 })
+    expect(footer.props['position']).toBeUndefined()
+    expect(footer.props['top']).toBeUndefined()
     expect(footer.props['width']).toBe(100)
-    expect(footer.props['top']).toBe(14 + 30 - 4)
     expect(footer.props['backgroundColor']).toBe(C.paneBackground)
-    expect(footerOf({ rows: 30 }).props['top']).toBe(26)
-    expect(footerOf({ rows: 2, offset: 0 }).props['top']).toBe(0)
   })
 
-  test('ends the pane body, which leaves room for it with bottom padding', () => {
-    const tree = renderPane(el, { ...base, rows: 30, offset: 3 }, act) as Node
-    expect(tree.props['paddingBottom']).toBe(4)
-    expect(kids(tree).at(-1)?.props['key']).toBe('footer')
-    const narrow = renderPane(el, { ...base, columns: 50 }, act) as Node
-    expect(narrow.props['paddingBottom']).toBe(6)
-  })
-
-  test('is in the detail, turns and team views and with no turns', () => {
+  test('ends the pane body in the detail, turns and team views and with no turns', () => {
     const views = [
       {},
       { view: 'turns' as const },
@@ -1285,7 +1276,7 @@ describe('pinned footer', () => {
     for (const extra of views) {
       const tree = renderPane(el, { ...base, ...extra }, act) as Node
       expect(kids(tree).at(-1)?.props['key']).toBe('footer')
-      expect(tree.props['paddingBottom']).toBe(4)
+      expect(tree.props['paddingBottom']).toBeUndefined()
     }
     expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'nav-detail')?.props['hotkey']).toBe('d')
     expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'nav-turns')).toBeUndefined()
@@ -1302,7 +1293,9 @@ describe('pinned footer', () => {
     expect(text(kids(footer)[0])).toBe('─'.repeat(100))
     expect(kids(footer)[0]?.props['color']).toBe(C.muted)
     expect(line(rowsOf(footer)[0])).toBe('p: ‹ prev  n: next ›  l: latest  │  j: ↓  k: ↑  o: open  y: copy')
-    expect(line(rowsOf(footer)[1])).toBe('t: turns  s: search  m: team     │  e: expand  c: collapse')
+    expect(line(rowsOf(footer)[1])).toBe(
+      't: turns  s: search  m: team     │  e: expand  c: collapse  b: ▲ page  f: ▼ page',
+    )
     expect(
       footerOf({ view: 'turns' }) &&
         line(rowsOf(footerOf({ view: 'turns', members: [{ name: 'a', type: 't', status: 'running' }] }))[1]),
@@ -1353,7 +1346,6 @@ describe('pinned footer', () => {
   test('stacks every group on its own row under 64 columns and drops the separator', () => {
     const footer = footerOf({ columns: 60 })
     expect(footer.props['width']).toBe(60)
-    expect(footer.props['top']).toBe(30 - 6)
     expect(kids(footer).map(n => n.props['key'])).toEqual([
       'footer-rule',
       'footer-row-move',
@@ -1371,7 +1363,7 @@ describe('pinned footer', () => {
     expect(line(rowsOf(footer)[0])).toBe('p: ‹  n: ›  l: »')
     expect(line(rowsOf(footer)[1])).toBe('j: ↓  k: ↑  o: +  y: ⧉')
     expect(line(rowsOf(footer)[2])).toBe('t: ≡  s: ⌕  m: ☺')
-    expect(line(rowsOf(footer)[3])).toBe('e: ⊞  c: ⊟')
+    expect(line(rowsOf(footer)[3])).toBe('e: ⊞  c: ⊟  b: ▲  f: ▼')
     expect(byKey(footer, 'nav-prev')?.props['label']).toBe('‹')
   })
 
@@ -1416,10 +1408,14 @@ describe('pinned footer', () => {
   })
 
   test('the status row stays inside the frame on stacked panes too', () => {
-    for (const columns of [40, 63]) {
+    // Where the page keys start the status row, it has their width and a gap less.
+    for (const [columns, page] of [
+      [40, 22],
+      [63, 0],
+    ]) {
       const status = byKey(footerOf({ columns, isFocused: false }), 'footer-status')!
-      expect(status.props['width']).toBe(columns - 2)
-      expect(displayWidth(text(status))).toBeLessThanOrEqual(columns - 2)
+      expect(status.props['width']).toBe(columns! - 2 - page!)
+      expect(displayWidth(text(status))).toBeLessThanOrEqual(columns! - 2 - page!)
     }
   })
 
@@ -1436,9 +1432,13 @@ describe('pinned footer', () => {
     expect(line(rowsOf(off)[0])).toBe(line(rowsOf(on)[0]))
   })
 
-  test('the status row is right-aligned inside the frame and cut with an ellipsis at 76 columns', () => {
-    const fits = byKey(footerOf({ columns: 76, isFocused: true }), 'footer-status')!
-    expect(fits.props['width']).toBe(74)
+  test('the status row is right-aligned inside the frame and cut with an ellipsis on a narrow pane', () => {
+    const fits = byKey(footerOf({ columns: 100, isFocused: true }), 'footer-status')!
+    expect(fits.props['width']).toBe(98)
+    expect(fits.props['justifyContent']).toBe('flex-end')
+    const beside = byKey(footerOf({ columns: 76, isFocused: true }), 'footer-status')!
+    expect(beside.props['width']).toBe(74 - 22)
+    expect(text(beside)).toBe('turn 2/2 (live) · keys on')
     expect(text(fits)).toBe('turn 2/2 (live) · keys on')
     const cut = byKey(footerOf({ columns: 20, isFocused: false }), 'footer-status')!
     expect(displayWidth(text(cut))).toBeLessThanOrEqual(18)
@@ -1455,6 +1455,124 @@ describe('pinned footer', () => {
     const tree = renderPane(el, { ...base, turns: big, stats: [undefined], isLatest: true, selected: 0 }, act)
     const total = nodes(tree).reduce((n, node) => n + text(node.children).length, 0)
     expect(total).toBeLessThanOrEqual(100_000)
+  })
+})
+
+describe('own scroll', () => {
+  const kids = (n: Node | undefined) => (n?.children as Node[]).filter(Boolean)
+  const pane = (extra: Record<string, unknown> = {}) => renderPane(el, { ...base, ...extra }, act) as Node
+  const press = (n: Node | undefined) => (n?.props['onPress'] as (e: unknown) => void)({})
+  const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+
+  test('the body is exactly as tall as the window: the header, the window and the footer in flow', () => {
+    const tree = pane()
+    expect(tree.props['height']).toBe(30)
+    expect(tree.props['minHeight']).toBeUndefined()
+    expect(tree.props['paddingBottom']).toBeUndefined()
+    expect(kids(tree).map(n => n.props['key'])).toEqual(['pane-header', 'pane-window', 'footer'])
+    expect(kids(pane({ turns: [] })).map(n => n.props['key'])).toEqual(['pane-window', 'footer'])
+  })
+
+  test('the header holds the metrics and the prompt and does not scroll', () => {
+    const tree = pane({ rows: 10, scrollTop: 2 })
+    const header = byKey(tree, 'pane-header')!
+    expect(header.props['height']).toBe(2)
+    expect(header.props['overflow']).toBe('hidden')
+    expect(byKey(header, 'brand-mark')).toBeDefined()
+    expect(text(header)).toContain('Fix the bug')
+    expect(byKey(byKey(tree, 'pane-window'), 'brand-mark')).toBeUndefined()
+  })
+
+  test('the window clips the rows between the header and the footer in every view', () => {
+    const cases: [Record<string, unknown>, number, number][] = [
+      [{}, 2, 4],
+      [{ columns: 50 }, 2, 6],
+      [{ view: 'turns' }, 2, 4],
+      [{ view: 'team', members }, 1, 4],
+      [{ turns: [] }, 0, 4],
+    ]
+    for (const [extra, headerRows, footerRows] of cases) {
+      const tree = pane(extra)
+      const win = byKey(tree, 'pane-window')!
+      expect(win.props['overflow'], JSON.stringify(extra)).toBe('hidden')
+      expect(win.props['height'], JSON.stringify(extra)).toBe(30 - headerRows - footerRows)
+      expect(byKey(tree, 'pane-header')?.props['height'] ?? 0).toBe(headerRows)
+    }
+  })
+
+  test('the content is absolute in the window and moved up by scrollTop, clamped to the content', () => {
+    const content = byKey(pane({ rows: 10, scrollTop: 2 }), 'pane-content')!
+    expect(content.props).toMatchObject({ position: 'absolute', top: -2, left: 0, width: 100 })
+    expect(byKey(pane(), 'pane-content')?.props['top']).toBe(0)
+    expect(byKey(pane({ scrollTop: 5 }), 'pane-content')?.props['top']).toBe(0)
+    expect(byKey(pane({ rows: 10, scrollTop: 99 }), 'pane-content')?.props['top']).toBe(-4)
+  })
+
+  test('more above and more below show only while the content overflows, muted, inside the window', () => {
+    const fits = pane()
+    expect(byKey(fits, 'more-above')).toBeUndefined()
+    expect(byKey(fits, 'more-below')).toBeUndefined()
+    const top = pane({ rows: 10 })
+    expect(byKey(top, 'more-above')).toBeUndefined()
+    const below = byKey(top, 'more-below')!
+    expect(text(below)).toBe('▼ 3 more below')
+    expect(below.props).toMatchObject({ position: 'absolute', top: 3, left: 0, backgroundColor: C.paneBackground })
+    expect(nodes(below).find(n => n.type === 'Text')?.props['color']).toBe(C.muted)
+    const mid = pane({ rows: 10, scrollTop: 2 })
+    const win = byKey(mid, 'pane-window')
+    expect(text(byKey(win, 'more-above'))).toBe('▲ 3 more above')
+    expect(byKey(win, 'more-above')?.props['top']).toBe(0)
+    expect(text(byKey(win, 'more-below'))).toBe('▼ 1 more below')
+    const ascii = pane({ rows: 10, scrollTop: 2, icons: ICON_SETS.ascii })
+    expect(text(byKey(ascii, 'more-above'))).toBe('^ 3 more above')
+    expect(text(byKey(ascii, 'more-below'))).toBe('v 1 more below')
+  })
+
+  test('f and b page the window, muted at the end and at the top', () => {
+    const top = pane({ rows: 10 })
+    expect(byKey(top, 'nav-pageup')).toBeUndefined()
+    expect(byKey(top, 'nav-pageup-off')?.props['color']).toBe(C.muted)
+    expect(text(byKey(top, 'nav-pageup-off'))).toBe('b: ▲ page')
+    const f = byKey(top, 'nav-pagedown')!
+    expect(f.props).toMatchObject({ hotkey: 'f', label: '▼ page', plain: true, dimColor: true })
+    expect((f.props['hover'] as { scope?: string }).scope).toBe('btn:nav-pagedown')
+    calls.length = 0
+    press(f)
+    expect(calls).toEqual(['scroll:2'])
+    const end = pane({ rows: 10, scrollTop: 4 })
+    expect(byKey(end, 'nav-pagedown')).toBeUndefined()
+    expect(text(byKey(end, 'nav-pagedown-off'))).toBe('f: ▼ page')
+    expect(byKey(end, 'nav-pageup')?.props['hotkey']).toBe('b')
+    press(byKey(end, 'nav-pageup'))
+    expect(calls.at(-1)).toBe('scroll:2')
+    for (const view of [{}, { view: 'turns' as const }, { view: 'team' as const, members }]) {
+      const fits = pane(view)
+      expect(byKey(fits, 'nav-pageup-off')).toBeDefined()
+      expect(byKey(fits, 'nav-pagedown-off')).toBeDefined()
+    }
+    expect(byKey(pane({ rows: 10, icons: ICON_SETS.ascii }), 'nav-pagedown')?.props['label']).toBe('v page')
+  })
+
+  test('the page keys move to the status row where the views row has no room for them', () => {
+    const tree = pane({ columns: 70, rows: 10, isFocused: true })
+    const footer = byKey(tree, 'footer')!
+    expect(text(byKey(footer, 'footer-row-2'))).not.toContain('page')
+    const last = byKey(footer, 'footer-last')!
+    expect(byKey(last, 'nav-pagedown')).toBeDefined()
+    const status = byKey(last, 'footer-status')!
+    expect(status.props['width']).toBe(70 - 2 - 20 - 2)
+    expect(text(status)).toBe('turn 1/2 · keys on')
+    expect(byKey(pane({ columns: 44 }), 'footer-last')).toBeDefined()
+    expect(byKey(pane({ columns: 100 }), 'footer-last')).toBeUndefined()
+  })
+
+  test('j hands over where the rows are, an open row pushes the rows under it down by its frames', () => {
+    calls.length = 0
+    press(byKey(pane({ rows: 10, scrollTop: 1, cursor: 'b1' }), 'nav-down'))
+    expect(calls).toEqual(['down:1/4/6/2/3'])
+    calls.length = 0
+    press(byKey(pane({ expanded: new Set(['b1']), cursor: 'b1' }), 'nav-down'))
+    expect(calls).toEqual(['down:0/24/15/2/12'])
   })
 })
 
@@ -2158,7 +2276,7 @@ describe('keyboard cursor', () => {
     ;(buttons(tree, 'nav-up')!.props['onPress'] as () => void)()
     ;(buttons(tree, 'nav-open')!.props['onPress'] as () => void)()
     ;(buttons(tree, 'nav-copy')!.props['onPress'] as (e: { surface: string }) => void)({ surface: 'terminal' })
-    expect(calls).toEqual(['down', 'up', 'open', 'copyCursor:terminal'])
+    expect(calls).toEqual(['down:0/24/6/2/3', 'up', 'open', 'copyCursor:terminal'])
   })
 })
 

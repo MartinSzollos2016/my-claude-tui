@@ -20,8 +20,13 @@ import {
   contextMeter,
   displayWidth,
   footerLayout,
-  footerTop,
   type FooterLayout,
+  clampScroll,
+  contentRows,
+  overflowRows,
+  pageScroll,
+  type RowBlock,
+  type ScrollFrame,
   durationBar,
   formatClock,
   EMPTY_TURN_TEXT,
@@ -179,9 +184,11 @@ type PaneData = {
   agentStats: Record<string, AgentStat>
   traces: ReadonlyMap<string, Trace>
   columns: number
+  // The rows the engine gives the pane's body: the pane is drawn exactly this tall.
   rows: number
-  // How many rows the pane is scrolled down; 0 when left out.
-  offset?: number
+  // How many rows the shown view's content is scrolled up in its window; 0
+  // when left out, clamped to the content when drawn.
+  scrollTop?: number
   // Blocks shown whole instead of previewed, by block id.
   full: ReadonlySet<string>
   // What the pane shows, and the stat recorded for each turn (by index).
@@ -206,8 +213,8 @@ const PANE_TEXT_BUDGET = 85_000
 // What a row is charged beyond its width: its fixed columns may carry a few
 // characters that take no cell.
 const ROW_SLACK = 8
-// What the pinned footer is charged out of the pane's budget: its buttons,
-// rule and status text, with room to spare.
+// What the pinned footer and the window's more above / below rows are charged
+// out of the pane's budget: buttons, rule and status text, with room to spare.
 const FOOTER_BUDGET = 1500
 // What a hunk header the splitting of a long diff adds may take at most.
 const DIFF_HEADER_SLACK = 40
@@ -235,7 +242,12 @@ type Ctx = PaneData & {
   cardBudget: { left: number }
   // The longest measured call of the shown turn: what a bar is relative to.
   maxMs: number
+  // The content's blocks as drawn, top to bottom: what its rows are estimated from.
+  layout: RowBlock[]
 }
+
+// One row of the content (an item row with its id), recorded as it is drawn.
+const LINE: RowBlock = { kind: 'line' }
 
 type PaneActions = {
   copy: (text: string, surface?: RenderSurface) => void
@@ -253,8 +265,12 @@ type PaneActions = {
   search: (query: string) => void
   submitSearch: (query: string) => void
   focusSearch: () => void
-  cursorDown: () => void
-  cursorUp: () => void
+  // The cursor keys get where the window stands and where each row starts,
+  // to keep the row under the cursor in view.
+  cursorDown: (at: ScrollFrame) => void
+  cursorUp: (at: ScrollFrame) => void
+  // Scrolls the shown view's content to `scrollTop` rows.
+  scroll: (scrollTop: number) => void
   // Expands or collapses the row under the cursor.
   cursorOpen: () => void
   // Copies the whole text of the row under the cursor.
@@ -314,6 +330,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     budget: { left: PANE_TEXT_BUDGET - FOOTER_BUDGET },
     cardBudget: { left: CARD_BUDGET },
     maxMs: longestCall(input, turn),
+    layout: [],
   }
   const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces)]
   reserveSections(lists.reduce((sum, items) => sum + items.length, 0))
@@ -322,54 +339,73 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 
   if (!turn) {
     const sep = data.icons.groupSep
-    return paneBody(
-      el,
-      data,
-      act,
-      <Box flexDirection="column">
-        <Text key="empty-title" color={C.text}>
-          No turns yet.
-        </Text>
-        <Text key="empty-send" color={C.muted}>
-          Send a prompt; tool calls and subagents appear here.
-        </Text>
-        <Text key="empty-keys" color={C.muted}>
-          {`Keys: t turns ${sep} s search ${sep} e expand ${sep} ctrl+x tab focuses this pane`}
-        </Text>
-      </Box>,
-    )
+    data.layout.push(LINE, LINE, LINE)
+    return paneBody(el, data, act, {
+      headerRows: 0,
+      content: (
+        <Box flexDirection="column">
+          <Text key="empty-title" color={C.text}>
+            No turns yet.
+          </Text>
+          <Text key="empty-send" color={C.muted}>
+            Send a prompt; tool calls and subagents appear here.
+          </Text>
+          <Text key="empty-keys" color={C.muted}>
+            {`Keys: t turns ${sep} s search ${sep} e expand ${sep} ctrl+x tab focuses this pane`}
+          </Text>
+        </Box>
+      ),
+    })
   }
   if (data.view === 'turns') return paneBody(el, data, act, renderTurnList(el, data, act))
 
-  return paneBody(
-    el,
-    data,
-    act,
-    <Box flexDirection="column">
-      {renderHeader(el, turn, data)}
-      {turn.prompt !== '' && (
-        <Text color={C.muted} wrap={endWrap(data.icons)}>
+  // The prompt is cut to one row, so the header keeps its height.
+  const hasPrompt = turn.prompt !== ''
+  const promptRoom = Math.max(8, data.columns - STATUS_INSET - displayWidth(data.icons.prompt) - 1)
+  const isEmpty = turn.items.length === 0 && (data.thinking?.text ?? '') === ''
+  // The blank row above the items.
+  data.layout.push(LINE)
+  return paneBody(el, data, act, {
+    headerRows: hasPrompt ? 2 : 1,
+    header: [
+      renderHeader(el, turn, data),
+      hasPrompt && (
+        <Text key="prompt" color={C.muted} wrap={endWrap(data.icons)}>
           {`${data.icons.prompt} `}
-          {trunc(turn.prompt, data.columns * 2)}
+          {trunc(turn.prompt, promptRoom)}
         </Text>
-      )}
+      ),
+    ],
+    content: (
       <Box flexDirection="column" marginTop={1}>
         {renderThinking(el, turn, data, act)}
-        {turn.items.length === 0 && (data.thinking?.text ?? '') === '' && (
-          <Text color={C.muted}>
-            {data.isWorking && data.isLatest ? `Working${data.icons.ellipsis}` : EMPTY_TURN_TEXT}
-          </Text>
-        )}
+        {isEmpty &&
+          drawn(
+            data,
+            <Text color={C.muted}>
+              {data.isWorking && data.isLatest ? `Working${data.icons.ellipsis}` : EMPTY_TURN_TEXT}
+            </Text>,
+          )}
         {renderRows(el, turn.items, data, act)}
       </Box>
-    </Box>,
-  )
+    ),
+  })
 }
+
+// Records one row of the content as it is drawn and returns it.
+function drawn<T>(data: Ctx, node: T, id?: string): T {
+  data.layout.push(id === undefined ? LINE : { kind: 'line', id })
+  return node
+}
+
+// What a view draws: the rows that stay on top (and how many), and the
+// content that scrolls in the window under them.
+type PaneParts = { header?: RenderChildren; headerRows: number; content: RenderElement }
 
 // Every turn of the session, newest first: one button per turn that opens
 // it in the detail view. A search narrows the list to the matching turns
 // and shows where each one matched.
-function renderTurnList(el: El, data: Ctx, act: PaneActions) {
+function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
   const trunc = cutter(data.icons)
   const { Box, Button, Input, Text } = el
   const query = data.query ?? ''
@@ -394,43 +430,53 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
     shown.push(row)
   }
   const hidden = rows.length - shown.length
+  const isNoMatch = isFiltered && rows.length === 0
+  data.layout.push(
+    LINE,
+    ...(rows.length > 0 ? [LINE] : []),
+    ...(isNoMatch ? [LINE, LINE] : []),
+    ...shown.map(row => ({ kind: 'turn' as const, hasSnippet: row.snippet !== '' })),
+    ...(hidden > 0 ? [LINE] : []),
+  )
 
-  return (
-    <Box flexDirection="column">
-      <Box flexDirection="row" gap={2}>
-        <Text bold color={C.brand}>
-          {isFiltered ? `Turns (${rows.length} of ${data.turns.length})` : `Turns (${data.turns.length})`}
-        </Text>
-      </Box>
-      {Input && (
-        <Box flexDirection="row" gap={2}>
-          <Input
-            key="turn-search"
-            placeholder="Search turns"
-            value={query}
-            submitLabel="open"
-            onInput={value => act.search(value)}
-            onSubmit={value => act.submitSearch(value)}
+  const header = [
+    <Box key="turns-title" flexDirection="row" gap={2}>
+      <Text bold color={C.brand}>
+        {isFiltered ? `Turns (${rows.length} of ${data.turns.length})` : `Turns (${data.turns.length})`}
+      </Text>
+    </Box>,
+    Input && (
+      <Box key="turns-search" flexDirection="row" gap={2}>
+        <Input
+          key="turn-search"
+          placeholder="Search turns"
+          value={query}
+          submitLabel="open"
+          onInput={value => act.search(value)}
+          onSubmit={value => act.submitSearch(value)}
+        />
+        {isFiltered && (
+          <Button
+            key="search-clear"
+            plain
+            dimColor
+            hover={buttonHover('btn:search-clear')}
+            label="clear"
+            onPress={() => act.search('')}
           />
-          {isFiltered && (
-            <Button
-              key="search-clear"
-              plain
-              dimColor
-              hover={buttonHover('btn:search-clear')}
-              label="clear"
-              onPress={() => act.search('')}
-            />
-          )}
-        </Box>
-      )}
+        )}
+      </Box>
+    ),
+  ]
+  const content = (
+    <Box flexDirection="column">
       <Box flexDirection="column" marginTop={1}>
         {rows.length > 0 && (
           <Text key="turn-header" color={C.muted}>
             {`  ${table.header}`}
           </Text>
         )}
-        {isFiltered && rows.length === 0 && (
+        {isNoMatch && (
           <Box flexDirection="column">
             <Text color={C.muted}>{`No turn matches "${trunc(sanitizeText(query), 40)}".`}</Text>
             <Text key="empty-search" color={C.muted}>
@@ -465,6 +511,7 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
       </Box>
     </Box>
   )
+  return { header, headerRows: Input ? 2 : 1, content }
 }
 
 // The line a search hit gets under its turn: the matched part underlined and
@@ -487,7 +534,7 @@ function renderSnippet(el: El, snippet: string, query: string, data: Ctx) {
 
 // The team board: each teammate with its type and status, then the tasks
 // with their TodoWrite marks and owners.
-function renderTeam(el: El, data: Ctx) {
+function renderTeam(el: El, data: Ctx): PaneParts {
   const trunc = cutter(data.icons)
   const { Box, Text } = el
   const members = data.members ?? []
@@ -513,12 +560,24 @@ function renderTeam(el: El, data: Ctx) {
   }
   const hiddenMembers = members.length - memberRows.length
   const hiddenTasks = tasks.length - taskRows.length
+  // A blank row and the members (or the two empty lines), then a blank row,
+  // the tasks heading and the tasks (or the two empty lines).
+  const lines =
+    1 +
+    (members.length === 0 ? 2 : memberRows.length) +
+    (hiddenMembers > 0 ? 1 : 0) +
+    2 +
+    (tasks.length === 0 ? 2 : taskRows.length) +
+    (hiddenTasks > 0 ? 1 : 0)
+  data.layout.push(...Array.from({ length: lines }, () => LINE))
 
-  return (
+  const header = (
+    <Box key="team-title" flexDirection="row" gap={2}>
+      <Text bold color={C.brand}>{`Team (${members.length})`}</Text>
+    </Box>
+  )
+  const content = (
     <Box flexDirection="column">
-      <Box flexDirection="row" gap={2}>
-        <Text bold color={C.brand}>{`Team (${members.length})`}</Text>
-      </Box>
       <Box flexDirection="column" marginTop={1}>
         {members.length === 0 && (
           <Box flexDirection="column">
@@ -563,22 +622,51 @@ function renderTeam(el: El, data: Ctx) {
       </Box>
     </Box>
   )
+  return { header, headerRows: 1, content }
 }
 
-// The pane body, painted edge to edge in the theme's background.
-function paneBody(el: El, data: Ctx, act: PaneActions, children: RenderChildren) {
-  const { Box } = el
+// The pane body, painted edge to edge in the theme's background and exactly
+// as tall as the engine's window, so the engine has nothing to scroll: the
+// header stays on top, the content moves by `scrollTop` in a clipped window
+// of its own, and the footer stays in flow under it.
+function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
+  const { Box, Text } = el
+  const { icons } = data
   const layout = footerLayout(data.columns)
+  const windowRows = Math.max(1, data.rows - parts.headerRows - layout.rows)
+  const rows = contentRows(data.layout)
+  const scrollTop = clampScroll(data.scrollTop ?? 0, rows.total, windowRows)
+  const frame: ScrollFrame = { scrollTop, windowRows, total: rows.total, starts: rows.starts }
+  const more = overflowRows(scrollTop, rows.total, windowRows)
+  // A row over the window's top or bottom edge: part of the window, so
+  // nothing moves when it shows.
+  const edge = (key: string, top: number, text: string) => (
+    <Box key={key} position="absolute" top={top} left={0} width={data.columns} backgroundColor={C.paneBackground}>
+      <Text color={C.muted}>{text}</Text>
+    </Box>
+  )
   return (
-    <Box
-      flexDirection="column"
-      width={data.columns}
-      minHeight={data.rows}
-      paddingBottom={layout.rows}
-      backgroundColor={C.paneBackground}
-    >
-      {children}
-      {renderFooter(el, data, act, layout)}
+    <Box flexDirection="column" width={data.columns} height={data.rows} backgroundColor={C.paneBackground}>
+      {parts.headerRows > 0 && (
+        <Box key="pane-header" flexDirection="column" height={parts.headerRows} flexShrink={0} overflow="hidden">
+          {parts.header}
+        </Box>
+      )}
+      <Box key="pane-window" height={windowRows} flexShrink={0} overflow="hidden">
+        <Box
+          key="pane-content"
+          flexDirection="column"
+          position="absolute"
+          top={scrollTop > 0 ? -scrollTop : 0}
+          left={0}
+          width={data.columns}
+        >
+          {parts.content}
+        </Box>
+        {more.above > 0 && edge('more-above', 0, `${icons.moreAbove} ${more.above} more above`)}
+        {more.below > 0 && edge('more-below', windowRows - 1, `${icons.moreBelow} ${more.below} more below`)}
+      </Box>
+      {renderFooter(el, data, act, layout, frame)}
     </Box>
   )
 }
@@ -649,58 +737,55 @@ type FooterKey = {
   onPress: (e: { surface?: RenderSurface }) => void
 }
 
-// The pinned footer: a rule, the keys in groups and the status line, drawn as
-// an absolute box on the last rows of the window (`offset` rows into the body).
-function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout) {
+// The footer under the window: a rule, the keys in groups and the status
+// line. The page keys end the views row, or start the status row when the
+// views row has no room for them.
+function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout, frame: ScrollFrame) {
   const { Box, Text } = el
   const { icons } = data
-  const groups = footerGroups(data, act)
+  const { move, cursor, views, expand, page } = footerGroups(data, act, frame)
   // As the engine draws a button: `<key>: <label>`.
   const textOf = (k: FooterKey) => `${k.hotkey}: ${footerLabel(k, layout.labels)}`
-  const groupText = (group: readonly FooterKey[]) => group.map(textOf).join('  ')
+  const groupWidth = (group: readonly FooterKey[]) => displayWidth(group.map(textOf).join('  '))
   const keys = (group: readonly FooterKey[]) =>
     group.map(k => renderFooterKey(el, k, textOf(k), footerLabel(k, layout.labels)))
-  const rows =
-    layout.columns === 'stacked'
-      ? groups.map(group => (
-          <Box key={`footer-row-${group.id}`} flexDirection="row" gap={2}>
-            {keys(group.keys)}
-          </Box>
-        ))
-      : [
-          [groups[0]!, groups[1]!],
-          [groups[2]!, groups[3]!],
-        ].map(([left, right], i) => {
-          const leftWidth = Math.max(...[groups[0]!, groups[2]!].map(g => displayWidth(groupText(g.keys))))
-          return (
-            <Box key={`footer-row-${i + 1}`} flexDirection="row" gap={2}>
-              <Box key={`footer-left-${i + 1}`} flexDirection="row" gap={2} width={leftWidth} flexShrink={0}>
-                {keys(left!.keys)}
-              </Box>
-              <Text key={`footer-sep-${i + 1}`} color={C.muted}>
-                {icons.columnSep}
-              </Text>
-              <Box key={`footer-right-${i + 1}`} flexDirection="row" gap={2}>
-                {keys(right!.keys)}
-              </Box>
-            </Box>
-          )
-        })
-  const status = footerStatus(data)
-  return (
-    <Box
-      key="footer"
-      flexDirection="column"
-      position="absolute"
-      left={0}
-      top={footerTop(data.offset ?? 0, data.rows, layout.rows)}
-      width={data.columns}
-      backgroundColor={C.paneBackground}
-    >
-      <Text key="footer-rule" color={C.muted}>
-        {icons.rule.repeat(data.columns)}
+  const inner = data.columns - STATUS_INSET
+  const leftWidth = Math.max(groupWidth(move), groupWidth(views))
+  const isTwo = layout.columns === 'two'
+  // The views row with the page keys at its end: the left column and the
+  // separator (two gaps around it), then the expand keys.
+  const pageWidth = groupWidth(page)
+  const isPageInRow = (isTwo ? leftWidth + 5 : 0) + groupWidth(expand) + 2 + pageWidth <= inner
+  const expandKeys = isPageInRow ? [...expand, ...page] : expand
+  const columnsRow = (n: number, left: readonly FooterKey[], right: readonly FooterKey[]) => (
+    <Box key={`footer-row-${n}`} flexDirection="row" gap={2}>
+      <Box key={`footer-left-${n}`} flexDirection="row" gap={2} width={leftWidth} flexShrink={0}>
+        {keys(left)}
+      </Box>
+      <Text key={`footer-sep-${n}`} color={C.muted}>
+        {icons.columnSep}
       </Text>
-      {rows}
+      <Box key={`footer-right-${n}`} flexDirection="row" gap={2}>
+        {keys(right)}
+      </Box>
+    </Box>
+  )
+  const stacked: [string, readonly FooterKey[]][] = [
+    ['move', move],
+    ['cursor', cursor],
+    ['views', views],
+    ['expand', expandKeys],
+  ]
+  const rows = isTwo
+    ? [columnsRow(1, move, cursor), columnsRow(2, views, expandKeys)]
+    : stacked.map(([id, group]) => (
+        <Box key={`footer-row-${id}`} flexDirection="row" gap={2}>
+          {keys(group)}
+        </Box>
+      ))
+  const statusBox = (width: number) => {
+    const status = footerStatus(data, width)
+    return (
       <Box key="footer-status" flexDirection="row" justifyContent="flex-end" width={status.width}>
         {status.parts.map(part => (
           <Text key={part.key} color={part.color}>
@@ -708,18 +793,36 @@ function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout)
           </Text>
         ))}
       </Box>
+    )
+  }
+  return (
+    <Box key="footer" flexDirection="column" width={data.columns} backgroundColor={C.paneBackground}>
+      <Text key="footer-rule" color={C.muted}>
+        {icons.rule.repeat(data.columns)}
+      </Text>
+      {rows}
+      {isPageInRow ? (
+        statusBox(inner)
+      ) : (
+        <Box key="footer-last" flexDirection="row" gap={2} width={inner}>
+          <Box key="footer-page" flexDirection="row" gap={2} flexShrink={0}>
+            {keys(page)}
+          </Box>
+          {statusBox(inner - pageWidth - 2)}
+        </Box>
+      )}
     </Box>
   )
 }
 
 // The status row: the position of the turn and the focus note, right-aligned
 // inside the pane's frame and padding (STATUS_INSET cells) and cut with the
-// set's ellipsis when it does not fit.
+// set's ellipsis when it does not fit `room` cells.
 const STATUS_INSET = 2
 
-function footerStatus(data: Ctx) {
+function footerStatus(data: Ctx, room: number) {
   const { icons } = data
-  const width = Math.max(1, data.columns - STATUS_INSET)
+  const width = Math.max(1, room)
   const position =
     data.turns.length > 0 ? `turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}` : ''
   const hasNote = data.isFocused !== undefined
@@ -764,15 +867,21 @@ function renderFooterKey(el: El, k: FooterKey, text: string, label: string) {
   )
 }
 
-// The keys by purpose: moving between turns, the cursor over rows, the views
-// and expanding.
-function footerGroups(data: Ctx, act: PaneActions): { id: string; keys: FooterKey[] }[] {
+// The keys by purpose: moving between turns, the cursor over rows, the views,
+// expanding and paging the window.
+type FooterGroups = Record<'move' | 'cursor' | 'views' | 'expand' | 'page', FooterKey[]>
+
+function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): FooterGroups {
   const { icons } = data
   const total = data.turns.length
   const hasTeam = (data.members?.length ?? 0) + (data.tasks?.length ?? 0) > 0
   const hasRows = (data.turns[data.selected]?.items.length ?? 0) > 0
   const hasCursor = hasRows && data.cursor !== undefined && data.cursor !== null
   const isDetail = data.view === 'detail'
+  // The page keys work in every view: b is muted at the top, f at the end.
+  const lastTop = clampScroll(Infinity, frame.total, frame.windowRows)
+  const paged = (delta: number) =>
+    clampScroll(pageScroll(frame.scrollTop, delta, frame.windowRows), frame.total, frame.windowRows)
   const key = (
     name: string,
     hotkey: string,
@@ -794,42 +903,42 @@ function footerGroups(data: Ctx, act: PaneActions): { id: string; keys: FooterKe
   })
   // Keys that act on the detail turn are muted in the turn list and the team
   // board, which do not show it.
-  return [
-    {
-      id: 'move',
-      keys: [
-        key('prev', 'p', 'prev', icons.navPrev, isDetail && data.selected > 0, act.prev, icons.navPrev),
-        key('next', 'n', 'next', icons.navNext, isDetail && data.selected < total - 1, act.next, icons.navNext, true),
-        key('latest', 'l', 'latest', icons.keyLatest, isDetail && !data.isLatest, act.latest),
-      ],
-    },
-    {
-      id: 'cursor',
-      keys: [
-        key('down', 'j', '', icons.cursorDown, isDetail && hasRows, act.cursorDown, icons.cursorDown),
-        key('up', 'k', '', icons.cursorUp, isDetail && hasRows, act.cursorUp, icons.cursorUp),
-        key('open', 'o', 'open', icons.keyOpen, isDetail && hasCursor, act.cursorOpen),
-        key('copy', 'y', 'copy', icons.keyCopy, isDetail && hasCursor, press => act.copyCursor(press.surface)),
-      ],
-    },
-    {
-      id: 'views',
-      keys: [
-        isDetail
-          ? key('turns', 't', 'turns', icons.keyTurns, true, act.showTurns)
-          : key('detail', 'd', 'detail', icons.keyDetail, true, act.showDetail),
-        key('search', 's', 'search', icons.keySearch, true, act.focusSearch),
-        key('team', 'm', 'team', icons.keyTeam, hasTeam && data.view !== 'team', act.showTeam),
-      ],
-    },
-    {
-      id: 'expand',
-      keys: [
-        key('expand', 'e', 'expand', icons.keyExpand, isDetail && hasRows, act.expandAll),
-        key('collapse', 'c', 'collapse', icons.keyCollapse, isDetail && hasRows, act.collapseAll),
-      ],
-    },
-  ]
+  return {
+    move: [
+      key('prev', 'p', 'prev', icons.navPrev, isDetail && data.selected > 0, act.prev, icons.navPrev),
+      key('next', 'n', 'next', icons.navNext, isDetail && data.selected < total - 1, act.next, icons.navNext, true),
+      key('latest', 'l', 'latest', icons.keyLatest, isDetail && !data.isLatest, act.latest),
+    ],
+    cursor: [
+      key('down', 'j', '', icons.cursorDown, isDetail && hasRows, () => act.cursorDown(frame), icons.cursorDown),
+      key('up', 'k', '', icons.cursorUp, isDetail && hasRows, () => act.cursorUp(frame), icons.cursorUp),
+      key('open', 'o', 'open', icons.keyOpen, isDetail && hasCursor, act.cursorOpen),
+      key('copy', 'y', 'copy', icons.keyCopy, isDetail && hasCursor, press => act.copyCursor(press.surface)),
+    ],
+    views: [
+      isDetail
+        ? key('turns', 't', 'turns', icons.keyTurns, true, act.showTurns)
+        : key('detail', 'd', 'detail', icons.keyDetail, true, act.showDetail),
+      key('search', 's', 'search', icons.keySearch, true, act.focusSearch),
+      key('team', 'm', 'team', icons.keyTeam, hasTeam && data.view !== 'team', act.showTeam),
+    ],
+    expand: [
+      key('expand', 'e', 'expand', icons.keyExpand, isDetail && hasRows, act.expandAll),
+      key('collapse', 'c', 'collapse', icons.keyCollapse, isDetail && hasRows, act.collapseAll),
+    ],
+    page: [
+      key('pageup', 'b', 'page', icons.pageUp, frame.scrollTop > 0, () => act.scroll(paged(-1)), icons.pageUp),
+      key(
+        'pagedown',
+        'f',
+        'page',
+        icons.pageDown,
+        frame.scrollTop < lastTop,
+        () => act.scroll(paged(1)),
+        icons.pageDown,
+      ),
+    ],
+  }
 }
 
 // The turn's thinking as one row above the items, when any of it is
@@ -843,6 +952,23 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
   const id = `t${turn.index}:thinking`
   const isOpen = data.expanded.has(id)
   const label = trunc(`${padEndDisplay('Thinking', 12)} - ${thinking.text}`, Math.max(8, data.columns - 8))
+  data.layout.push({ kind: 'line', id })
+  const frame =
+    isOpen &&
+    renderFrame(
+      el,
+      id,
+      'thinking',
+      undefined,
+      false,
+      C.accent,
+      renderLong(el, id, thinking.text, { kind: 'markdown' }, data, act),
+      thinking.text,
+      data,
+      act,
+    )
+  // The blank row under an open frame.
+  if (isOpen) data.layout.push(LINE)
   return (
     <Box key={`item-${id}`} flexDirection="column">
       <Box flexDirection="row">
@@ -860,18 +986,7 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
       </Box>
       {isOpen && (
         <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-          {renderFrame(
-            el,
-            id,
-            'thinking',
-            undefined,
-            false,
-            C.accent,
-            renderLong(el, id, thinking.text, { kind: 'markdown' }, data, act),
-            thinking.text,
-            data,
-            act,
-          )}
+          {frame}
         </Box>
       )}
     </Box>
@@ -909,7 +1024,11 @@ type Line = {
   card?: readonly string[]
 }
 
-function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined, below?: RenderChildren) {
+// `below` draws what an open row shows under it, after the row itself is
+// recorded, so the rows of the content are recorded top to bottom.
+function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined, below?: () => RenderChildren) {
+  data.layout.push({ kind: 'line', id: line.id })
+  const under = below?.()
   const { icons } = data
   const { Box, Button, Text } = el
   const { id, isOpen, canOpen, icon, mark, duration, model } = line
@@ -1009,7 +1128,7 @@ function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined,
           ))}
         </Box>
       )}
-      {below}
+      {under}
     </Box>
   )
 }
@@ -1046,6 +1165,7 @@ function fitRows<T>(el: El, rows: readonly T[], data: Ctx, key: string, draw: (r
   if (hidden === 0) return drawn
   const note = `${hidden} more row${hidden === 1 ? '' : 's'} ${data.icons.dash} pane text budget reached; collapse rows to see them`
   data.budget.left -= note.length
+  data.layout.push(LINE)
   const { Text } = el
   return [
     ...drawn,
@@ -1080,16 +1200,17 @@ function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, plac
   const { Box } = el
   const isOpen = data.expanded.has(group.id)
   const status = groupStatus(group, data)
-  const children = isOpen && (
-    <Box flexDirection="column">
-      {fitRows(el, group.items, data, group.id, (child, i) =>
-        renderItem(el, child, data, act, {
-          path: place === undefined ? [] : [...place.path, !place.isLast],
-          isLast: i === group.items.length - 1,
-        }),
-      )}
-    </Box>
-  )
+  const children = () =>
+    isOpen && (
+      <Box flexDirection="column">
+        {fitRows(el, group.items, data, group.id, (child, i) =>
+          renderItem(el, child, data, act, {
+            path: place === undefined ? [] : [...place.path, !place.isLast],
+            isLast: i === group.items.length - 1,
+          }),
+        )}
+      </Box>
+    )
   return renderLine(
     el,
     {
@@ -1155,7 +1276,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
     },
     data,
     place,
-    isOpen && canOpen && renderExpanded(el, item, data, act, place),
+    () => isOpen && canOpen && renderExpanded(el, item, data, act, place),
   )
 }
 
@@ -1163,20 +1284,22 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place?:
   const { Box } = el
 
   if (item.kind === 'output') {
+    const frame = renderFrame(
+      el,
+      item.id,
+      'message',
+      undefined,
+      false,
+      C.accent,
+      renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act),
+      item.text,
+      data,
+      act,
+    )
+    data.layout.push(LINE)
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-        {renderFrame(
-          el,
-          item.id,
-          'message',
-          undefined,
-          false,
-          C.accent,
-          renderLong(el, item.id, item.text, { kind: 'markdown' }, data, act),
-          item.text,
-          data,
-          act,
-        )}
+        {frame}
       </Box>
     )
   }
@@ -1191,31 +1314,34 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place?:
 // What went in and what came out, each in a frame colored by its kind.
 function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
   const { Box } = el
+  const frames = cachedSections(item, data.icons).map(section => {
+    const id = `${item.id}:${section.kind}`
+    const preview = renderLong(el, id, section.body, longSpec(section), data, act)
+    const isError = section.kind === 'error'
+    return renderFrame(
+      el,
+      id,
+      isError ? `${data.icons.error} ${section.title}` : section.title,
+      section.meta,
+      section.isPathMeta === true,
+      TONE[section.kind],
+      isError ? withFirstError(el, section.body, preview, data) : preview,
+      section.body,
+      data,
+      act,
+    )
+  })
+  // The blank row under the frames.
+  data.layout.push(LINE)
   return (
     <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-      {cachedSections(item, data.icons).map(section => {
-        const id = `${item.id}:${section.kind}`
-        const preview = renderLong(el, id, section.body, longSpec(section), data, act)
-        const isError = section.kind === 'error'
-        return renderFrame(
-          el,
-          id,
-          isError ? `${data.icons.error} ${section.title}` : section.title,
-          section.meta,
-          section.isPathMeta === true,
-          TONE[section.kind],
-          isError ? withFirstError(el, section.body, preview, data) : preview,
-          section.body,
-          data,
-          act,
-        )
-      })}
+      {frames}
     </Box>
   )
 }
 
 // An error's first telling line, in red, above the preview of its output.
-function withFirstError(el: El, body: string, preview: RenderElement, data: Ctx) {
+function withFirstError(el: El, body: string, preview: Long, data: Ctx): Long {
   const trunc = cutter(data.icons)
   const { Box, Text } = el
   const line = trunc(firstErrorLine(body), Math.max(8, data.columns - 12))
@@ -1226,14 +1352,18 @@ function withFirstError(el: El, body: string, preview: RenderElement, data: Ctx)
     ?.trim()
   if (line === '' || opening === firstErrorLine(body) || line.length > data.budget.left) return preview
   data.budget.left -= line.length
-  return (
-    <Box flexDirection="column">
-      <Text color={C.error} wrap={endWrap(data.icons)}>
-        {line}
-      </Text>
-      {preview}
-    </Box>
-  )
+  return {
+    ...preview,
+    notes: preview.notes + 1,
+    node: (
+      <Box flexDirection="column">
+        <Text color={C.error} wrap={endWrap(data.icons)}>
+          {line}
+        </Text>
+        {preview.node}
+      </Box>
+    ),
+  }
 }
 
 function longSpec(section: Section): LongSpec {
@@ -1250,12 +1380,13 @@ function renderFrame(
   meta: string | undefined,
   isPathMeta: boolean,
   tone: ThemeKey,
-  body: RenderElement,
+  body: Long,
   copyText: string,
   data: Ctx,
   act: PaneActions,
 ) {
   const { Box, Button, Text } = el
+  data.layout.push({ kind: 'frame', body: body.pieces, notes: body.notes })
   const trunc = cutter(data.icons)
   const metaText =
     meta === undefined || meta === ''
@@ -1291,7 +1422,7 @@ function renderFrame(
           onPress={press => act.copy(copyText, press.surface)}
         />
       </Box>
-      {body}
+      {body.node}
     </Box>
   )
 }
@@ -1302,10 +1433,14 @@ type LongSpec =
   | { kind: 'diff' }
   | { kind: 'markdown' }
 
+// A drawn block: its element, the pieces of text in it and the rows under
+// them (a note, show all, show less, an error line), for the row estimate.
+type Long = { node: RenderElement; pieces: readonly string[]; notes: number }
+
 // A block of any length: previewed by lines and characters until the person
 // asks for all of it, cut into pieces under the per-element limit, and drawn
 // from the pane's text budget so the tree never crosses the engine's total.
-function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx, act: PaneActions) {
+function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx, act: PaneActions): Long {
   const { Box, Button, Code, Text } = el
   const isFull = data.full.has(id)
   const preview = PREVIEW[spec.kind]
@@ -1337,8 +1472,9 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
     (isBudgetCut ? budgetNote.length : 0) +
     (isPreviewed ? fullLabel.length : 0) +
     (canShrink && !isBudgetCut ? 'show less'.length : 0)
+  const notes = [isBudgetCut, isPreviewed, canShrink && !isBudgetCut].filter(Boolean).length
 
-  return (
+  const node = (
     <Box flexDirection="column">
       {pieces.map((piece, i) =>
         spec.kind === 'markdown' ? (
@@ -1382,6 +1518,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
       )}
     </Box>
   )
+  return { node, pieces, notes }
 }
 
 function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, place?: TreePlace) {
@@ -1393,6 +1530,7 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
 
   // The line above the trace draws from the pane's budget like a row.
   data.budget.left -= data.columns + ROW_SLACK
+  data.layout.push(LINE)
   if (!trace) {
     return (
       <Box marginLeft={4}>
@@ -1403,16 +1541,18 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
   if ('denied' in trace) {
     const denied = `Trace unavailable: ${trunc(trace.denied, 300)}`
     data.budget.left -= denied.length
+    const sections = renderSections(el, item, data, act)
+    data.layout.push(LINE)
     return (
       <Box flexDirection="column" marginLeft={4} marginBottom={1}>
         <Text color={C.muted}>{denied}</Text>
-        {renderSections(el, item, data, act)}
+        {sections}
       </Box>
     )
   }
 
   const stats = traceStats(trace.items)
-  return (
+  const traced = (
     <Box flexDirection="column" marginBottom={1}>
       <Box flexDirection="row" marginLeft={4}>
         <Text color={C.muted}>{`${icons.system}  `}</Text>
@@ -1426,6 +1566,9 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
       {renderRows(el, trace.items, data, act, place === undefined ? [] : [...place.path, !place.isLast])}
     </Box>
   )
+  // The blank row under the trace.
+  data.layout.push(LINE)
+  return traced
 }
 
 // -- Info bar -----------------------------------------------------------------

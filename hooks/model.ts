@@ -2154,9 +2154,3 @@ export function scrollToRow(frame: ScrollFrame, id: string | null): number {
   if (start === undefined) return frame.scrollTop
   return clampScroll(followCursor(frame.scrollTop, start, frame.windowRows), frame.total, frame.windowRows)
 }
-
-// The row the footer starts on: the last `footerRows` rows of the window that
-// starts `offset` rows into the body.
-export function footerTop(offset: number, bodyRows: number, footerRows: number): number {
-  return Math.max(0, offset + bodyRows - footerRows)
-}
