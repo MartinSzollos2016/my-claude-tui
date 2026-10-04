@@ -62,7 +62,6 @@ import {
   runningTool,
   scrollToRow,
   searchTurns,
-  shortPath,
   spinnerMessage,
   statusText,
   stepCursor,
@@ -70,7 +69,6 @@ import {
   teamMembers,
   thinkingCounts,
   traceItems,
-  truncate,
   turnListText,
   turnsKey,
   turnText,
@@ -85,6 +83,7 @@ import {
 import { engineDuration } from './model/format'
 import { sanitizePrompt, sanitizeText } from './model/sanitize'
 import type { Item, Turn } from './model/types'
+import { shortPath, truncate } from './model/width'
 import { renderBar, renderPane, turnRowId, type El, type Trace } from './view'
 
 const PANE = 'tail'
