@@ -54,6 +54,10 @@ export type Icons = {
   groupSep: string
   // The thin rule above the footer.
   rule: string
+  // The duration bar's steps from one to eight eighths of a cell, and the
+  // sign of a group's call count.
+  bar: readonly string[]
+  times: string
 }
 
 const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -99,6 +103,8 @@ const nerd: Icons = {
   treeGuide: '│  ',
   groupSep: '·',
   rule: '─',
+  bar: ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'],
+  times: '×',
 }
 
 const unicode: Icons = {
@@ -163,6 +169,8 @@ const ascii: Icons = {
   treeGuide: '|  ',
   groupSep: '.',
   rule: '-',
+  bar: ['-', '-', '-', '-', '-', '-', '-', '='],
+  times: 'x',
 }
 
 export const ICON_SETS: Record<IconSetName, Icons> = { nerd, unicode, ascii }

@@ -1456,8 +1456,8 @@ describe('display-width alignment', () => {
 
   test('a row label with wide characters is cut to the room in cells', () => {
     const cjk = rowLabel('日本語'.repeat(70))
-    expect(displayWidth(cjk)).toBeLessThanOrEqual(84)
-    expect(displayWidth(cjk)).toBeGreaterThanOrEqual(83)
+    expect(displayWidth(cjk)).toBeLessThanOrEqual(75)
+    expect(displayWidth(cjk)).toBeGreaterThanOrEqual(74)
     expect(cjk.endsWith('…')).toBe(true)
   })
 
@@ -1474,5 +1474,59 @@ describe('display-width alignment', () => {
     const tree = renderPane(el, { ...base, turns: wide, view: 'turns', stats: [undefined] }, act)
     const row = text(byKey(tree, 'turn-0') ?? nodes(tree).find(n => n.props['key'] === 'turn-0'))
     expect(displayWidth(row)).toBeLessThanOrEqual(98)
+  })
+})
+
+describe('duration bars', () => {
+  const bar = (tree: unknown, id: string) => byKey(tree, `bar-${id}`)
+
+  test('each tool row ends in an 8-cell bar relative to the longest call, the longest in the accent', () => {
+    const tree = renderPane(el, base, act)
+    expect(text(bar(tree, 'a1'))).toBe('████████')
+    expect(bar(tree, 'a1')?.props['color']).toBe(C.accent)
+    expect(text(bar(tree, 'b1'))).toBe('█████   ')
+    expect(bar(tree, 'b1')?.props['color']).toBe(C.muted)
+    expect(text(bar(tree, 'p1'))).toBe('██      ')
+    for (const id of ['b1', 'e1', 'a1', 'p1']) expect(displayWidth(text(bar(tree, id)))).toBe(8)
+  })
+
+  test('a row without a duration keeps the column blank', () => {
+    expect(text(bar(renderPane(el, base, act), 'e1'))).toBe('        ')
+  })
+
+  test('the bar is left out under 70 columns and the label takes its room back', () => {
+    const wide = renderPane(el, { ...base, columns: 70 }, act)
+    const narrow = renderPane(el, { ...base, columns: 69 }, act)
+    expect(bar(wide, 'b1')).toBeDefined()
+    expect(bar(narrow, 'b1')).toBeUndefined()
+  })
+
+  test('the ascii set draws = and -', () => {
+    const tree = renderPane(el, { ...base, icons: ICON_SETS.ascii }, act)
+    expect(text(bar(tree, 'a1'))).toBe('========')
+    expect(text(bar(tree, 'b1'))).toBe('=====   ')
+  })
+
+  test('the label and the bar fit the width', () => {
+    const long = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          { tool_use_id: 'l1', tool: 'Bash', input: { command: 'x', description: 'd'.repeat(300) }, text: 'ok' },
+        ],
+      },
+    ])
+    const label = (columns: number) =>
+      displayWidth(
+        String(
+          byKey(renderPane(el, { ...base, turns: long, columns, timings: { l1: { start: 0, end: 5000 } } }, act), 'l1')
+            ?.props['label'],
+        ),
+      )
+    // Fixed columns take 16 cells, and the bar 9 more while it shows.
+    expect(label(70)).toBe(70 - 16 - 9)
+    expect(label(69)).toBe(69 - 16)
   })
 })
