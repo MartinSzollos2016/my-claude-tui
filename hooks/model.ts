@@ -678,3 +678,13 @@ export function resultLine(output: unknown, isErrored: boolean): string {
   }
   return 'done'
 }
+
+// The counts a turn list row shows: "3 tools · 1 agent", or "reply" for a
+// turn that only answered.
+export function turnCounts(turn: Turn): string {
+  const parts: string[] = []
+  const tools = turn.toolCount - turn.subagentCount
+  if (tools > 0) parts.push(`${tools} tool${tools === 1 ? '' : 's'}`)
+  if (turn.subagentCount > 0) parts.push(`${turn.subagentCount} agent${turn.subagentCount === 1 ? '' : 's'}`)
+  return parts.length > 0 ? parts.join(' · ') : 'reply'
+}
