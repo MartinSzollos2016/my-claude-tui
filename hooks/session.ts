@@ -66,13 +66,27 @@ export function toggleId(ids: readonly string[], id: string, max: number): strin
   return ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-max)
 }
 
-// Prefers the stat recorded for this turn's prompt; the latest turn of a
-// fresh session may have none yet.
-export function statFor(stats: readonly TurnStat[], turn: Turn | undefined): TurnStat | undefined {
+// The stat recorded for this turn. An index match counts only while the
+// turn at that index still has the stat's prompt: $.session.messages() holds
+// the newest rows only, so indexes shift as old rows leave the window. Else
+// the newest stat with the turn's prompt that no other turn's index claims;
+// the latest turn of a fresh session may have none yet.
+export function statFor(
+  stats: readonly TurnStat[],
+  turn: Turn | undefined,
+  turns: readonly Turn[],
+): TurnStat | undefined {
   if (!turn) return undefined
+  const isOwn = (stat: TurnStat, at: Turn | undefined) =>
+    at !== undefined && (stat.prompt === at.prompt || at.prompt === '')
   for (let i = stats.length - 1; i >= 0; i--) {
     const stat = stats[i]!
-    if (stat.turnIndex === undefined ? stat.prompt === turn.prompt : stat.turnIndex === turn.index) return stat
+    if (stat.turnIndex === turn.index && isOwn(stat, turn)) return stat
+  }
+  for (let i = stats.length - 1; i >= 0; i--) {
+    const stat = stats[i]!
+    const claimed = stat.turnIndex !== undefined && isOwn(stat, turns[stat.turnIndex])
+    if (stat.prompt === turn.prompt && !claimed) return stat
   }
   return undefined
 }

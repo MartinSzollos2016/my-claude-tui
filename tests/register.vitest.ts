@@ -292,6 +292,32 @@ describe('live data', () => {
     expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
   })
 
+  test('a stat does not move to another turn when old rows leave the window', async () => {
+    const { $, world } = fakeEngine()
+    const rounds: [string, string, number][] = [
+      ['a', 'Alpha', 1_000],
+      ['b', 'Beta', 9_000],
+    ]
+    for (const [id, said, ms] of rounds) {
+      await run('prompt.submit', $, { text: said }, async e => e)
+      world.messages = [...world.messages, { role: 'user', text: said, toolUses: [] }]
+      await run('turn.start', $, { text: said, turnId: id }, async e => e)
+      world.messages = [...world.messages, { role: 'assistant', text: 'Done.', toolUses: [] }]
+      await finish(id, ms, $)
+    }
+    // The newest rows only: Alpha's fell off the front, and Gamma runs.
+    await run('prompt.submit', $, { text: 'Gamma' }, async e => e)
+    world.messages = [...world.messages.slice(2), { role: 'user', text: 'Gamma', toolUses: [] }]
+    await run('turn.start', $, { text: 'Gamma', turnId: 'c' }, async e => e)
+
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('9.0s')
+    expect(String(byKey(list, 'turn-1')?.props['label'])).not.toMatch(/\d\.\ds/)
+    await press($, 'nav-detail')
+    expect(text(await draw($))).not.toContain('9.0s')
+  })
+
   test('a turn started by a notification falls back to the transcript', async () => {
     const { $, world } = fakeEngine()
     world.messages = [{ role: 'user', text: 'ping', toolUses: [] }]

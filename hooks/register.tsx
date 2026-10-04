@@ -190,9 +190,9 @@ let lastPrompt = ''
 // Indexes (in buildTurns) of prompts submitted idle and not yet started; the
 // next main-loop turn.start takes the oldest.
 let pendingTurns: number[] = []
-// turnId -> the index its turn got, from turn.start to its turn.complete;
-// bounded in case a turn never completes.
-const turnIndexes = new Map<string, number>()
+// turnId -> the index and prompt its turn got, from turn.start to its
+// turn.complete; bounded in case a turn never completes.
+const turnIndexes = new Map<string, { index: number; prompt: string }>()
 const MAX_OPEN_TURNS = 50
 
 // Agents a running Workflow started, as far as the hooks see them.
@@ -231,10 +231,11 @@ async function notePrompt($: EngineInterface): Promise<number | undefined> {
 async function noteTurnStart($: EngineInterface, turnId: string, text: string): Promise<void> {
   try {
     const turns = (await currentTurns($)).value
+    const prompt = sanitizePrompt(sanitizeText(text).trim())
     const queue = discardStale(pendingTurns, lastDoneIndex)
-    const taken = takeTurnIndex(queue, turnIndexAtStart(turns, sanitizePrompt(sanitizeText(text).trim())))
+    const taken = takeTurnIndex(queue, turnIndexAtStart(turns, prompt))
     pendingTurns = taken.queue
-    remember(turnIndexes, turnId, taken.index, MAX_OPEN_TURNS)
+    remember(turnIndexes, turnId, { index: taken.index, prompt }, MAX_OPEN_TURNS)
   } catch {
     // No index: the stat matches by prompt.
   }
@@ -298,10 +299,10 @@ async function turnsReport($: EngineInterface, isList: boolean): Promise<string>
   if (isList)
     return turnListText(
       turns,
-      turns.map(t => statFor(stats, t)),
+      turns.map(t => statFor(stats, t, turns)),
     )
   const turn = turns.at(-1)
-  return turnText(turn, statFor(stats, turn))
+  return turnText(turn, statFor(stats, turn, turns))
 }
 
 // Copies a whole block (not its preview) and says how it went; called with
@@ -470,10 +471,12 @@ export const register: Register = on => {
       await update($, agentStats, all => ({ ...all, [agentId]: stat }))
       trackWorkflow($, '', agentId).catch(ignore)
     } else {
-      const index = turnIndexes.get(e.turnId)
+      const opened = turnIndexes.get(e.turnId)
       turnIndexes.delete(e.turnId)
-      if (index !== undefined) lastDoneIndex = Math.max(lastDoneIndex, index)
-      const stat = turnStatFrom(e, lastPrompt, endedAt, index)
+      if (opened !== undefined) lastDoneIndex = Math.max(lastDoneIndex, opened.index)
+      // The prompt its turn.start carried; a continuation's is empty.
+      const prompt = opened?.prompt || lastPrompt
+      const stat = turnStatFrom(e, prompt, endedAt, opened?.index)
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
       refreshGit($).catch(ignore)
@@ -519,7 +522,7 @@ export const register: Register = on => {
         selected: Math.max(0, selected),
         expanded: open,
         timings: await read($, timings),
-        turnStat: statFor(allStats, turn),
+        turnStat: statFor(allStats, turn, turns),
         sessionModel: await $.session.model(),
         contextPercent: usage.context.percent,
         isLatest: selected === latest,
@@ -536,7 +539,7 @@ export const register: Register = on => {
         view,
         query,
         matches: isSearching ? searchCache?.value : undefined,
-        stats: turns.map(t => statFor(allStats, t)),
+        stats: turns.map(t => statFor(allStats, t, turns)),
         members: teamMembers(agentList),
         tasks,
       },
