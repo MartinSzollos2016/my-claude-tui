@@ -1,0 +1,38 @@
+# Weekly bumps of the pinned actions (Dependabot rewrites the SHA and its
+# version comment together) and of the dev tools, grouped into one PR; the
+# Claude Code that CI tests against (.github/tools) moves monthly. The
+# cooldown lets a fresh release settle before it is proposed.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: '⬆️ chore'
+      include: scope
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      dev-dependencies:
+        dependency-type: development
+    commit-message:
+      prefix: '⬆️ chore'
+      include: scope
+
+  - package-ecosystem: npm
+    directory: /.github/tools
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: '⬆️ chore'
+      include: scope
