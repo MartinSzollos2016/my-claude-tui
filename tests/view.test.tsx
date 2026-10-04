@@ -1530,3 +1530,126 @@ describe('duration bars', () => {
     expect(label(69)).toBe(69 - 16)
   })
 })
+
+describe('grouped runs', () => {
+  const run = (n: number, extra: { tool_use_id: string; tool: string; input: Record<string, unknown> }[] = []) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          ...Array.from({ length: n }, (_, i) => ({
+            tool_use_id: `g${i}`,
+            tool: 'Read',
+            input: { file_path: `/src/f${i % 3}.ts` },
+            text: 'x',
+          })),
+          ...extra.map(e => ({ ...e, text: 'ok' })),
+        ],
+      },
+    ])
+  const timings = { g0: { start: 0, end: 1000 }, g1: { start: 1000, end: 4000 }, g2: { start: 4000, end: 4500 } }
+  const grouped = { ...base, turns: run(3), timings }
+
+  test('a run of three reads is one row with its calls and files, not three rows', () => {
+    const tree = renderPane(el, grouped, act)
+    expect(String(byKey(tree, 'group:g0')?.props['label'])).toBe('Read ×3 · 3 files')
+    expect(byKey(tree, 'g0')).toBeUndefined()
+    expect(byKey(tree, 'g1')).toBeUndefined()
+    expect(text(byKey(tree, 'status-group:g0'))).toBe('✓ ')
+  })
+
+  test('the group row shows the total time as one bar, the longest row of the turn', () => {
+    const tree = renderPane(el, grouped, act)
+    expect(text(nodes(tree).find(n => n.props['key'] === 'bar-group:g0'))).toBe('████████')
+    expect(nodes(tree).find(n => n.props['key'] === 'bar-group:g0')?.props['color']).toBe(C.accent)
+    expect(text(tree)).toContain('4.5s')
+  })
+
+  test('a click toggles the group id', () => {
+    calls.length = 0
+    ;(byKey(renderPane(el, grouped, act), 'group:g0')?.props['onPress'] as () => void)()
+    expect(calls).toEqual(['toggle:group:g0'])
+  })
+
+  test('open, it lists the original rows under tree guides, the last closing the branch', () => {
+    const tree = renderPane(el, { ...grouped, expanded: new Set(['group:g0']) }, act)
+    expect(byKey(tree, 'g0')).toBeDefined()
+    expect(byKey(tree, 'g2')).toBeDefined()
+    const guides = nodes(tree).filter(n => n.props['key']?.toString().startsWith('guide-'))
+    expect(guides.map(text)).toEqual(['├─ ', '├─ ', '└─ '])
+    for (const g of guides) expect(g.props['color']).toBe(C.muted)
+  })
+
+  test('the group state survives a longer run, and two calls do not group', () => {
+    const longer = renderPane(el, { ...grouped, turns: run(5), expanded: new Set(['group:g0']) }, act)
+    expect(byKey(longer, 'g4')).toBeDefined()
+    const two = renderPane(el, { ...grouped, turns: run(2) }, act)
+    expect(byKey(two, 'group:g0')).toBeUndefined()
+    expect(byKey(two, 'g0')).toBeDefined()
+  })
+
+  test('an error call or another tool breaks the run', () => {
+    const broken = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          { tool_use_id: 'a', tool: 'Read', input: { file_path: '/a' }, text: 'x' },
+          { tool_use_id: 'b', tool: 'Read', input: { file_path: '/b' }, text: 'x' },
+          { tool_use_id: 'c', tool: 'Read', input: { file_path: '/c' }, text: 'boom', isError: true },
+          { tool_use_id: 'd', tool: 'Read', input: { file_path: '/d' }, text: 'x' },
+        ],
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: broken }, act)
+    expect(nodes(tree).some(n => String(n.props['key']).startsWith('group:'))).toBe(false)
+  })
+
+  test('a run in a subagent trace groups under the trace guides', () => {
+    const trace = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [1, 2, 3].map(n => ({
+            tool_use_id: `t${n}`,
+            tool: 'Grep',
+            input: { pattern: `p${n}` },
+            text: 'm',
+          })),
+        },
+      ],
+      'ag/',
+    )[0]!.items
+    const tree = renderPane(
+      el,
+      {
+        ...base,
+        expanded: new Set(['a1', 'group:ag/t1']),
+        traces: new Map([['ag', { items: trace }]]),
+      },
+      act,
+    )
+    expect(String(byKey(tree, 'group:ag/t1')?.props['label'])).toBe('Grep ×3 · 3 patterns')
+    expect(byKey(tree, 'ag/t2')).toBeDefined()
+    expect(text(tree)).toMatch(/└─ /)
+  })
+
+  test('the ascii set groups with x and draws only ASCII', () => {
+    const tree = renderPane(el, { ...grouped, icons: ICON_SETS.ascii, expanded: new Set(['group:g0']) }, act)
+    expect(String(byKey(tree, 'group:g0')?.props['label'])).toBe('Read x3 . 3 files')
+    expect(text(tree)).toMatch(/^[\x20-\x7e\n]*$/)
+  })
+
+  test('every group text and button keeps the colors and hover scope', () => {
+    const tree = renderPane(el, { ...grouped, expanded: new Set(['group:g0']) }, act)
+    for (const n of nodes(tree)) if (n.type === 'Text') expect(n.props['color']).toBeDefined()
+    const row = byKey(tree, 'group:g0')
+    expect(row?.props['plain']).toBe(true)
+    expect(row?.props['dimColor']).toBe(true)
+    expect(row?.props['hover']).toMatchObject({ scope: 'row:group:g0' })
+  })
+})

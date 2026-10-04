@@ -38,6 +38,7 @@ import {
   taskBoard,
   teamMembers,
   thinkingCounts,
+  groupRuns,
   traceItems,
   turnListText,
   truncate,
@@ -178,10 +179,12 @@ async function loadTraces(
 
 function visibleIds(items: readonly Item[], traces: ReadonlyMap<string, Trace>): string[] {
   const ids: string[] = []
-  for (const item of items) {
-    ids.push(item.id)
-    if (isSubagent(item)) {
-      const trace = traces.get(item.agentId)
+  // A folded run counts as its own row, so expand all opens it too.
+  for (const row of groupRuns(items)) {
+    ids.push(row.id)
+    if (row.kind === 'group') ids.push(...row.items.map(item => item.id))
+    else if (isSubagent(row)) {
+      const trace = traces.get(row.agentId)
       if (trace && 'items' in trace) ids.push(...visibleIds(trace.items, traces))
     }
   }

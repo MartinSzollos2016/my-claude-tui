@@ -549,6 +549,36 @@ describe('detail pane', () => {
     expect(text(await draw($))).not.toContain('package main')
   })
 
+  test('folds a run of reads into a group row that opens on press and with expand all', async () => {
+    const reads: SessionMessage[] = [
+      { role: 'user', text: 'Read it all', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [1, 2, 3, 4].map(n => ({
+          tool_use_id: `rd${n}`,
+          tool: 'Read',
+          input: { file_path: `/src/f${n}.go` },
+          text: 'package main',
+        })),
+      },
+    ]
+    const { $ } = fakeEngine({ messages: reads })
+    const folded = await draw($)
+    expect(String(byKey(folded, 'group:rd1')?.props['label'])).toBe('Read ×4 · 4 files')
+    expect(byKey(folded, 'rd1')).toBeUndefined()
+    await press($, 'group:rd1')
+    expect(byKey(await draw($), 'rd1')).toBeDefined()
+    await press($, 'group:rd1')
+    expect(byKey(await draw($), 'rd1')).toBeUndefined()
+    await press($, 'nav-expand')
+    const open = await draw($)
+    expect(byKey(open, 'rd4')).toBeDefined()
+    expect(text(open)).toContain('package main')
+    await press($, 'nav-collapse')
+    expect(byKey(await draw($), 'rd1')).toBeUndefined()
+  })
+
   test('builds the turns once while the transcript stays the same', async () => {
     let reads = 0
     const middle: SessionMessage = {
