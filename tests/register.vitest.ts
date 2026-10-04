@@ -1,7 +1,7 @@
 // register()'s hooks under Vitest, against the fake engine in
 // tests/coverage/engine.ts: the same paths tests/render.test.tsx drives in
 // the real engine, here measured by coverage.
-import type { ConfigRow, SessionMessage } from 'claude-code'
+import type { SessionMessage } from 'claude-code'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { BAR_EVENT, byKey, fakeEngine, hooksOf, PANE_EVENT, settle, text } from './coverage/engine'
@@ -62,15 +62,6 @@ const command = (name: string, args = '') => ({
   presentation: { isFullscreen: true, columns: 200 },
 })
 
-const themeRow = (value: string): ConfigRow => ({
-  key: 'theme',
-  label: 'Theme',
-  kind: 'choice',
-  value,
-  provider: { plugin: 'engine', tier: 'core' },
-  isLocked: false,
-})
-
 const say = async ($: Parameters<typeof run>[1], name: string, args = '') =>
   ((await run('command.run', $, command(name, args))) as { text: string }).text
 
@@ -89,15 +80,7 @@ describe('session start', () => {
     const { $, world } = fakeEngine({ files: { '/r/.git/HEAD': 'ref: refs/heads/main\n' } })
     await run('session.start', $, { cwd: '/r' }, async e => e)
     await settle()
-    expect(world.commands).toEqual([
-      'tail',
-      'tail-turns',
-      'tail-width',
-      'tail-theme',
-      'tail-compact',
-      'tail-bar',
-      'tail-help',
-    ])
+    expect(world.commands).toEqual(['tail', 'tail-turns', 'tail-width', 'tail-compact', 'tail-bar', 'tail-help'])
     // Opened once, before any width was known: no columns asked for.
     expect(world.opened).toEqual([undefined])
     expect(text(await run('ui.render', $, BAR_EVENT))).toContain('main')
@@ -121,7 +104,7 @@ describe('session start', () => {
 
 describe('commands', () => {
   test('every command answers and the width sticks', async () => {
-    const { $, world } = fakeEngine({ config: [themeRow('light')] })
+    const { $, world } = fakeEngine()
     expect(await say($, 'tail')).toContain('Detail view opened')
     expect(world.opened.at(-1)).toBe(160)
     expect(await say($, 'tail-width', '99')).toContain('between 30 and 80')
@@ -131,7 +114,6 @@ describe('commands', () => {
     expect(await say($, 'tail', 'bar')).toBe('Info bar hidden.')
     expect(await run('ui.render', $, BAR_EVENT, async () => 'engine bar')).toBe('engine bar')
     expect(await say($, 'tail-bar')).toBe('Info bar shown.')
-    expect(await say($, 'tail-theme')).toContain('"Tail Light"')
     expect(await say($, 'tail-compact')).toContain('off')
     expect(await say($, 'tail-compact')).toContain('on')
     expect(await say($, 'tail-help')).toContain('/tail-turns')

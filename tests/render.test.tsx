@@ -1,4 +1,4 @@
-import type { CommandRunInput, ConfigRow, RenderSurface, SessionMessage } from 'claude-code'
+import type { CommandRunInput, RenderSurface, SessionMessage } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { THEME_KEYS } from '../hooks/theme'
@@ -574,55 +574,6 @@ describe('info bar', () => {
   })
 })
 
-describe('/tail theme', () => {
-  const themeRow = (value: string): ConfigRow => ({
-    key: 'theme',
-    label: 'Theme',
-    kind: 'choice',
-    value,
-    provider: { plugin: 'engine', tier: 'core' },
-    isLocked: false,
-  })
-  const RUN_THEME = {
-    command: 'tail',
-    args: 'theme',
-    origin: { kind: 'composer' },
-    presentation: { isFullscreen: true, columns: 160 },
-  } as CommandRunInput
-
-  test('advises the matching tail-view theme without writing config', async ($, on) => {
-    let writes = 0
-    on('config.list', () => ({ value: [themeRow('dark-daltonized')] }))
-    on('config.set', (_$, e) => {
-      writes += 1
-      return { value: e.value }
-    })
-
-    const ran = await $.command.run(RUN_THEME)
-    expect(writes).toBe(0)
-    expect(ran.text).toContain('"Tail Dark (colorblind-friendly)"')
-  })
-
-  test('says the variants are missing when /theme does not offer them', async ($, on) => {
-    on('config.list', () => ({ value: [{ ...themeRow('dark'), options: ['dark', 'light', 'auto'] }] }))
-    const ran = await $.command.run(RUN_THEME)
-    expect(ran.text).toContain('not loaded')
-  })
-
-  test('leaves auto to /theme without writing', async ($, on) => {
-    let writes = 0
-    on('config.list', () => ({ value: [themeRow('auto')] }))
-    on('config.set', (_$, e) => {
-      writes += 1
-      return { value: e.value }
-    })
-
-    const ran = await $.command.run(RUN_THEME)
-    expect(writes).toBe(0)
-    expect(ran.text).toContain('/theme')
-  })
-})
-
 describe('compact transcript', () => {
   const RESULT = {
     component: 'ToolResult',
@@ -719,15 +670,7 @@ describe('commands', () => {
     on('ui.open', () => ({ value: { isPlaced: false as const, reason: 'test' } }))
     on('session.start', (_$, e) => ({ cwd: e.cwd }))
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true } as never)
-    expect(names.sort()).toEqual([
-      'tail',
-      'tail-bar',
-      'tail-compact',
-      'tail-help',
-      'tail-theme',
-      'tail-turns',
-      'tail-width',
-    ])
+    expect(names.sort()).toEqual(['tail', 'tail-bar', 'tail-compact', 'tail-help', 'tail-turns', 'tail-width'])
   })
 
   test('/tail and /tail-turns answer in text where no pane is drawn', async ($, on) => {
@@ -754,12 +697,12 @@ describe('commands', () => {
   test('/tail-help and /tail help list every command', async ($, on) => {
     mock.store(on)
     for (const ran of [await $.command.run(run('tail-help')), await $.command.run(run('tail', 'help'))]) {
-      for (const name of ['/tail-turns', '/tail-theme', '/tail-width', '/tail-compact', '/tail-bar', '/tail-help'])
+      for (const name of ['/tail-turns', '/tail-width', '/tail-compact', '/tail-bar', '/tail-help'])
         expect(ran.text).toContain(name)
     }
   })
 
-  test('/tail-width and /tail-theme work like their /tail forms', async ($, on) => {
+  test('/tail-width works like its /tail form', async ($, on) => {
     mock.store(on)
     on('session.surfaces', () => ({ value: ['terminal' as const] }))
     const opened: (number | undefined)[] = []
@@ -768,23 +711,10 @@ describe('commands', () => {
       opened.push(e.columns)
       return { value: { isPlaced: true as const } }
     })
-    on('config.list', () => ({
-      value: [
-        {
-          key: 'theme',
-          label: 'Theme',
-          kind: 'choice',
-          value: 'light',
-          provider: { plugin: 'engine', tier: 'core' },
-          isLocked: false,
-        },
-      ],
-    }))
 
     expect((await $.command.run(run('tail-width', '75'))).text).toContain('75%')
     await $.command.run(run('tail'))
     expect(opened.at(-1)).toBe(150)
-    expect((await $.command.run(run('tail-theme'))).text).toContain('"Tail Light"')
   })
 })
 

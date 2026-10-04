@@ -62,7 +62,7 @@ import {
   turnStatFrom,
   type Memo,
 } from './session'
-import { C, tailThemeAdvice } from './theme'
+import { C } from './theme'
 import { renderBar, renderPane, type El, type Trace } from './view'
 
 const PANE = 'tail'
@@ -274,8 +274,6 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       const hidden = await update($, isBarHidden, wasHidden => !wasHidden)
       return { text: hidden ? 'Info bar hidden.' : 'Info bar shown.' }
     }
-    case 'theme':
-      return { text: await themeAdvice($) }
     case 'compact':
       return { text: await toggleCompact($) }
     case 'width':
@@ -337,13 +335,6 @@ async function openMatch($: EngineInterface, value: string, turns: readonly Turn
   await update($, searchQuery, () => value)
   const newest = searchTurns(turns, value).at(-1)
   if (newest) await pickTurn($, newest.index, turns.length - 1)
-}
-
-// Names the tail-view theme matching the current one; picking it is the
-// person's, in /theme (the config API only accepts built-in themes).
-async function themeAdvice($: EngineInterface): Promise<string> {
-  const row = (await $.config.list()).find(r => r.key === 'theme')
-  return tailThemeAdvice(sanitizeText(typeof row?.value === 'string' ? row.value : ''), row?.options)
 }
 
 // Persisted preferences ($.store, across sessions).
@@ -425,7 +416,6 @@ export const register: Register = on => {
   on('command.run', { command: 'tail' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-turns' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-width' }, ($, e) => runCommand($, e))
-  on('command.run', { command: 'tail-theme' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-compact' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-bar' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-help' }, ($, e) => runCommand($, e))

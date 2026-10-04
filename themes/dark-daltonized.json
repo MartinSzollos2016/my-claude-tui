@@ -1,7 +1,0 @@
-{
-  "name": "Tail Dark (colorblind-friendly)",
-  "base": "dark-daltonized",
-  "overrides": {
-    "composerSidebarBackground": "rgb(0,0,0)"
-  }
-}
