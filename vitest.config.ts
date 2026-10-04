@@ -13,7 +13,8 @@ export default defineConfig({
   },
   oxc: { jsx: { runtime: 'classic', pragma: 'h', pragmaFrag: 'Fragment' } },
   test: {
-    include: ['tests/model.test.ts', 'tests/theme.test.ts'],
+    setupFiles: ['tests/coverage/setup.ts'],
+    include: ['tests/model.test.ts', 'tests/theme.test.ts', 'tests/summaries.test.ts', 'tests/view.test.tsx'],
     coverage: {
       provider: 'istanbul',
       include: ['hooks/**/*.{ts,tsx}'],
