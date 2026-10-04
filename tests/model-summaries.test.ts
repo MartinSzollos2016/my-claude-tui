@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { buildTurns } from '../hooks/model'
 import { itemName, itemSummary, toolSummary } from '../hooks/model/summaries'
+import { buildTurns } from '../hooks/model/turns'
 import { transcript } from './fixtures/model'
 
 describe('summaries', () => {

@@ -4,22 +4,19 @@ import type { SessionMessage, ToolUseSummary } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 import {
   alignFromEnd,
-  buildTurns,
   EMPTY_TURN_TEXT,
-  isAgentFinished,
-  isAgentRunning,
   searchTurns,
   taskBoard,
   taskMark,
   teamMembers,
   thinkingCounts,
   turnListText,
-  turnsKey,
   turnTail,
   turnText,
   workflowState,
   type ApiLike,
 } from '../hooks/model'
+import { buildTurns, isAgentFinished, isAgentRunning, turnsKey } from '../hooks/model/turns'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
 
