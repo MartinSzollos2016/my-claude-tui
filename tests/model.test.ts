@@ -15,6 +15,8 @@ import {
   finishedWorkflows,
   cachedSections,
   firstErrorLine,
+  footerLayout,
+  footerTop,
   formatDuration,
   fitPath,
   formatTokens,
@@ -1595,5 +1597,34 @@ describe('engineDuration', () => {
     expect(engineDuration(2_600)).toBe('3s')
     expect(engineDuration(59_400)).toBe('59s')
     expect(engineDuration(64_000)).toBe('1m 4s')
+  })
+})
+
+describe('footerLayout', () => {
+  test('two columns with labels from 64 columns up', () => {
+    expect(footerLayout(100)).toEqual({ rows: 4, columns: 'two', labels: true })
+    expect(footerLayout(64)).toEqual({ rows: 4, columns: 'two', labels: true })
+  })
+
+  test('stacked groups with labels from 40 to 63 columns', () => {
+    expect(footerLayout(63)).toEqual({ rows: 6, columns: 'stacked', labels: true })
+    expect(footerLayout(40)).toEqual({ rows: 6, columns: 'stacked', labels: true })
+  })
+
+  test('stacked groups without labels under 40 columns', () => {
+    expect(footerLayout(39)).toEqual({ rows: 6, columns: 'stacked', labels: false })
+    expect(footerLayout(0)).toEqual({ rows: 6, columns: 'stacked', labels: false })
+  })
+})
+
+describe('footerTop', () => {
+  test('is the last rows of the visible window', () => {
+    expect(footerTop(0, 30, 4)).toBe(26)
+    expect(footerTop(14, 30, 4)).toBe(40)
+  })
+
+  test('never goes above the body when the window is smaller than the footer', () => {
+    expect(footerTop(0, 3, 6)).toBe(0)
+    expect(footerTop(0, 0, 4)).toBe(0)
   })
 })
