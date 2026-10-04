@@ -62,6 +62,24 @@ Claude Code paints the pane's frame grey and plugins cannot draw over it. `theme
 variant of each built-in theme with a black (dark themes) or white (light themes) frame. Pick
 one in `/theme`; `/tail-theme` tells you which.
 
+## What the plugin does on your machine
+
+- **Reads** the current session through Claude Code's plugin API: the conversation and its tool
+  calls and results, the session's agents, context usage and cost, and the permission mode from
+  the prompt hook. It keeps its own UI state (expanded rows, timings) in the session and two
+  preferences (pane width, compact transcript) in Claude Code's plugin store.
+- **Runs one program**: `git --no-optional-locks -c core.fsmonitor=false -c
+core.untrackedCache=false status --porcelain=v1 --branch` in the session's directory, at
+  session start and after each turn, for the branch and dirty mark in the info bar. It never
+  prompts for credentials (`GIT_TERMINAL_PROMPT=0`) and takes no index lock.
+- **Sends nothing out**: no network requests, no telemetry. Everything it reads is drawn in the
+  pane, the info bar and the transcript of the same session.
+- **Hooks**: its own slash commands (`command.run`, registered per command, so it never sees
+  others); `tool.call` and `turn.complete` to time calls and turns, passing each call on
+  unchanged; `prompt.submit` and the `UserPromptSubmit` prompt hook to note the prompt and the
+  permission mode, passing both on unchanged; `ui.render` to draw the pane, the info bar and the
+  compact tool rows in the transcript. It makes no permission decisions and changes no settings.
+
 ## Security
 
 - Text from the transcript is untrusted: terminal escape sequences, control characters and
