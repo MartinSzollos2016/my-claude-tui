@@ -4,7 +4,7 @@
 import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
-import { buildTurns } from '../hooks/model'
+import { buildTurns, displayWidth } from '../hooks/model'
 import { renderBar, renderPane, type El } from '../hooks/view'
 import { ICON_SETS } from '../hooks/icons'
 import { C, modelColor } from '../hooks/theme'
@@ -1438,5 +1438,41 @@ describe('code blocks', () => {
       at += (piece.props['source'] as string).split('\n').length
     }
     expect(at).toBe(1505)
+  })
+})
+
+describe('display-width alignment', () => {
+  const rowLabel = (description: string, name = 'Bash') => {
+    const wide = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'w1', tool: name, input: { command: 'x', description }, text: 'ok' }],
+      },
+    ])
+    return String(byKey(renderPane(el, { ...base, turns: wide }, act), 'w1')?.props['label'])
+  }
+
+  test('a row label with wide characters is cut to the room in cells', () => {
+    const cjk = rowLabel('日本語'.repeat(70))
+    expect(displayWidth(cjk)).toBeLessThanOrEqual(84)
+    expect(displayWidth(cjk)).toBeGreaterThanOrEqual(83)
+    expect(cjk.endsWith('…')).toBe(true)
+  })
+
+  test('a wide tool name pads to the same name column as an ASCII one', () => {
+    const name = rowLabel('same', 'mcp__srv__日本')
+    expect(displayWidth(name.split(' - ')[0]!)).toBe(12)
+  })
+
+  test('the turn list pads its prompt column by cells', () => {
+    const wide = buildTurns([
+      { role: 'user', text: '日本語の長い質問'.repeat(20), toolUses: [] },
+      { role: 'assistant', text: 'ok', toolUses: [] },
+    ])
+    const tree = renderPane(el, { ...base, turns: wide, view: 'turns', stats: [undefined] }, act)
+    const row = text(byKey(tree, 'turn-0') ?? nodes(tree).find(n => n.props['key'] === 'turn-0'))
+    expect(displayWidth(row)).toBeLessThanOrEqual(98)
   })
 })
