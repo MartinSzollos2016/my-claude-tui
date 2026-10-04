@@ -1486,6 +1486,31 @@ describe('own scroll', () => {
     expect(byKey(byKey(tree, 'pane-window'), 'brand-mark')).toBeUndefined()
   })
 
+  test('the header is laid out row by row with explicit heights, at 64 and 40 columns', () => {
+    const busy = new Map([...Array.from({ length: 12 }, (_, i) => [`x${i}`, 'running' as const] as const)])
+    for (const columns of [64, 40])
+      for (const extra of [{}, { view: 'turns' as const }, { view: 'team' as const, members }]) {
+        const tree = pane({ columns, agents: busy, ...extra })
+        const header = byKey(tree, 'pane-header')!
+        const parts = kids(header)
+        for (const part of parts) {
+          expect(typeof part.props['height'], JSON.stringify(extra)).toBe('number')
+          expect(part.props['overflow']).toBe('hidden')
+          expect(part.props['flexShrink']).toBe(0)
+        }
+        const rows = parts.reduce((sum, part) => sum + Number(part.props['height']), 0)
+        expect(header.props['height']).toBe(rows)
+        const footerRows = columns >= 64 ? 4 : 6
+        expect(byKey(tree, 'pane-window')?.props['height']).toBe(30 - rows - footerRows)
+      }
+    // A long prompt is cut to the one row it is given.
+    const long = buildTurns([{ role: 'user', text: `go ${'very long prompt '.repeat(20)}`, toolUses: [] }])
+    for (const icons of [ICON_SETS.nerd, ICON_SETS.ascii]) {
+      const prompt = byKey(pane({ turns: long, stats: [undefined], columns: 40, icons }), 'prompt')!
+      expect(displayWidth(text(prompt))).toBeLessThanOrEqual(38)
+    }
+  })
+
   test('the window clips the rows between the header and the footer in every view', () => {
     const cases: [Record<string, unknown>, number, number][] = [
       [{}, 2, 4],
@@ -1669,7 +1694,8 @@ describe('empty states', () => {
 describe('header spacing', () => {
   const header = (columns: number, extra = {}) => {
     const tree = renderPane(el, { ...base, selected: 1, isLatest: true, isWorking: true, columns, ...extra }, act)
-    return nodes(tree)[2]!
+    // The metrics row, in the header's first part.
+    return nodes(byKey(tree, 'pane-header-0')?.children)[0]!
   }
   const texts = (tree: unknown) => nodes(tree).filter(n => n.type === 'Text')
 

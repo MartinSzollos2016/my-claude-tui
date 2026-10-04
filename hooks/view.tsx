@@ -366,7 +366,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       textLine(data, hint, 0),
     )
     return paneBody(el, data, act, {
-      headerRows: 0,
+      header: [],
       content: (
         <Box flexDirection="column">
           <Text key="empty-title" color={C.text}>
@@ -392,15 +392,22 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   // The blank row above the items.
   data.layout.push(LINE)
   return paneBody(el, data, act, {
-    headerRows: hasPrompt ? 2 : 1,
+    // The metrics row is clipped to its one row where its parts would wrap.
     header: [
-      renderHeader(el, turn, data),
-      hasPrompt && (
-        <Text key="prompt" color={C.muted} wrap={endWrap(data.icons)}>
-          {`${data.icons.prompt} `}
-          {trunc(turn.prompt, promptRoom)}
-        </Text>
-      ),
+      { node: renderHeader(el, turn, data), rows: 1 },
+      ...(hasPrompt
+        ? [
+            {
+              node: (
+                <Text key="prompt" color={C.muted} wrap={endWrap(data.icons)}>
+                  {`${data.icons.prompt} `}
+                  {trunc(turn.prompt, promptRoom)}
+                </Text>
+              ),
+              rows: 1,
+            },
+          ]
+        : []),
     ],
     content: (
       <Box flexDirection="column" marginTop={1}>
@@ -420,7 +427,15 @@ function drawn<T>(data: Ctx, node: T, block: RowBlock): T {
 
 // What a view draws: the rows that stay on top (and how many), and the
 // content that scrolls in the window under them.
-type PaneParts = { header?: RenderChildren; headerRows: number; content: RenderElement }
+type PaneParts = { header: readonly HeaderPart[]; content: RenderElement }
+
+// One part of the header and the rows it is given: each part is drawn in a
+// box of exactly that height, so the header is as tall as their sum.
+type HeaderPart = { node: RenderElement; rows: number }
+
+// The search field: "every surface's one-line text field" (InputProps), with
+// its submit label beside it while focused.
+const INPUT_ROWS = 1
 
 // Every turn of the session, newest first: one button per turn that opens
 // it in the detail view. A search narrows the list to the matching turns
@@ -467,35 +482,44 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
     ...(hidden > 0 ? [textLine(data, hiddenNote, 0)] : []),
   )
 
-  const header = [
-    <Box key="turns-title" flexDirection="row" gap={2}>
-      <Text bold color={C.brand}>
-        {isFiltered ? `Turns (${rows.length} of ${data.turns.length})` : `Turns (${data.turns.length})`}
-      </Text>
-    </Box>,
-    Input && (
-      <Box key="turns-search" flexDirection="row" gap={2}>
-        <Input
-          key="turn-search"
-          placeholder="Search turns"
-          value={query}
-          submitLabel="open"
-          onInput={value => act.search(value)}
-          onSubmit={value => act.submitSearch(value)}
-        />
-        {isFiltered && (
-          <Button
-            key="search-clear"
-            plain
-            dimColor
-            hover={buttonHover('btn:search-clear')}
-            label="clear"
-            onPress={() => act.search('')}
-          />
-        )}
-      </Box>
-    ),
+  const header: HeaderPart[] = [
+    {
+      rows: 1,
+      node: (
+        <Box key="turns-title" flexDirection="row" gap={2}>
+          <Text bold color={C.brand}>
+            {isFiltered ? `Turns (${rows.length} of ${data.turns.length})` : `Turns (${data.turns.length})`}
+          </Text>
+        </Box>
+      ),
+    },
   ]
+  if (Input)
+    header.push({
+      rows: INPUT_ROWS,
+      node: (
+        <Box key="turns-search" flexDirection="row" gap={2}>
+          <Input
+            key="turn-search"
+            placeholder="Search turns"
+            value={query}
+            submitLabel="open"
+            onInput={value => act.search(value)}
+            onSubmit={value => act.submitSearch(value)}
+          />
+          {isFiltered && (
+            <Button
+              key="search-clear"
+              plain
+              dimColor
+              hover={buttonHover('btn:search-clear')}
+              label="clear"
+              onPress={() => act.search('')}
+            />
+          )}
+        </Box>
+      ),
+    })
   const content = (
     <Box flexDirection="column">
       <Box flexDirection="column" marginTop={1}>
@@ -535,7 +559,7 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
       </Box>
     </Box>
   )
-  return { header, headerRows: Input ? 2 : 1, content }
+  return { header, content }
 }
 
 const SNIPPET_INDENT = '      '
@@ -607,11 +631,16 @@ function renderTeam(el: El, data: Ctx): PaneParts {
     ...(hiddenTasks > 0 ? [line(`${hiddenTasks} more tasks`)] : []),
   )
 
-  const header = (
-    <Box key="team-title" flexDirection="row" gap={2}>
-      <Text bold color={C.brand}>{`Team (${members.length})`}</Text>
-    </Box>
-  )
+  const header = [
+    {
+      rows: 1,
+      node: (
+        <Box key="team-title" flexDirection="row" gap={2}>
+          <Text bold color={C.brand}>{`Team (${members.length})`}</Text>
+        </Box>
+      ),
+    },
+  ]
   const content = (
     <Box flexDirection="column">
       <Box flexDirection="column" marginTop={1}>
@@ -658,7 +687,7 @@ function renderTeam(el: El, data: Ctx): PaneParts {
       </Box>
     </Box>
   )
-  return { header, headerRows: 1, content }
+  return { header, content }
 }
 
 // The pane body, painted edge to edge in the theme's background and exactly
@@ -669,7 +698,8 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   const { Box, Text } = el
   const { icons } = data
   const layout = footerLayout(data.columns)
-  const windowRows = Math.max(1, data.rows - parts.headerRows - layout.rows)
+  const headerRows = parts.header.reduce((sum, part) => sum + part.rows, 0)
+  const windowRows = Math.max(1, data.rows - headerRows - layout.rows)
   const rows = contentRows(data.layout)
   const scrollTop = clampScroll(data.scrollTop ?? 0, rows.total, windowRows)
   const frame: ScrollFrame = { scrollTop, windowRows, total: rows.total, starts: rows.starts }
@@ -684,9 +714,13 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   )
   return (
     <Box flexDirection="column" width={data.columns} height={data.rows} backgroundColor={C.paneBackground}>
-      {parts.headerRows > 0 && (
-        <Box key="pane-header" flexDirection="column" height={parts.headerRows} flexShrink={0} overflow="hidden">
-          {parts.header}
+      {headerRows > 0 && (
+        <Box key="pane-header" flexDirection="column" height={headerRows} flexShrink={0} overflow="hidden">
+          {parts.header.map((part, i) => (
+            <Box key={`pane-header-${i}`} flexDirection="column" height={part.rows} flexShrink={0} overflow="hidden">
+              {part.node}
+            </Box>
+          ))}
         </Box>
       )}
       <Box key="pane-window" height={windowRows} flexShrink={0} overflow="hidden">
