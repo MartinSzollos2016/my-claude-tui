@@ -167,7 +167,7 @@ describe('renderPane', () => {
     const tree = renderPane(el, base, act)
     const all = text(tree)
     expect(all).not.toContain('ctx')
-    expect(text(renderPane(el, { ...base, selected: 1, isLatest: true }, act))).toContain('ctx 62%')
+    expect(text(renderPane(el, { ...base, selected: 1, isLatest: true }, act))).toContain('62%')
     expect(all).toContain('opus5.5')
     expect(all).toContain('1.5k')
     expect(all).toContain('1m 5s')
@@ -416,6 +416,17 @@ describe('renderPane', () => {
       renderPane(el, { ...ascii, view: 'turns', query: 'zzz', matches: [] }, act),
       renderPane(el, { ...ascii, view: 'team', members, tasks }, act),
       renderPane(el, { ...ascii, turns: [] }, act),
+      renderPane(el, { ...ascii, selected: 1, isLatest: true }, act),
+      renderBar(el, {
+        project: 'tail',
+        git: null,
+        mode: null,
+        runningAgents: 0,
+        contextTokens: 5000,
+        contextPercent: 70,
+        columns: 120,
+        icons: ICON_SETS.ascii,
+      }),
       renderBar(el, {
         project: 'tail',
         git: { branch: 'main' },
@@ -585,6 +596,7 @@ describe('renderPane', () => {
       renderPane(el, { ...base, icons: ICON_SETS.ascii, expanded: open, thinking }, act),
       renderPane(el, { ...base, icons: ICON_SETS.unicode, view: 'turns', stats: [base.turnStat, undefined] }, act),
       renderPane(el, { ...base, icons: ICON_SETS.ascii, view: 'team', members, tasks }, act),
+      renderPane(el, { ...base, selected: 1, isLatest: true, icons: ICON_SETS.ascii }, act),
     ]
     const allowed: unknown[] = [...Object.values(C), ...['fable', 'opus', 'sonnet', 'haiku'].map(m => modelColor(m))]
     let texts = 0
@@ -844,6 +856,35 @@ describe('renderPane', () => {
     expect(all).toContain('☑ #2 Ship')
     expect(nodes(team).some(n => n.props['color'] === 'success' && text(n) === 'running')).toBe(true)
     expect(text(renderPane(el, { ...base, view: 'team', turns: [] }, act))).toContain('No teammates in this session.')
+  })
+})
+
+describe('context meter', () => {
+  test('the header of the latest turn and the info bar draw the meter in the context color', () => {
+    const latest = renderPane(el, { ...base, selected: 1, isLatest: true }, act)
+    expect(text(latest)).toContain('ctx ▰▰▰▰▰▰▱▱▱▱ 62%')
+    expect(nodes(latest).some(n => n.props['color'] === 'warning' && text(n).includes('▰▰▰▰▰▰▱▱▱▱ 62%'))).toBe(true)
+    expect(text(renderPane(el, base, act))).not.toContain('▰')
+    expect(text(renderPane(el, { ...base, selected: 1, isLatest: true, icons: ICON_SETS.ascii }, act))).toContain(
+      'ctx ######---- 62%',
+    )
+
+    const bar = (columns: number, icons = ICON_SETS.nerd) =>
+      renderBar(el, {
+        project: 'tail',
+        git: null,
+        mode: null,
+        runningAgents: 0,
+        contextTokens: 5000,
+        contextPercent: 85,
+        columns,
+        icons,
+      })
+    expect(text(bar(100))).toContain('5.0k ctx ▰▰▰▰▰▰▰▰▰▱ 85%')
+    expect(text(bar(99))).not.toContain('▰')
+    expect(text(bar(99))).toContain('85%')
+    expect(nodes(bar(100)).some(n => n.props['color'] === 'error' && text(n).includes('▰▰▰▰▰▰▰▰▰▱ 85%'))).toBe(true)
+    expect(text(bar(120, ICON_SETS.ascii))).toContain('#########- 85%')
   })
 })
 

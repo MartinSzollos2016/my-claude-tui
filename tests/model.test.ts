@@ -9,6 +9,7 @@ import {
   chunkText,
   clampText,
   compactCall,
+  contextMeter,
   firstErrorLine,
   formatDuration,
   fitPath,
@@ -664,5 +665,21 @@ describe('compactCall paths', () => {
     expect([...summary].length).toBeLessThanOrEqual(80)
     expect(summary).toContain('…')
     expect(summary.endsWith('session.ts')).toBe(true)
+  })
+})
+
+describe('contextMeter', () => {
+  test('fills round(percent/100*cells) cells within 0..cells', () => {
+    const { nerd, ascii } = ICON_SETS
+    expect(contextMeter(0, 10, nerd)).toBe('▱▱▱▱▱▱▱▱▱▱')
+    expect(contextMeter(100, 10, nerd)).toBe('▰▰▰▰▰▰▰▰▰▰')
+    expect(contextMeter(62, 10, nerd)).toBe('▰▰▰▰▰▰▱▱▱▱')
+    expect(contextMeter(65, 10, nerd)).toBe('▰▰▰▰▰▰▰▱▱▱')
+    expect(contextMeter(-5, 10, nerd)).toBe('▱▱▱▱▱▱▱▱▱▱')
+    expect(contextMeter(250, 10, nerd)).toBe('▰▰▰▰▰▰▰▰▰▰')
+    expect(contextMeter(50, 4, nerd)).toBe('▰▰▱▱')
+    expect(contextMeter(30, undefined, nerd)).toHaveLength(10)
+    expect(contextMeter(62, 10, ICON_SETS.unicode)).toBe('▰▰▰▰▰▰▱▱▱▱')
+    expect(contextMeter(62, 10, ascii)).toBe('######----')
   })
 })
