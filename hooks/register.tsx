@@ -3,7 +3,15 @@
 // by the tool.call and turn.complete hooks. Commands are in commands.ts,
 // rendering in view.tsx, transformations in model.ts.
 import { atom, read, update } from 'claude-code'
-import type { AgentStatus, CommandRunInput, CommandRunResult, EngineInterface, Register, Timer } from 'claude-code'
+import type {
+  AgentStatus,
+  CommandRunInput,
+  CommandRunResult,
+  EngineInterface,
+  Register,
+  RenderSurface,
+  Timer,
+} from 'claude-code'
 
 import type { AgentStat } from '../types'
 import {
@@ -235,6 +243,13 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
   }
 }
 
+// Copies a whole block (not its preview) and says how it went; called with
+// `$` whole, as the directory's validator wants.
+async function copyBlock($: EngineInterface, text: string, surface?: RenderSurface): Promise<void> {
+  const copied = await $.ui.copy(surface === undefined ? { text } : { text, surface })
+  $.ui.toast(copied.isCopied ? 'Copied' : `Not copied: ${copied.reason}`)
+}
+
 // Shows one turn in the detail view; the latest one follows new turns.
 async function pickTurn($: EngineInterface, index: number, latest: number) {
   await update($, selectedTurn, () => (index >= latest ? null : index))
@@ -446,6 +461,7 @@ export const register: Register = on => {
         showTurns: () => update($, paneView, () => 'turns' as const).catch(ignore),
         showDetail: () => update($, paneView, () => 'detail' as const).catch(ignore),
         pickTurn: index => pickTurn($, index, latest).catch(ignore),
+        copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
         toggleFull: id => update($, fullBlocks, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
       },
     )

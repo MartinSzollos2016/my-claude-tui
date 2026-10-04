@@ -286,6 +286,28 @@ describe('live data', () => {
 })
 
 describe('detail pane', () => {
+  test('copies a block, or says why it could not', async () => {
+    const bash: SessionMessage[] = [
+      { role: 'user', text: 'test it', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: { command: 'go test' }, text: 'PASS' }],
+      },
+    ]
+    const ok = fakeEngine({ messages: bash })
+    await press(ok.$, 'b1')
+    await press(ok.$, 'copy:b1:output')
+    expect(ok.world.copies).toEqual(['PASS'])
+    expect(ok.world.toasts).toEqual(['Copied'])
+
+    const refused = fakeEngine({ messages: bash, copyResult: { isCopied: false, reason: 'no-clipboard' } })
+    await press(refused.$, 'b1')
+    await press(refused.$, 'copy:b1:command')
+    expect(refused.world.copies).toEqual(['go test'])
+    expect(refused.world.toasts).toEqual(['Not copied: no-clipboard'])
+  })
+
   test('navigates turns, drills into a subagent and expands everything', async () => {
     const { $ } = fakeEngine({ messages: three, agentMessages: { 'agent-1': child } })
     expect(text(await draw($))).toContain('turn 3/3 (live)')

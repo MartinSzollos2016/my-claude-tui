@@ -54,7 +54,7 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 | `e` / `c`              | expand all / collapse all                 |
 | Esc                    | back to the prompt                        |
 
-Long blocks show a preview with **show all** / **show less**.
+Long blocks show a preview with **show all** / **show less**; **copy** in a section's frame copies the whole block.
 
 ## Themes
 

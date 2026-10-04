@@ -109,6 +109,7 @@ const base = {
 
 const calls: string[] = []
 const act = {
+  copy: (text: string, surface?: string) => calls.push(`copy:${surface}:${text}`),
   toggle: (id: string) => calls.push(`toggle:${id}`),
   prev: () => calls.push('prev'),
   next: () => calls.push('next'),
@@ -198,6 +199,24 @@ describe('renderPane', () => {
     )
     expect(text(everything)).toContain('pane text budget reached')
     expect(text(everything).length).toBeLessThan(100_000)
+  })
+
+  test('every frame has a copy button that copies the whole block', () => {
+    const lines = Array.from({ length: 300 }, (_, n) => `line ${n}`).join('\n')
+    const long = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: 'Done.',
+        toolUses: [{ tool_use_id: 'x1', tool: 'Bash', input: { command: 'seq 300' }, text: lines }],
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: long, expanded: new Set(['x1', 't0:o0']) }, act)
+    for (const key of ['copy:x1:command', 'copy:x1:output', 'copy:t0:o0']) expect(byKey(tree, key)?.type).toBe('Button')
+    ;(byKey(tree, 'copy:x1:output')?.props['onPress'] as (e: { surface: string }) => void)({ surface: 'terminal' })
+    ;(byKey(tree, 'copy:x1:command')?.props['onPress'] as (e: { surface: string }) => void)({ surface: 'desktop' })
+    expect(calls).toContain(`copy:terminal:${lines}`)
+    expect(calls).toContain('copy:desktop:seq 300')
   })
 
   test('turn list and empty state', () => {
