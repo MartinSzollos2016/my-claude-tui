@@ -525,7 +525,8 @@ describe('compact transcript', () => {
     })
 
     await $.command.run(RUN(''))
-    expect(opened.at(-1)).toBe(120)
+    // Default share: 80 % of 200 columns, the transcript keeping its 40.
+    expect(opened.at(-1)).toBe(160)
 
     expect((await $.command.run(RUN('width 70'))).text).toContain('70%')
     await $.command.run(RUN(''))

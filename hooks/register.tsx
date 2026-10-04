@@ -181,7 +181,7 @@ async function themeAdvice($: EngineInterface): Promise<string> {
 // Persisted preferences ($.store, across sessions).
 const WIDTH_KEY = 'paneWidth'
 const COMPACT_KEY = 'isCompact'
-const DEFAULT_WIDTH = 60
+const DEFAULT_WIDTH = 80
 const MIN_WIDTH = 30
 const MAX_WIDTH = 80
 

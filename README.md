@@ -20,7 +20,7 @@ A Claude Code mod that brings [tail-claude](https://github.com/kylesnowschwartz/
   expandable). Header: model, tool/output counts, subagent icons, tokens,
   ctx %, duration.
 
-- **Layout**: the pane asks for **60 %** of the terminal (`/tail width 30–80`
+- **Layout**: the pane asks for **80 %** of the terminal (`/tail width 30–80`
   sets the share, kept across sessions; a width you drag the dock to wins),
   and the transcript on the left stays a **conversation**: tool results are
   one dim line (`⎿ 12 lines`, errors in red with their first line) and tool
