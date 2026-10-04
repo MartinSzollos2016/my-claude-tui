@@ -536,9 +536,11 @@ function renderFooter(el: El, data: Ctx, act: PaneActions) {
       </Text>
       <Box flexDirection="row" justifyContent="space-between">
         <Box flexShrink={1}>{renderNav(el, data, act)}</Box>
-        <Text key="turn-position" color={C.muted}>
-          {`turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}`}
-        </Text>
+        <Box flexShrink={0}>
+          <Text key="turn-position" color={C.muted}>
+            {`turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}`}
+          </Text>
+        </Box>
       </Box>
     </Box>
   )
