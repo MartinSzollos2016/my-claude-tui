@@ -11,6 +11,7 @@ import type { AgentStatus, EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
 import { buildTurns, isSubagent, sanitizePrompt, sanitizeText, shortPath, traceItems, type Item, type Turn } from './model'
+import { toggleTailTheme } from './theme'
 import { renderBar, renderPane, type El, type Trace } from './view'
 
 const PANE = 'tail'
@@ -147,6 +148,22 @@ function startTicker($: EngineInterface) {
   ticker = $.clock.every(TICK_MS, () => void onTick($))
 }
 
+// Swaps the current built-in theme for its tail-view variant (black or white
+// pane column, frame included) or back; the person's /theme choice otherwise.
+async function switchTailTheme($: EngineInterface): Promise<string> {
+  const row = (await $.config.list()).find(r => r.key === 'theme')
+  const current = typeof row?.value === 'string' ? row.value : ''
+  const target = toggleTailTheme(current)
+  if (target === undefined) {
+    return `Theme "${sanitizeText(current)}" has no tail-view variant; pick one of the "Tail …" themes in /theme.`
+  }
+  const set = await $.config.set({ key: 'theme', value: target })
+  if ('deny' in set && set.deny !== undefined) {
+    return `Could not switch the theme (${sanitizeText(String(set.deny))}); pick a "Tail …" theme in /theme.`
+  }
+  return target.startsWith('custom:') ? `Theme switched to the tail-view variant (${target}).` : `Theme switched back to ${target}.`
+}
+
 function openPane($: EngineInterface, focus: boolean) {
   return $.ui.open(focus ? { id: PANE, title: 'tail', focus: true } : { id: PANE, title: 'tail' })
 }
@@ -156,8 +173,9 @@ export const register: Register = on => {
     const started = await next(e)
     await $.command.register({
       name: 'tail',
-      description: 'Open the tail-claude detail view (tool calls, subagents); "/tail bar" toggles the info bar',
-      argumentHint: '[bar]',
+      description:
+        'Open the tail-claude detail view; "/tail bar" toggles the info bar, "/tail theme" the black/white pane theme',
+      argumentHint: '[bar|theme]',
     })
     void refreshGit($)
     void openPane($, false)
@@ -165,10 +183,12 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'tail' }, async ($, e) => {
-    if (e.args.trim() === 'bar') {
+    const arg = e.args.trim()
+    if (arg === 'bar') {
       const hidden = await update($, isBarHidden, h => !h)
       return { text: hidden ? 'Info bar hidden.' : 'Info bar shown.' }
     }
+    if (arg === 'theme') return { text: await switchTailTheme($) }
     await openPane($, true)
     return { text: 'Detail view opened: Tab walks rows, Enter expands, p/n/l turns, e/c expand/collapse all.' }
   })

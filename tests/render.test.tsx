@@ -1,4 +1,4 @@
-import type { SessionMessage } from 'claude-code'
+import type { CommandRunInput, ConfigRow, SessionMessage } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { THEME_KEYS } from '../hooks/theme'
@@ -205,5 +205,52 @@ describe('info bar', () => {
     expect(await ui.find({ text: /\$1\.50/ })).toBeDefined()
     expect(colorsOf(await ui.drawn()).filter(c => !themeKeys.has(c))).toEqual([])
     await ui.unmount()
+  })
+})
+
+describe('/tail theme', () => {
+  const themeRow = (value: string): ConfigRow => ({
+    key: 'theme',
+    label: 'Theme',
+    kind: 'choice',
+    value,
+    provider: { plugin: 'engine', tier: 'core' },
+    isLocked: false,
+  })
+  const RUN_THEME = {
+    command: 'tail',
+    args: 'theme',
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: true, columns: 160 },
+  } as CommandRunInput
+
+  test('switches to the tail-view variant of the current theme and back', async ($, on) => {
+    let theme = 'dark'
+    on('config.list', () => ({ value: [themeRow(theme)] }))
+    on('config.set', (_$, e) => {
+      theme = String(e.value)
+      return { value: e.value }
+    })
+
+    const on1 = await $.command.run(RUN_THEME)
+    expect(theme).toBe('custom:tail-view:dark')
+    expect(on1.text).toContain('tail-view variant')
+
+    const off = await $.command.run(RUN_THEME)
+    expect(theme).toBe('dark')
+    expect(off.text).toContain('back to dark')
+  })
+
+  test('leaves auto to /theme without writing', async ($, on) => {
+    let writes = 0
+    on('config.list', () => ({ value: [themeRow('auto')] }))
+    on('config.set', (_$, e) => {
+      writes += 1
+      return { value: e.value }
+    })
+
+    const ran = await $.command.run(RUN_THEME)
+    expect(writes).toBe(0)
+    expect(ran.text).toContain('/theme')
   })
 })
