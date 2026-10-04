@@ -39,6 +39,7 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 | `/tail-turns`         | list the session's turns and open one in the pane   |
 | `/tail-width <30-80>` | pane width as % of the terminal (default 80, kept)  |
 | `/tail-compact`       | toggle the compact transcript (on by default, kept) |
+| `/tail-icons [set]`   | icon set: `nerd` (default), `unicode` or `ascii`    |
 | `/tail-bar`           | show or hide the info bar                           |
 | `/tail-help`          | list commands and keys                              |
 
@@ -69,8 +70,8 @@ Claude Code paints the pane's frame grey and a plugin cannot change it.
 
 - **Reads** the current session through Claude Code's plugin API: the conversation and its tool
   calls and results, the session's agents, context usage and cost, and the permission mode from
-  the prompt hook. It keeps its own UI state (expanded rows, timings) in the session and two
-  preferences (pane width, compact transcript) in Claude Code's plugin store.
+  the prompt hook. It keeps its own UI state (expanded rows, timings) in the session and three
+  preferences (pane width, compact transcript, icon set) in Claude Code's plugin store.
 - **Runs no programs.** The branch in the info bar is read from the repository's `.git/HEAD`
   (through a worktree's `.git` file when there is one).
 - **Sends nothing out**: no network requests, no telemetry. Everything it reads is drawn in the

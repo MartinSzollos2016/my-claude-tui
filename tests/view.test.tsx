@@ -6,6 +6,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { buildTurns } from '../hooks/model'
 import { renderBar, renderPane, type El } from '../hooks/view'
+import { ICON_SETS } from '../hooks/icons'
 import { C, modelColor } from '../hooks/theme'
 
 type Node = { type: string; props: Record<string, unknown>; children: unknown }
@@ -226,6 +227,35 @@ describe('renderPane', () => {
     expect(glyph(quiet, 't0:o0')).toBe('  ')
   })
 
+  test('the icon set in the data replaces every glyph, the default is Nerd Font', () => {
+    const nerd = text(renderPane(el, base, act))
+    expect(nerd).toContain(ICON_SETS.nerd.robot)
+    const ascii = text(renderPane(el, { ...base, icons: ICON_SETS.ascii, frame: 2 }, act))
+    expect(ascii).not.toContain(ICON_SETS.nerd.robot)
+    expect(ascii).not.toContain(ICON_SETS.nerd.wrench)
+    expect(ascii).toContain(ICON_SETS.ascii.robot)
+    expect(text(byKey(renderPane(el, { ...base, icons: ICON_SETS.ascii }, act), 'status-b1'))).toBe('+ ')
+    expect(text(byKey(renderPane(el, { ...base, icons: ICON_SETS.ascii, frame: 2 }, act), 'status-a1'))).toBe('- ')
+    expect(text(byKey(renderPane(el, { ...base, icons: ICON_SETS.unicode }, act), 'status-b1'))).toBe('✓ ')
+    expect(text(byKey(renderPane(el, { ...base, icons: ICON_SETS.ascii }, act), 'status-e1'))).toBe('x ')
+  })
+
+  test('the info bar draws its glyphs from the chosen set', () => {
+    const bar = (icons?: (typeof ICON_SETS)['nerd']) =>
+      text(
+        renderBar(el, {
+          project: 'tail',
+          git: { branch: 'main' },
+          mode: null,
+          runningAgents: 0,
+          columns: 80,
+          ...(icons ? { icons } : {}),
+        }),
+      )
+    expect(bar()).toContain(ICON_SETS.nerd.branch)
+    expect(bar(ICON_SETS.ascii)).toBe('tail . ^ main')
+  })
+
   test('the trace of a subagent carries status glyphs too', () => {
     const trace = buildTurns(
       [
@@ -350,6 +380,9 @@ describe('renderPane', () => {
       renderPane(el, { ...base, view: 'turns', query: 'zzz', matches: [] }, act),
       renderPane(el, { ...base, view: 'team', members, tasks }, act),
       renderPane(el, { ...base, view: 'team', turns: [] }, act),
+      renderPane(el, { ...base, icons: ICON_SETS.ascii, expanded: open, thinking }, act),
+      renderPane(el, { ...base, icons: ICON_SETS.unicode, view: 'turns', stats: [base.turnStat, undefined] }, act),
+      renderPane(el, { ...base, icons: ICON_SETS.ascii, view: 'team', members, tasks }, act),
     ]
     const allowed: unknown[] = [...Object.values(C), ...['fable', 'opus', 'sonnet', 'haiku'].map(m => modelColor(m))]
     let texts = 0

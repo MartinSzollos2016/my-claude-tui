@@ -80,7 +80,15 @@ describe('session start', () => {
     const { $, world } = fakeEngine({ files: { '/r/.git/HEAD': 'ref: refs/heads/main\n' } })
     await run('session.start', $, { cwd: '/r' }, async e => e)
     await settle()
-    expect(world.commands).toEqual(['tail', 'tail-turns', 'tail-width', 'tail-compact', 'tail-bar', 'tail-help'])
+    expect(world.commands).toEqual([
+      'tail',
+      'tail-turns',
+      'tail-width',
+      'tail-compact',
+      'tail-icons',
+      'tail-bar',
+      'tail-help',
+    ])
     // Opened once, before any width was known: no columns asked for.
     expect(world.opened).toEqual([undefined])
     expect(text(await run('ui.render', $, BAR_EVENT))).toContain('main')
@@ -117,6 +125,20 @@ describe('commands', () => {
     expect(await say($, 'tail-compact')).toContain('off')
     expect(await say($, 'tail-compact')).toContain('on')
     expect(await say($, 'tail-help')).toContain('/tail-turns')
+  })
+
+  test('/tail-icons stores the set, names it without an argument and the pane draws it', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    expect(await say($, 'tail-icons')).toContain('nerd')
+    expect(await say($, 'tail-icons', 'bogus')).toContain('nerd|unicode|ascii')
+    expect(world.store.get('tail-view.icons')).toBeUndefined()
+    expect(await say($, 'tail-icons', 'ascii')).toContain('ascii')
+    expect(world.store.get('tail-view.icons')).toBe('ascii')
+    expect(await say($, 'tail', 'icons')).toContain('ascii')
+    const drawn = text(await draw($))
+    expect(drawn).not.toContain('\u{F167A}')
+    expect(drawn).toContain('+ ')
+    expect(text(await run('ui.render', $, BAR_EVENT))).not.toContain('\uF418')
   })
 
   test('answers /tail in text in VS Code', async () => {

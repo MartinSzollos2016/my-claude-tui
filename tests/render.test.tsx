@@ -121,6 +121,7 @@ const PANE = {
 
 describe('detail pane', () => {
   test('typing in the turn search narrows the list and Enter opens the match', async ($, on) => {
+    mock.store(on)
     const three: SessionMessage[] = [
       ...main,
       { role: 'user', text: 'Now add tests', toolUses: [] },
@@ -149,6 +150,7 @@ describe('detail pane', () => {
   })
 
   test('copies a whole block and says so', async ($, on) => {
+    mock.store(on)
     const lines = Array.from({ length: 500 }, (_, i) => `line ${i}`).join('\n')
     const long: SessionMessage[] = [
       { role: 'user', text: 'run it', toolUses: [] },
@@ -185,6 +187,7 @@ describe('detail pane', () => {
   })
 
   test('reads a finished subagent trace once', async ($, on) => {
+    mock.store(on)
     const done: SessionMessage[] = [
       { role: 'user', text: 'Map it', toolUses: [] },
       {
@@ -224,6 +227,7 @@ describe('detail pane', () => {
   })
 
   test('paints the body with the theme background, full height', async ($, on) => {
+    mock.store(on)
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.model', () => ({ value: 'claude-opus-5-5' }))
     on('agent.list', () => ({ value: [] }))
@@ -244,6 +248,7 @@ describe('detail pane', () => {
   })
 
   test('lists the turn items and drills into a subagent trace', async ($, on) => {
+    mock.store(on)
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.messages', (_$, e) => ({ value: e.agentId === 'agent-1' ? child : main }))
     on('session.model', () => ({ value: 'claude-opus-5-5' }))
@@ -278,6 +283,7 @@ describe('detail pane', () => {
   })
 
   test('never draws terminal escapes from a hostile tool result', async ($, on) => {
+    mock.store(on)
     const hostile: SessionMessage[] = [
       { role: 'user', text: 'fetch it', toolUses: [] },
       {
@@ -310,6 +316,7 @@ describe('detail pane', () => {
   })
 
   test('expands huge single-line results and long outputs without exceeding the text limit', async ($, on) => {
+    mock.store(on)
     const huge: SessionMessage[] = [
       { role: 'user', text: 'x'.repeat(30_000), toolUses: [] },
       {
@@ -349,6 +356,7 @@ describe('detail pane', () => {
   })
 
   test('the whole row is one button that expands and collapses', async ($, on) => {
+    mock.store(on)
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.messages', () => ({ value: main }))
     on('session.model', () => ({ value: 'claude-opus-5-5' }))
@@ -370,6 +378,7 @@ describe('detail pane', () => {
   })
 
   test('frames the command apart from its output, colored by outcome', async ($, on) => {
+    mock.store(on)
     const bash: SessionMessage[] = [
       { role: 'user', text: 'test it', toolUses: [] },
       {
@@ -411,6 +420,7 @@ describe('detail pane', () => {
   })
 
   test('previews a long result and shows it in full on demand', async ($, on) => {
+    mock.store(on)
     const lines = Array.from({ length: 500 }, (_, i) => `line ${i}`).join('\n')
     const long: SessionMessage[] = [
       { role: 'user', text: 'run it', toolUses: [] },
@@ -441,6 +451,7 @@ describe('detail pane', () => {
   })
 
   test('keeps the whole pane under the engine text budget', async ($, on) => {
+    mock.store(on)
     const uses = Array.from({ length: 6 }, (_, i) => ({
       tool_use_id: `h${i}`,
       tool: 'Bash',
@@ -477,6 +488,7 @@ describe('detail pane', () => {
   })
 
   test('lists the turns, newest first, and switches to the one picked', async ($, on) => {
+    mock.store(on)
     const three: SessionMessage[] = [
       ...main,
       { role: 'user', text: 'Now add tests', toolUses: [] },
@@ -524,6 +536,7 @@ describe('detail pane', () => {
   })
 
   test('shows an empty state before the first prompt', async ($, on) => {
+    mock.store(on)
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.messages', () => ({ value: [] }))
     on('session.model', () => ({ value: 'claude-opus-5-5' }))
@@ -538,6 +551,7 @@ describe('detail pane', () => {
 
 describe('info bar', () => {
   test('shows project, context and running agents', async ($, on) => {
+    mock.store(on)
     on('session.root', () => ({ value: '/home/dev/my-claude-tui' }))
     on('session.messages', () => ({ value: [] }))
     on('agent.list', () => ({ value: [{ id: 'x', description: 'd', type: 'Explore', status: 'running' as const }] }))
@@ -669,7 +683,15 @@ describe('commands', () => {
     on('ui.open', () => ({ value: { isPlaced: false as const, reason: 'test' } }))
     on('session.start', (_$, e) => ({ cwd: e.cwd }))
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true } as never)
-    expect(names.sort()).toEqual(['tail', 'tail-bar', 'tail-compact', 'tail-help', 'tail-turns', 'tail-width'])
+    expect(names.sort()).toEqual([
+      'tail',
+      'tail-bar',
+      'tail-compact',
+      'tail-help',
+      'tail-icons',
+      'tail-turns',
+      'tail-width',
+    ])
   })
 
   test('/tail and /tail-turns answer in text where no pane is drawn', async ($, on) => {
@@ -696,9 +718,29 @@ describe('commands', () => {
   test('/tail-help and /tail help list every command', async ($, on) => {
     mock.store(on)
     for (const ran of [await $.command.run(run('tail-help')), await $.command.run(run('tail', 'help'))]) {
-      for (const name of ['/tail-turns', '/tail-width', '/tail-compact', '/tail-bar', '/tail-help'])
+      for (const name of ['/tail-turns', '/tail-width', '/tail-compact', '/tail-icons', '/tail-bar', '/tail-help'])
         expect(ran.text).toContain(name)
     }
+  })
+
+  test('/tail-icons ascii is stored and the pane draws only ASCII glyphs', async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', (_$, e) => ({ value: e.agentId === 'agent-1' ? child : main }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({
+      value: { startedAt: 0, context: { tokens: 46_900, window: 200_000, percent: 23 }, rateLimits: [] },
+    }))
+
+    expect((await $.command.run(run('tail-icons'))).text).toContain('nerd')
+    expect((await $.command.run(run('tail-icons', 'ascii'))).text).toContain('ascii')
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    const rows = textsOf(await ui.drawn()).join('')
+    expect(rows).toContain('+ ')
+    expect(rows).not.toContain('\u{F167A}')
+    expect(rows).not.toContain('✓')
+    await ui.unmount()
   })
 
   test('/tail-width works like its /tail form', async ($, on) => {

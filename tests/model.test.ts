@@ -2,6 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { parseCommand } from '../hooks/commands'
+import { ICON_SETS } from '../hooks/icons'
 import {
   buildTurns,
   chunkMarkdown,
@@ -325,6 +326,8 @@ describe('parseCommand', () => {
     expect(parseCommand('tail', 'nonsense')).toEqual({ sub: 'open', arg: 'nonsense' })
     expect(parseCommand('tail-turns', '')).toEqual({ sub: 'turns', arg: '' })
     expect(parseCommand('tail', 'turns')).toEqual({ sub: 'turns', arg: '' })
+    expect(parseCommand('tail-icons', ' ascii ')).toEqual({ sub: 'icons', arg: 'ascii' })
+    expect(parseCommand('tail', 'icons unicode')).toEqual({ sub: 'icons', arg: 'unicode' })
     expect(parseCommand('other', '')).toBe(undefined)
   })
 })
@@ -397,5 +400,29 @@ describe('itemStatus', () => {
   test('a call ended by the user is interrupted, not an error', () => {
     const stopped = tool({ isError: true, resultText: '[Request interrupted by user for tool use]' })
     expect(itemStatus(stopped, quiet)).toBe('interrupted')
+  })
+})
+
+describe('icon sets', () => {
+  test('every set has the same keys', () => {
+    const keys = Object.keys(ICON_SETS.nerd).sort()
+    expect(Object.keys(ICON_SETS.unicode).sort()).toEqual(keys)
+    expect(Object.keys(ICON_SETS.ascii).sort()).toEqual(keys)
+  })
+
+  test('the ascii set is only ASCII, the unicode set has no Nerd Font private-use glyph', () => {
+    const all = (set: (typeof ICON_SETS)['nerd']) => Object.values(set).flat().join('')
+    expect(all(ICON_SETS.ascii)).toMatch(/^[\x20-\x7e]+$/)
+    expect(all(ICON_SETS.unicode)).not.toMatch(/[\ue000-\uf8ff\u{f0000}-\u{ffffd}]/u)
+    expect(all(ICON_SETS.nerd)).toMatch(/[\ue000-\uf8ff\u{f0000}-\u{ffffd}]/u)
+  })
+
+  test('each glyph is one cell wide in the unicode and ascii sets, the spinner has frames', () => {
+    for (const set of [ICON_SETS.unicode, ICON_SETS.ascii])
+      for (const [key, value] of Object.entries(set))
+        for (const glyph of [value].flat()) expect([...glyph].length, key).toBe(1)
+    expect(ICON_SETS.ascii.spinner).toEqual(['|', '/', '-', '\\'])
+    expect(ICON_SETS.ascii.done).toBe('+')
+    expect(ICON_SETS.ascii.error).toBe('x')
   })
 })
