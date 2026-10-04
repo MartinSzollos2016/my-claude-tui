@@ -1,0 +1,11 @@
+{
+  "name": "tail-view",
+  "version": "0.1.0",
+  "description": "tail-claude's detail view (tool calls, subagent traces) and info bar inside Claude Code",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Martin Szollos",
+    "email": "martin.szollos@gmail.com"
+  },
+  "license": "MIT"
+}
