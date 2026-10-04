@@ -16,6 +16,8 @@ import {
   turnIndexAtStart,
   turnStatFrom,
   enqueueTurn,
+  dropPending,
+  discardStale,
 } from '../hooks/session'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
@@ -175,5 +177,17 @@ describe('pending turn indexes', () => {
     for (let i = 0; i < 100; i++) queue = enqueueTurn(queue, i)
     expect(queue.length).toBeLessThan(100)
     expect(queue.at(-1)).toBe(99)
+  })
+})
+
+describe('pending queue repair', () => {
+  test('dropPending removes the last entry equal to the index', () => {
+    expect(dropPending([3, 4, 3], 3)).toEqual([3, 4])
+    expect(dropPending([3], 9)).toEqual([3])
+  })
+
+  test('discardStale keeps only entries after the last completed turn', () => {
+    expect(discardStale([2, 3, 5], 3)).toEqual([5])
+    expect(discardStale([0], -1)).toEqual([0])
   })
 })

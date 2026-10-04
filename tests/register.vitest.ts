@@ -195,6 +195,50 @@ describe('live data', () => {
     expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('4.0s')
   })
 
+  test('a dropped prompt leaves no pending index behind', async () => {
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'ok' }, async () => ({ drop: 'blocked' }))
+    const rounds: [string, number, SessionMessage[]][] = [
+      ['a', 1_000, [{ role: 'user', text: 'ok', toolUses: [] }]],
+      [
+        'b',
+        9_000,
+        [
+          { role: 'assistant', text: 'x', toolUses: [] },
+          { role: 'user', text: 'ok', toolUses: [] },
+        ],
+      ],
+    ]
+    for (const [id, ms, rows] of rounds) {
+      await run('prompt.submit', $, { text: 'ok' }, async e => e)
+      world.messages = [...world.messages, ...rows]
+      await run('turn.start', $, { text: 'ok', turnId: id }, async e => e)
+      await finish(id, ms, $)
+    }
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('1.0s')
+    expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
+  })
+
+  test('a stale entry from a submit without turn.start is discarded', async () => {
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'ok' }, async e => e)
+    world.messages = [{ role: 'user', text: 'ok', toolUses: [] }]
+    await run('turn.start', $, { text: 'ok', turnId: 'a' }, async e => e)
+    await finish('a', 1_000, $)
+    await run('prompt.submit', $, { text: '/stale' }, async e => e)
+    world.messages = [...world.messages, { role: 'assistant', text: 'x', toolUses: [] }]
+    await run('prompt.submit', $, { text: 'ok' }, async e => e)
+    world.messages = [...world.messages, { role: 'user', text: 'ok', toolUses: [] }]
+    await run('turn.start', $, { text: 'ok', turnId: 'b' }, async e => e)
+    await finish('b', 9_000, $)
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('1.0s')
+    expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
+  })
+
   test('a turn started by a notification falls back to the transcript', async () => {
     const { $, world } = fakeEngine()
     world.messages = [{ role: 'user', text: 'ping', toolUses: [] }]

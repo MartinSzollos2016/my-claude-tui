@@ -94,6 +94,18 @@ export function enqueueTurn(queue: readonly number[], index: number): number[] {
   return [...queue, index].slice(-MAX_PENDING_TURNS)
 }
 
+// The queue without the last entry equal to `index` (a prompt that was dropped).
+export function dropPending(queue: readonly number[], index: number): number[] {
+  const at = queue.lastIndexOf(index)
+  return at < 0 ? [...queue] : [...queue.slice(0, at), ...queue.slice(at + 1)]
+}
+
+// The queue without entries at or below the last completed turn: their
+// turn.start never came, so they would shift every later pairing.
+export function discardStale(queue: readonly number[], lastDone: number): number[] {
+  return queue.filter(i => i > lastDone)
+}
+
 // The oldest pending index, else `fallback` (a turn no submit announced, such
 // as one a notification started).
 export function takeTurnIndex(queue: readonly number[], fallback: number): { index: number; queue: number[] } {
