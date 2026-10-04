@@ -20,8 +20,6 @@ import {
   EMPTY_TURN_TEXT,
   footerLayout,
   footerPads,
-  groupLabel,
-  hoverCard,
   overflowRows,
   pageScroll,
   splitMatch,
@@ -33,6 +31,7 @@ import {
   type TurnThinking,
   type WorkflowState,
 } from './model'
+import { groupLabel, hoverCard } from './model/card'
 import { chunkText, clampText } from './model/clamp'
 import { clampDiff, splitDiff } from './model/diff'
 import {

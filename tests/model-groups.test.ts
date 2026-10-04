@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
-import { groupLabel } from '../hooks/model'
+import { groupLabel } from '../hooks/model/card'
 import { groupRuns } from '../hooks/model/groups'
 import type { Item, ToolItem } from '../hooks/model/types'
 
