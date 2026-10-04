@@ -20,9 +20,14 @@ Requires Claude Code 2.1.289 or newer and a [Nerd Font](https://www.nerdfonts.co
 icons.
 
 ```bash
-git clone https://github.com/MartinSzollos2016/my-claude-tui.git
-claude --plugin-dir my-claude-tui
+claude plugin marketplace add MartinSzollos2016/my-claude-tui
+claude plugin install tail-view@my-claude-tui
 ```
+
+Or in Claude Code: `/plugin` → add the marketplace `MartinSzollos2016/my-claude-tui` → install
+`tail-view`. Update with `claude plugin update tail-view@my-claude-tui`.
+
+To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 
 ## Commands
 
@@ -75,7 +80,8 @@ npm run coverage  # Istanbul coverage of the unit-tested logic (coverage/index.h
 
 `npm run typecheck` needs the plugin API types Claude Code writes to `.claude-plugin/types/`
 when it loads the plugin. The pre-push hook runs `npm run check`, `npm run coverage` and
-`npm audit`; CI runs the same plus gitleaks.
+`npm audit`; CI runs the same plus gitleaks and an install from the marketplace
+(`scripts/smoke-install.sh`).
 
 Coverage (Vitest with Istanbul) measures the unit tests: about 73 % of lines overall and
 95–100 % of the logic and views, with floors enforced in CI and the pre-push hook. The hook
