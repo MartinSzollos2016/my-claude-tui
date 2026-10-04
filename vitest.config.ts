@@ -20,6 +20,16 @@ export default defineConfig({
       include: ['hooks/**/*.{ts,tsx}'],
       reporter: ['text', 'html', 'lcov', 'json-summary'],
       reportsDirectory: 'coverage',
+      // Floors just under the current numbers, so coverage cannot quietly
+      // drop. register.tsx is engine wiring that only the render tests reach.
+      thresholds: {
+        lines: 70,
+        statements: 70,
+        functions: 50,
+        branches: 70,
+        'hooks/{model,theme,commands}.ts': { lines: 98, statements: 98, functions: 98, branches: 90 },
+        'hooks/view.tsx': { lines: 95, statements: 95, functions: 90, branches: 85 },
+      },
     },
   },
 })
