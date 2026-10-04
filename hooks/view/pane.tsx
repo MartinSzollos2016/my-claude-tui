@@ -1,6 +1,7 @@
 // The pane: the header, the view's content in a window of its own scroll, and the
 // pinned footer under it; renderPane is what register.tsx draws.
 import { ICON_SETS } from '../icons'
+import { C, contextColor, modelColor } from '../theme'
 import { contextMeter, formatClock, formatDuration, formatTokens, shortModel } from '../model/format'
 import { clampScroll, contentRows, overflowRows, type ScrollFrame } from '../model/scroll'
 import { reserveSections } from '../model/sections'
@@ -8,7 +9,6 @@ import { EMPTY_TURN_TEXT } from '../model/turn-table'
 import { isAgentRunning, isSubagent } from '../model/turns'
 import type { Turn } from '../model/types'
 import { displayWidth } from '../model/width'
-import { C, contextColor, modelColor } from '../theme'
 import {
   CARD_BUDGET,
   drawn,
@@ -24,8 +24,9 @@ import {
   type PaneParts,
 } from './context'
 import { focusChord, footerRowsOf, renderFooter, STATUS_INSET } from './footer'
-import { renderRows, renderThinking } from './items'
+import { renderRows } from './items'
 import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, type El } from './kit'
+import { renderThinking } from './row'
 import { renderTeam } from './team'
 import { renderTurnList } from './turn-list'
 

@@ -1,10 +1,10 @@
 // The info bar above the prompt: project, branch, mode, agents, workflow, context and cost.
 import { ICON_SETS, type Icons } from '../icons'
+import { C, contextColor, modeColor } from '../theme'
+import type { GitInfo } from '../../types'
 import type { WorkflowState } from '../model/activity'
 import { contextMeter, formatTokens, shortMode } from '../model/format'
-import { C, contextColor, modeColor } from '../theme'
 import { BAR_METER_COLUMNS, METER_CELLS, type El } from './kit'
-import type { GitInfo } from '../../types'
 
 type BarData = {
   workflow?: WorkflowState
