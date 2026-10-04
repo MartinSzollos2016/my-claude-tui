@@ -862,7 +862,13 @@ export function thinkingCounts(messages: readonly ApiLike[]): TurnThinking[] {
   }
 
   for (const m of messages) {
-    const blocks = Array.isArray(m.content) ? m.content : []
+    if (m === null || typeof m !== 'object') continue
+    const blocks =
+      typeof m.content === 'string'
+        ? [{ type: 'text', text: m.content }]
+        : Array.isArray(m.content)
+          ? m.content.filter(block => block !== null && typeof block === 'object')
+          : []
     if (m.role === 'user') {
       const isResult = blocks.some(block => block.type === 'tool_result')
       const hasText = blocks.some(block => {

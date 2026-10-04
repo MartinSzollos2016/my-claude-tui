@@ -300,6 +300,46 @@ describe('live data', () => {
 })
 
 describe('detail pane', () => {
+  test('a failing API read leaves the pane drawn without a thinking count', async () => {
+    const { $ } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'Failing read one', toolUses: [] },
+        { role: 'assistant', text: 'ok', toolUses: [] },
+      ],
+    })
+    const original = $.session.messages
+    ;($.session as { messages: unknown }).messages = async (args?: { as?: 'api' }) => {
+      if (args?.as === 'api') throw new Error('boom')
+      return original(args as never)
+    }
+    const drawn = text(await draw($))
+    expect(drawn).toContain('Failing read one')
+    expect(drawn).not.toContain('\u{F09D1}')
+  })
+
+  test('pairs thinking from the end when the API form is shorter, refetches on a new fingerprint, expand all opens it', async () => {
+    const api = [
+      { role: 'user', content: [{ type: 'text', text: 'Second misaligned' }] },
+      { role: 'assistant', content: [{ type: 'thinking', thinking: 'Only late thought', signature: 's' }] },
+    ]
+    const { $, world } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'First misaligned', toolUses: [] },
+        { role: 'assistant', text: 'one', toolUses: [] },
+        { role: 'user', text: 'Second misaligned', toolUses: [] },
+        { role: 'assistant', text: 'two', toolUses: [] },
+      ],
+      api,
+    })
+    expect(text(await draw($))).toContain('\u{F09D1} 1')
+    await press($, 'nav-expand')
+    expect(text(await draw($))).toContain('Only late thought')
+    world.messages.push({ role: 'user', text: 'Third misaligned', toolUses: [] })
+    api.push({ role: 'user', content: [{ type: 'text', text: 'Third misaligned' }] })
+    expect(text(await draw($))).not.toContain('\u{F09D1} 1')
+    expect(world.calls.filter(call => call === 'messages:api').length).toBe(2)
+  })
+
   test('counts the shown turn thinking from the API form, read once per transcript', async () => {
     // A transcript of its own: the thinking cache is keyed by the transcript's
     // fingerprint and lives in the module across tests.

@@ -260,3 +260,17 @@ describe('thinkingCounts', () => {
     expect(alignFromEnd(['b', 'c'], 3, 0)).toBe(undefined)
   })
 })
+
+describe('thinkingCounts, malformed input', () => {
+  test('string content opens a turn; null blocks and messages are skipped', () => {
+    const api = [
+      { role: 'user', content: 'Plain prompt' },
+      null,
+      { role: 'assistant', content: [null, 'x', { type: 'thinking', thinking: 'a' }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] },
+      { role: 'assistant', content: [{ type: 'redacted_thinking', data: 'z' }] },
+      { role: 'user', content: '   ' },
+    ] as unknown as ApiLike[]
+    expect(thinkingCounts(api)).toEqual([{ count: 2, text: 'a' }])
+  })
+})

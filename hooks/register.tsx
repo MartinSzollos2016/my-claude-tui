@@ -105,7 +105,9 @@ let thinkingCache: Memo<TurnThinking[]> | undefined
 // transcript's fingerprint moved.
 async function turnThinking($: EngineInterface, key: string): Promise<TurnThinking[]> {
   if (thinkingCache === undefined || thinkingCache.key !== key) {
-    const api = await $.session.messages({ as: 'api' })
+    // An auxiliary read: a failure shows no counts and is not cached.
+    const api = await $.session.messages({ as: 'api' }).catch(() => undefined)
+    if (api === undefined) return []
     thinkingCache = { key, value: thinkingCounts(api) }
   }
   return thinkingCache.value
@@ -485,6 +487,8 @@ export const register: Register = on => {
     const thinkingByTurn = view === 'detail' && turn ? await turnThinking($, turnsMemo.key) : []
     const thinking = alignFromEnd(thinkingByTurn, turns.length, selected)
 
+    const thinkingIds = turn && thinking && thinking.text !== '' ? [`t${turn.index}:thinking`] : []
+
     return renderPane(
       el,
       {
@@ -518,7 +522,7 @@ export const register: Register = on => {
         latest: () => step(null).catch(ignore),
         expandAll: () =>
           update($, expanded, ids =>
-            [...new Set([...ids, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED),
+            [...new Set([...ids, ...thinkingIds, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED),
           ).catch(ignore),
         collapseAll: () => {
           update($, expanded, () => []).catch(ignore)
