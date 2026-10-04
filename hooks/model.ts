@@ -741,6 +741,21 @@ function outputFormat(item: ToolItem): SectionFormat {
   return { kind: 'text' }
 }
 
+const ERROR_LINE = /error|fail|panic|exception/i
+
+// The line of an error output worth reading first: the first one that names
+// an error, else the first non-empty one; '' when there is none. Trimmed.
+export function firstErrorLine(text: string): string {
+  let first = ''
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (line === '') continue
+    if (ERROR_LINE.test(line)) return line
+    if (first === '') first = line
+  }
+  return first
+}
+
 export function toolSections(item: ToolItem): Section[] {
   const sections = inputSections(item)
   const result = item.resultText?.trimEnd()

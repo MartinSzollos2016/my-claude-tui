@@ -19,6 +19,7 @@ import {
   formatClock,
   EMPTY_TURN_TEXT,
   formatDuration,
+  firstErrorLine,
   fitPath,
   formatTokens,
   isAgentRunning,
@@ -760,19 +761,38 @@ function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions) {
   const { Box } = el
   return (
     <Box flexDirection="column" marginLeft={4} marginBottom={1}>
-      {toolSections(item).map(section =>
-        renderFrame(
+      {toolSections(item).map(section => {
+        const id = `${item.id}:${section.kind}`
+        const preview = renderLong(el, id, section.body, longSpec(section), data, act)
+        const isError = section.kind === 'error'
+        return renderFrame(
           el,
-          `${item.id}:${section.kind}`,
-          section.title,
+          id,
+          isError ? `${data.icons.error} ${section.title}` : section.title,
           section.meta,
           section.isPathMeta === true,
           TONE[section.kind],
-          renderLong(el, `${item.id}:${section.kind}`, section.body, longSpec(section), data, act),
+          isError ? withFirstError(el, section.body, preview, data) : preview,
           section.body,
           act,
-        ),
-      )}
+        )
+      })}
+    </Box>
+  )
+}
+
+// An error's first telling line, in red, above the preview of its output.
+function withFirstError(el: El, body: string, preview: RenderElement, data: Ctx) {
+  const { Box, Text } = el
+  const line = truncate(firstErrorLine(body), Math.max(8, data.columns - 12))
+  if (line === '' || line.length > data.budget.left) return preview
+  data.budget.left -= line.length
+  return (
+    <Box flexDirection="column">
+      <Text color={C.error} wrap="truncate-end">
+        {line}
+      </Text>
+      {preview}
     </Box>
   )
 }
