@@ -2,7 +2,6 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { parseCommand } from '../hooks/commands'
-import { statFor } from '../hooks/register'
 import {
   buildTurns,
   chunkMarkdown,
@@ -313,16 +312,6 @@ describe('formatters', () => {
     expect(gitDirFrom('/r', 'gitdir: /r/.git/worktrees/wt\n')).toBe('/r/.git/worktrees/wt')
     expect(gitDirFrom('/r/wt', 'gitdir: ../.git/worktrees/wt')).toBe('/r/wt/../.git/worktrees/wt')
     expect(gitDirFrom('/r', 'nonsense')).toBe(null)
-  })
-
-  test('statFor picks the latest stat for the turn prompt', () => {
-    const turn = buildTurns(transcript)[1]!
-    const stats = [
-      { prompt: 'Thanks', durationMs: 1, endedAt: 0 },
-      { prompt: 'Thanks', durationMs: 2, endedAt: 0 },
-    ]
-    expect(statFor(stats, turn)?.durationMs).toBe(2)
-    expect(statFor(stats, undefined)).toBe(undefined)
   })
 })
 
