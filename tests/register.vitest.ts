@@ -286,10 +286,20 @@ describe('live data', () => {
     world.messages = [...world.messages, { role: 'user', text: 'ok', toolUses: [] }]
     await run('turn.start', $, { text: 'ok', turnId: 'b' }, async e => e)
     await finish('b', 9_000, $)
+    // The stale entry is still queued: the third turn must not take it.
+    await run('prompt.submit', $, { text: 'ok' }, async e => e)
+    world.messages = [
+      ...world.messages,
+      { role: 'assistant', text: 'y', toolUses: [] },
+      { role: 'user', text: 'ok', toolUses: [] },
+    ]
+    await run('turn.start', $, { text: 'ok', turnId: 'c' }, async e => e)
+    await finish('c', 5_000, $)
     await press($, 'nav-turns')
     const list = await draw($)
     expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('1.0s')
     expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
+    expect(String(byKey(list, 'turn-2')?.props['label'])).toContain('5.0s')
   })
 
   test('a stat does not move to another turn when old rows leave the window', async () => {
