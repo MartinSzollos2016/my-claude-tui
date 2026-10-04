@@ -73,7 +73,12 @@ describe('tailThemeAdvice', () => {
     )
     expect(tailThemeAdvice('dark', ['dark', 'custom:tail-view:dark'])).toContain('"Tail Dark"')
     expect(tailThemeAdvice('dark')).toContain('"Tail Dark"')
-    expect(tailThemeAdvice('custom:tail-view:light', ['light'])).toContain('Already using "Tail Light"')
+    expect(tailThemeAdvice('custom:tail-view:light', ['light'])).toBe(
+      'Tail themes are not loaded in this session; run /reload-plugins or reinstall tail-view.',
+    )
+    expect(tailThemeAdvice('custom:tail-view:light', ['light', 'custom:tail-view:light'])).toContain(
+      'Already using "Tail Light"',
+    )
   })
 
   test('lists the variants for auto and other custom themes', () => {

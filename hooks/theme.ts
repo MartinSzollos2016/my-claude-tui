@@ -156,11 +156,12 @@ const NOT_LOADED = 'Tail themes are not loaded in this session; run /reload-plug
 // known and hold no tail-view variant, the themes did not load and naming
 // one would send the person looking for nothing.
 export function tailThemeAdvice(current: string, options?: readonly string[]): string {
+  // A tail theme still selected but no longer loaded is not in use.
+  if (options !== undefined && !options.some(option => option.startsWith(TAIL_THEME_PREFIX))) return NOT_LOADED
   if (current.startsWith(TAIL_THEME_PREFIX)) {
     const base = current.slice(TAIL_THEME_PREFIX.length)
     if (isBuiltinTheme(base)) return `Already using "${TAIL_THEMES[base]}".`
   }
-  if (options !== undefined && !options.some(option => option.startsWith(TAIL_THEME_PREFIX))) return NOT_LOADED
   if (isBuiltinTheme(current)) {
     return `Pick "${TAIL_THEMES[current]}" in /theme: ${current} with a ${current.startsWith('dark') ? 'black' : 'white'} pane column and frame.`
   }
