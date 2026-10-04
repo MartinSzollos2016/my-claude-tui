@@ -37,6 +37,7 @@ import {
   type ToolItem,
   type Turn,
   type TurnMatch,
+  type TurnThinking,
 } from './model'
 import { C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 
@@ -63,6 +64,7 @@ const G = {
   book: '\uE28B',
   web: '\u{F059F}',
   output: '\u{F0182}',
+  thinking: '\u{F09D1}',
   clock: '\uF017',
   token: '\uEDE8',
   collapsed: '\uF054',
@@ -100,6 +102,8 @@ function itemIcon(item: Item): { glyph: string; color?: ThemeKey } {
 export type Trace = { items: Item[] } | { denied: string }
 
 type PaneData = {
+  // Thinking of the shown turn: how many blocks, and their readable text.
+  thinking?: TurnThinking
   turns: Turn[]
   selected: number
   expanded: ReadonlySet<string>
@@ -198,6 +202,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       )}
       {renderNav(el, data, act)}
       <Box flexDirection="column" marginTop={1}>
+        {renderThinking(el, turn, data, act)}
         {turn.items.length === 0 && (
           <Text dimColor>{data.isWorking && data.isLatest ? 'Working…' : EMPTY_TURN_TEXT}</Text>
         )}
@@ -318,6 +323,9 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
         {turn.toolCount > 0 && <Text dimColor>{`${G.wrench} ${turn.toolCount}  `}</Text>}
         {turn.outputCount > 0 && <Text color={C.accent}>{G.output} </Text>}
         {turn.outputCount > 0 && <Text dimColor>{`${turn.outputCount}  `}</Text>}
+        {data.thinking !== undefined && data.thinking.count > 0 && (
+          <Text dimColor>{`${G.thinking} ${data.thinking.count}  `}</Text>
+        )}
         {subagents.map(item => (
           <Text color={isAgentRunning(data.agents.get(item.agentId)) ? C.ongoing : C.accent}>{`${G.robot} `}</Text>
         ))}
@@ -351,6 +359,40 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
       <Button key="nav-search" plain hotkey="s" label="search" onPress={act.focusSearch} />
       <Button key="nav-expand" plain hotkey="e" label="expand all" onPress={act.expandAll} />
       <Button key="nav-collapse" plain hotkey="c" label="collapse" onPress={act.collapseAll} />
+    </Box>
+  )
+}
+
+// The turn's thinking as one row above the items, when any of it is
+// readable; expanded, it reads as Markdown like the model's output.
+function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
+  const { Box, Button, Text } = el
+  const thinking = data.thinking
+  if (thinking === undefined || thinking.text === '') return undefined
+  const id = `t${turn.index}:thinking`
+  const isOpen = data.expanded.has(id)
+  const label = truncate(`${'Thinking'.padEnd(12)} - ${thinking.text}`, Math.max(8, data.columns - 8))
+  return (
+    <Box key={`item-${id}`} flexDirection="column">
+      <Box flexDirection="row">
+        <Text dimColor={!isOpen}>{`${isOpen ? G.expanded : G.collapsed} `}</Text>
+        <Text color={C.accent}>{`${G.thinking} `}</Text>
+        <Button key={id} plain label={label} onPress={() => act.toggle(id)} />
+      </Box>
+      {isOpen && (
+        <Box flexDirection="column" marginLeft={4} marginBottom={1}>
+          {renderFrame(
+            el,
+            id,
+            'thinking',
+            undefined,
+            C.accent,
+            renderLong(el, id, thinking.text, { kind: 'markdown' }, data, act),
+            thinking.text,
+            act,
+          )}
+        </Box>
+      )}
     </Box>
   )
 }

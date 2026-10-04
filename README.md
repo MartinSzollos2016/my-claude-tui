@@ -5,7 +5,7 @@
 A Claude Code plugin that brings the detail view and info bar of
 [tail-claude](https://github.com/kylesnowschwartz/tail-claude) into Claude Code.
 
-- **Detail pane**: the current turn as rows (model output, tool calls, subagents with their
+- **Detail pane**: the current turn as rows (thinking, model output, tool calls, subagents with their
   execution trace). Expanding a tool call shows its input and its output in separate frames.
 - **Compact transcript**: tool calls and results take one line each in the conversation; the
   detail is in the pane.

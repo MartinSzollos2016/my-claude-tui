@@ -127,6 +127,22 @@ const act = {
 }
 
 describe('renderPane', () => {
+  test('the header counts thinking blocks and the Thinking row opens its text', () => {
+    const quiet = renderPane(el, { ...base, thinking: { count: 3, text: '' } }, act)
+    expect(text(quiet)).toContain('\u{F09D1} 3')
+    expect(byKey(quiet, 't0:thinking')).toBeUndefined()
+
+    const thinking = { count: 1, text: 'Plan the fix' }
+    const tree = renderPane(el, { ...base, thinking }, act)
+    expect(String(byKey(tree, 't0:thinking')?.props['label'])).toContain('Thinking')
+    ;(byKey(tree, 't0:thinking')?.props['onPress'] as () => void)()
+    expect(calls).toContain('toggle:t0:thinking')
+
+    const open = renderPane(el, { ...base, thinking, expanded: new Set(['t0:thinking']) }, act)
+    expect(nodes(open).some(n => n.type === 'Markdown' && n.props['text'] === 'Plan the fix')).toBe(true)
+    expect(byKey(open, 'copy:t0:thinking')).toBeDefined()
+  })
+
   test('header, prompt, navigation and one row per item', () => {
     const tree = renderPane(el, base, act)
     const all = text(tree)

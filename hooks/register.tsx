@@ -15,6 +15,7 @@ import type {
 
 import type { AgentStat } from '../types'
 import {
+  alignFromEnd,
   buildTurns,
   compactCall,
   gitDirFrom,
@@ -28,6 +29,7 @@ import {
   sanitizeText,
   searchTurns,
   shortPath,
+  thinkingCounts,
   traceItems,
   turnListText,
   turnsKey,
@@ -35,6 +37,7 @@ import {
   type Item,
   type Turn,
   type TurnMatch,
+  type TurnThinking,
 } from './model'
 import { COMMANDS, helpText, parseCommand } from './commands'
 import {
@@ -96,6 +99,17 @@ async function refreshGit($: EngineInterface): Promise<void> {
 // Module-local caches: a reload starts them over, which costs one rebuild.
 let turnsCache: Memo<Turn[]> | undefined
 let searchCache: Memo<TurnMatch[]> | undefined
+let thinkingCache: Memo<TurnThinking[]> | undefined
+
+// Thinking per turn from the Messages API form, read again only when the
+// transcript's fingerprint moved.
+async function turnThinking($: EngineInterface, key: string): Promise<TurnThinking[]> {
+  if (thinkingCache === undefined || thinkingCache.key !== key) {
+    const api = await $.session.messages({ as: 'api' })
+    thinkingCache = { key, value: thinkingCounts(api) }
+  }
+  return thinkingCache.value
+}
 
 // The session's turns, rebuilt only when the transcript's fingerprint moved.
 async function currentTurns($: EngineInterface): Promise<Memo<Turn[]>> {
@@ -468,6 +482,9 @@ export const register: Register = on => {
     const isSearching = view === 'turns' && query.trim() !== ''
     if (isSearching) searchCache = memo(searchCache, `${turnsMemo.key}\n${query}`, () => searchTurns(turns, query))
 
+    const thinkingByTurn = view === 'detail' && turn ? await turnThinking($, turnsMemo.key) : []
+    const thinking = alignFromEnd(thinkingByTurn, turns.length, selected)
+
     return renderPane(
       el,
       {
@@ -479,6 +496,7 @@ export const register: Register = on => {
         sessionModel: await $.session.model(),
         contextPercent: usage.context.percent,
         isLatest: selected === latest,
+        thinking,
         isWorking: await read($, isWorking),
         now: await $.clock.now(),
         frame,
