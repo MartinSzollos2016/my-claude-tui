@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
-import { gitDirFrom, parseGitHead } from '../hooks/model'
 import { chunkText, clampText } from '../hooks/model/clamp'
 import {
   contextMeter,
@@ -10,6 +9,7 @@ import {
   shortModel,
   treePrefix,
 } from '../hooks/model/format'
+import { gitDirFrom, parseGitHead } from '../hooks/model/git'
 import { sanitizePrompt } from '../hooks/model/sanitize'
 
 describe('formatters', () => {

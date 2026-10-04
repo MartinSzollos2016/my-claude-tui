@@ -40,15 +40,7 @@ import {
 } from './session'
 import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
-import {
-  engineScroll,
-  gitDirFrom,
-  parseGitHead,
-  scrollToRow,
-  stepCursor,
-  type EngineScroll,
-  type ScrollFrame,
-} from './model'
+import { engineScroll, scrollToRow, stepCursor, type EngineScroll, type ScrollFrame } from './model'
 import {
   callInput,
   compactCall,
@@ -62,6 +54,7 @@ import {
 } from './model/activity'
 import { cursorRows, rowText } from './model/cursor'
 import { engineDuration } from './model/format'
+import { gitDirFrom, parseGitHead } from './model/git'
 import { groupRuns } from './model/groups'
 import { turnListText, turnText } from './model/reports'
 import { sanitizePrompt, sanitizeText } from './model/sanitize'
