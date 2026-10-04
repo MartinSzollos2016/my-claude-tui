@@ -2,12 +2,18 @@
 // tests/coverage/engine.ts: the same paths tests/render.test.tsx drives in
 // the real engine, here measured by coverage.
 import type { ConfigRow, SessionMessage } from 'claude-code'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { register } from '../hooks/register'
 import { BAR_EVENT, byKey, fakeEngine, hooksOf, PANE_EVENT, settle, text } from './coverage/engine'
 
-const run = hooksOf(register)
+// register.tsx keeps module-level state (pending turns, caches, the ticker):
+// each test gets a fresh copy of the module so none of it leaks between tests.
+let run: ReturnType<typeof hooksOf>
+beforeEach(async () => {
+  vi.resetModules()
+  const { register } = await import('../hooks/register')
+  run = hooksOf(register)
+})
 
 const main: SessionMessage[] = [
   { role: 'user', text: 'Fix the bug', toolUses: [] },
@@ -159,7 +165,6 @@ describe('live data', () => {
       ],
     })
     await run('prompt.submit', $, { text: 'Run review' }, async e => e)
-    await run('turn.start', $, { text: 'Run review', turnId: 'wf' }, async e => e)
     let release = () => undefined as unknown
     const workflow = run(
       'tool.call',
@@ -179,7 +184,6 @@ describe('live data', () => {
     expect(text(await run('ui.render', $, BAR_EVENT))).toContain('workflow running · 2 agents')
     release()
     await workflow
-    await finish('wf', 1, $)
   })
 
   const done = { answer: '', isAborted: false, reason: 'answer' }
