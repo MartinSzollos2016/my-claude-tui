@@ -241,6 +241,13 @@ async function noteTurnStart($: EngineInterface, turnId: string, text: string): 
   }
 }
 
+// A dropped or failed submit: no turn.start (nor turn.complete) follows, so
+// its index must not stay queued and the session is as busy as before.
+async function undoSubmit($: EngineInterface, pushed: number | undefined, wasWorking: boolean): Promise<void> {
+  if (pushed !== undefined) pendingTurns = dropPending(pendingTurns, pushed)
+  await update($, isWorking, () => wasWorking)
+}
+
 function stopTicker() {
   ticker?.cancel()
   ticker = undefined
@@ -431,12 +438,18 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     lastPrompt = sanitizePrompt(e.text.trim())
     const pushed = e.turnId === undefined ? await notePrompt($) : undefined
+    const wasWorking = await read($, isWorking)
     await update($, isWorking, () => true)
     await update($, selectedTurn, () => null)
     startTicker($)
-    const result = await next(e)
-    // Dropped: no turn.start will follow, so its index must not stay queued.
-    if (pushed !== undefined && 'drop' in result) pendingTurns = dropPending(pendingTurns, pushed)
+    let result
+    try {
+      result = await next(e)
+    } catch (err) {
+      await undoSubmit($, pushed, wasWorking)
+      throw err
+    }
+    if (result.drop !== undefined) await undoSubmit($, pushed, wasWorking)
     return result
   })
 
