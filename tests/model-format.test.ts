@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
-import { chunkText, clampText, gitDirFrom, parseGitHead, sanitizePrompt } from '../hooks/model'
+import { chunkText, clampText, gitDirFrom, parseGitHead } from '../hooks/model'
 import {
   contextMeter,
   engineDuration,
@@ -9,6 +9,7 @@ import {
   shortModel,
   treePrefix,
 } from '../hooks/model/format'
+import { sanitizePrompt } from '../hooks/model/sanitize'
 
 describe('formatters', () => {
   test('shortModel', () => {
