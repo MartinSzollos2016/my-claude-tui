@@ -1,0 +1,8 @@
+{
+  "name": "tail-view-ci-tools",
+  "private": true,
+  "description": "Pinned Claude Code for CI: the engine the plugin API types and tests are written for",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.289"
+  }
+}
