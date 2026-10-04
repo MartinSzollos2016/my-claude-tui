@@ -11,9 +11,22 @@ export type CommandSpec = {
 }
 
 export const COMMANDS: readonly CommandSpec[] = [
-  { name: 'tail', description: 'Open the tail-view detail pane (tool calls, subagents)', argumentHint: '[bar|compact|width N|theme|help]' },
-  { name: 'tail-width', description: 'Set the detail pane width as a share of the terminal (30-80 %)', argumentHint: '<30-80>', sub: 'width' },
-  { name: 'tail-theme', description: 'Name the tail-view theme with a black/white pane frame for /theme', sub: 'theme' },
+  {
+    name: 'tail',
+    description: 'Open the tail-view detail pane (tool calls, subagents)',
+    argumentHint: '[bar|compact|width N|theme|help]',
+  },
+  {
+    name: 'tail-width',
+    description: 'Set the detail pane width as a share of the terminal (30-80 %)',
+    argumentHint: '<30-80>',
+    sub: 'width',
+  },
+  {
+    name: 'tail-theme',
+    description: 'Name the tail-view theme with a black/white pane frame for /theme',
+    sub: 'theme',
+  },
   { name: 'tail-compact', description: 'Toggle one-line tool results in the transcript', sub: 'compact' },
   { name: 'tail-bar', description: 'Show or hide the tail-view info bar above the prompt', sub: 'bar' },
   { name: 'tail-help', description: 'List the tail-view commands and pane keys', sub: 'help' },
@@ -33,7 +46,9 @@ export function parseCommand(command: string, args: string): { sub: Subcommand |
 
 export function helpText(): string {
   const width = Math.max(...COMMANDS.map(c => `/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''}`.length))
-  const lines = COMMANDS.map(c => `  ${`/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''}`.padEnd(width)}  ${c.description}`)
+  const lines = COMMANDS.map(
+    c => `  ${`/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''}`.padEnd(width)}  ${c.description}`,
+  )
   return [
     'tail-view commands:',
     ...lines,

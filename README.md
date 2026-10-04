@@ -8,17 +8,18 @@ A Claude Code mod that brings [tail-claude](https://github.com/kylesnowschwartz/
   An expanded tool call shows **what went in apart from what came out**, each
   in a rounded frame colored by the theme:
 
-  | Frame | Shows | Color (theme key) |
-  |---|---|---|
-  | `$ command` / query | Bash command, Grep/Glob pattern, Web URL or query | `permission` |
-  | read / write / input / todos | file path, written file (highlighted by extension), JSON input, todo list | `suggestion` |
-  | diff | Edit as `-`/`+` diff | `autoAccept` |
-  | output | result, with `ok · N lines` | `success` |
-  | error | failed result | `error` |
+  | Frame                        | Shows                                                                     | Color (theme key) |
+  | ---------------------------- | ------------------------------------------------------------------------- | ----------------- |
+  | `$ command` / query          | Bash command, Grep/Glob pattern, Web URL or query                         | `permission`      |
+  | read / write / input / todos | file path, written file (highlighted by extension), JSON input, todo list | `suggestion`      |
+  | diff                         | Edit as `-`/`+` diff                                                      | `autoAccept`      |
+  | output                       | result, with `ok · N lines`                                               | `success`         |
+  | error                        | failed result                                                             | `error`           |
 
   Subagent rows drill into the agent's **Execution Trace** (nested,
   expandable). Header: model, tool/output counts, subagent icons, tokens,
   ctx %, duration.
+
 - **Layout**: the pane asks for **60 %** of the terminal (`/tail width 30–80`
   sets the share, kept across sessions; a width you drag the dock to wins),
   and the transcript on the left stays a **conversation**: tool results are
@@ -54,9 +55,9 @@ The pane's column and frame are painted by Claude Code itself with the
 therefore ships a variant of each built-in theme in `themes/` that overrides
 only that key (black on dark themes, white on light ones):
 
-| Built-in | tail-view variant |
-|---|---|
-| `dark`, `dark-daltonized`, `dark-ansi` | `Tail Dark …` (`custom:tail-view:dark…`) |
+| Built-in                                  | tail-view variant                          |
+| ----------------------------------------- | ------------------------------------------ |
+| `dark`, `dark-daltonized`, `dark-ansi`    | `Tail Dark …` (`custom:tail-view:dark…`)   |
 | `light`, `light-daltonized`, `light-ansi` | `Tail Light …` (`custom:tail-view:light…`) |
 
 Claude Code only lets plugins set the built-in themes, so pick the variant
@@ -76,24 +77,24 @@ in `/theme`; `/tail theme` names the one matching your current theme.
 Each command shows up in the slash menu; `/tail <sub>` works too
 (`/tail width 70`, `/tail help`).
 
-| Command | What it does |
-|---|---|
-| `/tail` | open the detail pane at its width share |
-| `/tail-width <30-80>` | pane width as % of the terminal, kept across sessions |
-| `/tail-theme` | name the `Tail …` theme matching yours, to pick in `/theme` |
-| `/tail-compact` | toggle one-line tool results in the transcript |
-| `/tail-bar` | show or hide the info bar above the prompt |
-| `/tail-help` | list the commands and pane keys |
+| Command               | What it does                                                |
+| --------------------- | ----------------------------------------------------------- |
+| `/tail`               | open the detail pane at its width share                     |
+| `/tail-width <30-80>` | pane width as % of the terminal, kept across sessions       |
+| `/tail-theme`         | name the `Tail …` theme matching yours, to pick in `/theme` |
+| `/tail-compact`       | toggle one-line tool results in the transcript              |
+| `/tail-bar`           | show or hide the info bar above the prompt                  |
+| `/tail-help`          | list the commands and pane keys                             |
 
 ## Keys (pane focused: `/tail`, or ctrl+x tab)
 
-| Key | Action |
-|-----|--------|
-| Tab / shift+Tab | move between rows |
+| Key                    | Action                                     |
+| ---------------------- | ------------------------------------------ |
+| Tab / shift+Tab        | move between rows                          |
 | Enter / click on a row | expand / collapse row, drill into subagent |
-| `p` / `n` / `l` | previous / next / latest turn |
-| `e` / `c` | expand all / collapse all |
-| Esc | back to the prompt |
+| `p` / `n` / `l`        | previous / next / latest turn              |
+| `e` / `c`              | expand all / collapse all                  |
+| Esc                    | back to the prompt                         |
 
 ## Requirements
 

@@ -10,7 +10,11 @@ function colorsOf(node: unknown, found: string[] = []): string[] {
   if (Array.isArray(node)) {
     for (const child of node) colorsOf(child, found)
   } else if (node !== null && typeof node === 'object') {
-    const { props, hover, children } = node as { props?: Record<string, unknown>; hover?: Record<string, unknown>; children?: unknown }
+    const { props, hover, children } = node as {
+      props?: Record<string, unknown>
+      hover?: Record<string, unknown>
+      children?: unknown
+    }
     for (const source of [props, hover]) {
       for (const key of ['color', 'backgroundColor', 'borderColor']) {
         if (typeof source?.[key] === 'string') found.push(source[key] as string)
@@ -21,7 +25,13 @@ function colorsOf(node: unknown, found: string[] = []): string[] {
   return found
 }
 
-type Node = { type?: string; key?: string; props?: Record<string, unknown>; hover?: { scope?: string }; children?: unknown }
+type Node = {
+  type?: string
+  key?: string
+  props?: Record<string, unknown>
+  hover?: { scope?: string }
+  children?: unknown
+}
 
 // Every framed Box: its border color and the text drawn inside it.
 function framesOf(node: unknown, found: { color: string; text: string }[] = []): { color: string; text: string }[] {
@@ -74,14 +84,25 @@ const main: SessionMessage[] = [
     text: 'Looking.',
     toolUses: [
       { tool_use_id: 'r1', tool: 'Read', input: { file_path: '/a/b/main.go' }, text: 'package main' },
-      { tool_use_id: 'a1', tool: 'Agent', input: { subagent_type: 'Explore', description: 'Find callers' }, agentId: 'agent-1', text: 'done', durationMs: 4200 },
+      {
+        tool_use_id: 'a1',
+        tool: 'Agent',
+        input: { subagent_type: 'Explore', description: 'Find callers' },
+        agentId: 'agent-1',
+        text: 'done',
+        durationMs: 4200,
+      },
     ],
   },
 ]
 
 const child: SessionMessage[] = [
   { role: 'user', text: 'Find callers', toolUses: [] },
-  { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'g1', tool: 'Grep', input: { pattern: 'Run(' }, text: '3 matches' }] },
+  {
+    role: 'assistant',
+    text: '',
+    toolUses: [{ tool_use_id: 'g1', tool: 'Grep', input: { pattern: 'Run(' }, text: '3 matches' }],
+  },
 ]
 
 const PANE = {
@@ -121,10 +142,12 @@ describe('detail pane', () => {
 
   test('lists the turn items and drills into a subagent trace', async ($, on) => {
     mock.clock(on, { now: 1_700_000_000_000 })
-    on('session.messages', (_$, e) => ({ value: (e.agentId === 'agent-1' ? child : main) }))
+    on('session.messages', (_$, e) => ({ value: e.agentId === 'agent-1' ? child : main }))
     on('session.model', () => ({ value: 'claude-opus-5-5' }))
     on('agent.list', () => ({ value: [] }))
-    on('session.usage', () => ({ value: ({ startedAt: 0, context: { tokens: 46_900, window: 200_000, percent: 23 }, rateLimits: [] }) }))
+    on('session.usage', () => ({
+      value: { startedAt: 0, context: { tokens: 46_900, window: 200_000, percent: 23 }, rateLimits: [] },
+    }))
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
@@ -157,7 +180,14 @@ describe('detail pane', () => {
       {
         role: 'assistant',
         text: 'done\u001b]52;c;cm0gLXJmIH4=\u0007',
-        toolUses: [{ tool_use_id: 'w1', tool: 'WebFetch', input: { url: 'https://x.test/a' }, text: 'page\u001b[2J\u001b[1;1H‮gnp.exe' }],
+        toolUses: [
+          {
+            tool_use_id: 'w1',
+            tool: 'WebFetch',
+            input: { url: 'https://x.test/a' },
+            text: 'page\u001b[2J\u001b[1;1H‮gnp.exe',
+          },
+        ],
       },
     ]
     mock.clock(on, { now: 1_700_000_000_000 })
@@ -183,8 +213,18 @@ describe('detail pane', () => {
         role: 'assistant',
         text: 'word '.repeat(4_000),
         toolUses: [
-          { tool_use_id: 'g1', tool: 'Bash', input: { command: 'y'.repeat(20_000), blob: 'z'.repeat(20_000) }, text: 'q'.repeat(50_000) },
-          { tool_use_id: 'e1', tool: 'Edit', input: { file_path: '/a', old_string: 'o'.repeat(15_000), new_string: 'n' }, text: 'ok' },
+          {
+            tool_use_id: 'g1',
+            tool: 'Bash',
+            input: { command: 'y'.repeat(20_000), blob: 'z'.repeat(20_000) },
+            text: 'q'.repeat(50_000),
+          },
+          {
+            tool_use_id: 'e1',
+            tool: 'Edit',
+            input: { file_path: '/a', old_string: 'o'.repeat(15_000), new_string: 'n' },
+            text: 'ok',
+          },
           { tool_use_id: 'j1', tool: 'Custom', input: { data: 'd'.repeat(15_000) }, text: 'ok' },
         ],
       },
@@ -233,7 +273,12 @@ describe('detail pane', () => {
         role: 'assistant',
         text: '',
         toolUses: [
-          { tool_use_id: 'ok1', tool: 'Bash', input: { command: 'go test ./...', description: 'Run tests' }, text: 'PASS' },
+          {
+            tool_use_id: 'ok1',
+            tool: 'Bash',
+            input: { command: 'go test ./...', description: 'Run tests' },
+            text: 'PASS',
+          },
           { tool_use_id: 'bad1', tool: 'Bash', input: { command: 'false' }, text: 'exit status 1', isError: true },
         ],
       },
@@ -266,7 +311,11 @@ describe('detail pane', () => {
     const lines = Array.from({ length: 500 }, (_, i) => `line ${i}`).join('\n')
     const long: SessionMessage[] = [
       { role: 'user', text: 'run it', toolUses: [] },
-      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: { command: 'seq 500' }, text: lines }] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: { command: 'seq 500' }, text: lines }],
+      },
     ]
     mock.clock(on, { now: 1_700_000_000_000 })
     on('session.messages', () => ({ value: long }))
@@ -329,7 +378,7 @@ describe('detail pane', () => {
     on('session.messages', () => ({ value: [] }))
     on('session.model', () => ({ value: 'claude-opus-5-5' }))
     on('agent.list', () => ({ value: [] }))
-    on('session.usage', () => ({ value: ({ startedAt: 0, context: { window: 200_000 }, rateLimits: [] }) }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
 
     const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
     expect(await ui.find({ text: /No turns yet/ })).toBeDefined()
@@ -341,13 +390,27 @@ describe('info bar', () => {
   test('shows project, context and running agents', async ($, on) => {
     on('session.root', () => ({ value: '/Users/me/Sites/claude/my-claude-tui' }))
     on('agent.list', () => ({ value: [{ id: 'x', description: 'd', type: 'Explore', status: 'running' as const }] }))
-    on('session.usage', () => ({ value: ({ startedAt: 0, context: { tokens: 52_700, window: 200_000, percent: 26 }, rateLimits: [], cost: { usd: 1.5 } }) }))
+    on('session.usage', () => ({
+      value: {
+        startedAt: 0,
+        context: { tokens: 52_700, window: 200_000, percent: 26 },
+        rateLimits: [],
+        cost: { usd: 1.5 },
+      },
+    }))
 
     const ui = await $.ui.mount({
       plugin: 'tail-view',
       surface: 'terminal',
       component: 'AbovePrompt',
-      props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+      props: {
+        hasSurvey: false,
+        isWorking: false,
+        maxRows: 10,
+        bodyColumns: 120,
+        scroll: { offset: 0, bodyRows: 10 },
+        view: {},
+      },
     })
     expect(await ui.find({ text: /my-claude-tui/ })).toBeDefined()
     expect(await ui.find({ text: /52\.7k ctx/ })).toBeDefined()
@@ -406,10 +469,20 @@ describe('compact transcript', () => {
   const RESULT = {
     component: 'ToolResult',
     requestId: 'b1',
-    props: { tool_use_id: 'b1', tool: 'Bash', output: { stdout: 'a\nb\nc', stderr: '', interrupted: false }, isErrored: false },
+    props: {
+      tool_use_id: 'b1',
+      tool: 'Bash',
+      output: { stdout: 'a\nb\nc', stderr: '', interrupted: false },
+      isErrored: false,
+    },
   } as const
   const RUN = (args: string) =>
-    ({ command: 'tail', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } }) as CommandRunInput
+    ({
+      command: 'tail',
+      args,
+      origin: { kind: 'composer' },
+      presentation: { isFullscreen: true, columns: 200 },
+    }) as CommandRunInput
 
   test('draws a tool result as one line and restores it on /tail compact', async ($, on) => {
     mock.store(on)
@@ -462,12 +535,16 @@ describe('compact transcript', () => {
     await $.command.run(RUN(''))
     expect(opened.at(-1)).toBe(140)
   })
-
 })
 
 describe('commands', () => {
   const run = (command: string, args = '') =>
-    ({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } }) as CommandRunInput
+    ({
+      command,
+      args,
+      origin: { kind: 'composer' },
+      presentation: { isFullscreen: true, columns: 200 },
+    }) as CommandRunInput
 
   test('registers every subcommand as its own slash command', async ($, on) => {
     const names: string[] = []
@@ -475,7 +552,9 @@ describe('commands', () => {
       names.push(e.name)
       return { value: { command: e.name } }
     })
-    on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+    on('process.run', () => ({
+      value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
+    }))
     on('session.cwd', () => ({ value: '/tmp' }))
     on('ui.open', () => ({ value: { isPlaced: false as const, reason: 'test' } }))
     on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -486,7 +565,8 @@ describe('commands', () => {
   test('/tail-help and /tail help list every command', async ($, on) => {
     mock.store(on)
     for (const ran of [await $.command.run(run('tail-help')), await $.command.run(run('tail', 'help'))]) {
-      for (const name of ['/tail-theme', '/tail-width', '/tail-compact', '/tail-bar', '/tail-help']) expect(ran.text).toContain(name)
+      for (const name of ['/tail-theme', '/tail-width', '/tail-compact', '/tail-bar', '/tail-help'])
+        expect(ran.text).toContain(name)
     }
   })
 
@@ -498,7 +578,18 @@ describe('commands', () => {
       opened.push(e.columns)
       return { value: { isPlaced: true as const } }
     })
-    on('config.list', () => ({ value: [{ key: 'theme', label: 'Theme', kind: 'choice', value: 'light', provider: { plugin: 'engine', tier: 'core' }, isLocked: false }] }))
+    on('config.list', () => ({
+      value: [
+        {
+          key: 'theme',
+          label: 'Theme',
+          kind: 'choice',
+          value: 'light',
+          provider: { plugin: 'engine', tier: 'core' },
+          isLocked: false,
+        },
+      ],
+    }))
 
     expect((await $.command.run(run('tail-width', '75'))).text).toContain('75%')
     await $.command.run(run('tail'))
