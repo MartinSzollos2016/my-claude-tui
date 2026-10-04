@@ -6,13 +6,12 @@ import type { AgentStatus } from 'claude-code'
 import type { TurnStat } from '../types'
 import type { Icons } from './icons'
 import { clampText } from './model/clamp'
-import { DEFAULT_GLYPHS, formatDuration, formatTokens, shortModel, type Glyphs } from './model/format'
-import { groupRuns, type GroupItem, type Row } from './model/groups'
+import { moveCursor } from './model/cursor'
+import { formatDuration, formatTokens, shortModel } from './model/format'
 import { sanitizeText, sanitizeValue } from './model/sanitize'
-import { cachedSections, inputSections } from './model/sections'
 import { itemName, itemSummary, toolCategory, toolSummary } from './model/summaries'
-import { isAgentFinished, isSubagent } from './model/turns'
-import type { Item, ToolItem, Turn } from './model/types'
+import { isAgentFinished } from './model/turns'
+import type { ToolItem, Turn } from './model/types'
 import { str } from './model/values'
 import {
   displayWidth,
@@ -23,159 +22,6 @@ import {
   truncateDisplay,
   truncateMiddle,
 } from './model/width'
-
-// -- Keyboard cursor ----------------------------------------------------------
-
-// The trace rows of a subagent, when they are loaded.
-export type ChildrenOf = (agentId: string) => readonly Item[] | undefined
-
-// The ids of the rows the cursor can stand on, top to bottom: a folded run
-// is one row and shows its calls only while open; a subagent's trace rows
-// count only while the subagent is open.
-export function cursorRows(items: readonly Item[], open: ReadonlySet<string>, childrenOf: ChildrenOf): string[] {
-  const ids: string[] = []
-  for (const row of groupRuns(items)) {
-    ids.push(row.id)
-    if (row.kind === 'group') {
-      if (open.has(row.id)) ids.push(...row.items.map(item => item.id))
-    } else if (isSubagent(row) && open.has(row.id)) {
-      ids.push(...cursorRows(childrenOf(row.agentId) ?? [], open, childrenOf))
-    }
-  }
-  return ids
-}
-
-// The row one step from `current` (`delta` -1 or 1), clipped to the first and
-// last row. Without a cursor on the list, going down enters at the first row
-// and going up at the last; an empty list has none.
-export function moveCursor(ids: readonly string[], current: string | null, delta: number): string | null {
-  if (ids.length === 0) return null
-  const at = current === null ? -1 : ids.indexOf(current)
-  if (at < 0) return delta < 0 ? ids.at(-1)! : ids[0]!
-  return ids[Math.min(ids.length - 1, Math.max(0, at + delta))]!
-}
-
-// The row with `id` among `items`, a folded run's calls and the loaded traces
-// of subagents included. `seen` stops a trace that names itself.
-function findRow(items: readonly Item[], id: string, childrenOf: ChildrenOf, seen: Set<string>): Row | undefined {
-  for (const row of groupRuns(items)) {
-    if (row.id === id) return row
-    if (row.kind === 'group') {
-      const call = row.items.find(item => item.id === id)
-      if (call !== undefined) return call
-    } else if (isSubagent(row) && !seen.has(row.agentId)) {
-      seen.add(row.agentId)
-      const found = findRow(childrenOf(row.agentId) ?? [], id, childrenOf, seen)
-      if (found !== undefined) return found
-    }
-  }
-  return undefined
-}
-
-function itemFullText(item: Item, glyphs: Glyphs): string {
-  if (item.kind === 'output') return item.text
-  return cachedSections(item, glyphs)
-    .map(section => section.body)
-    .join('\n\n')
-}
-
-// Everything the row's frames hold, whole (what `y` copies); a folded run
-// joins its calls. Undefined when no such row is drawn.
-export function rowText(
-  items: readonly Item[],
-  id: string,
-  childrenOf: ChildrenOf,
-  glyphs: Glyphs = DEFAULT_GLYPHS,
-): string | undefined {
-  const row = findRow(items, id, childrenOf, new Set())
-  if (row === undefined) return undefined
-  if (row.kind === 'group') return row.items.map(item => itemFullText(item, glyphs)).join('\n\n')
-  return itemFullText(row, glyphs)
-}
-
-// -- Hover card ---------------------------------------------------------------
-
-const CARD_LINES = 6
-// A card is a glance, not a frame: never wider than this, however wide the pane.
-const CARD_WIDTH = 72
-// What one card may carry in all, whatever the width: a pane draws many.
-const CARD_CHARS = 600
-
-// The preview a collapsed tool row shows on hover: the first lines of its
-// input frame (the command, the path and parameters), each cut to `width`
-// cells and the whole to CARD_CHARS characters. Undefined when the call
-// has no input to show. Read from the input alone: a pane draws a card for
-// every collapsed row, so none builds a diff or the output.
-export function hoverCard(item: ToolItem, width: number, glyphs: Glyphs = DEFAULT_GLYPHS): string[] | undefined {
-  const source = cardSource(item, glyphs)
-  if (source.length === 0) return undefined
-  const lines: string[] = []
-  const room = Math.max(1, Math.min(width, CARD_WIDTH))
-  let left = CARD_CHARS
-  for (const raw of source.slice(0, CARD_LINES)) {
-    if (left <= 0) break
-    const line = [...truncateDisplay(sanitizeText(raw), room, glyphs.ellipsis)].slice(0, left).join('')
-    lines.push(line)
-    left -= line.length + 1
-  }
-  return lines
-}
-
-// The first lines of a call's input frame, at most CARD_LINES of them.
-function cardSource(item: ToolItem, glyphs: Glyphs): string[] {
-  if (item.tool === 'Edit' || item.tool === 'MultiEdit') return editCardLines(item)
-  const body = inputSections(item, glyphs)[0]?.body ?? ''
-  if (body.trim() === '') return []
-  // A tool without its own input frame is drawn as JSON; a card reads it as
-  // one `key: value` line per field instead of braces, quotes and indents.
-  if (body.trimStart().startsWith('{')) return fieldLines(item.input)
-  return body.split('\n', CARD_LINES)
-}
-
-function fieldLines(input: Record<string, unknown>): string[] {
-  return Object.entries(input)
-    .slice(0, CARD_LINES)
-    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`.replace(/\s+/g, ' '))
-}
-
-// An edit's card: per edit its first old lines as - and its first new lines
-// as +, half the room each unless one side is shorter.
-function editCardLines(item: ToolItem): string[] {
-  const f = item.input
-  const edits = item.tool === 'Edit' ? [f] : Array.isArray(f['edits']) ? (f['edits'] as unknown[]) : []
-  const lines: string[] = []
-  for (const e of edits) {
-    const room = CARD_LINES - lines.length
-    if (room <= 0) break
-    const edit = e !== null && typeof e === 'object' ? (e as Record<string, unknown>) : {}
-    const before = str(edit, 'old_string')
-    const after = str(edit, 'new_string')
-    if (before === '' && after === '') continue
-    const olds = before.split('\n', CARD_LINES)
-    const news = after.split('\n', CARD_LINES)
-    const oldTake = Math.min(olds.length, Math.max(Math.ceil(room / 2), room - news.length))
-    lines.push(...olds.slice(0, oldTake).map(l => `-${l}`), ...news.slice(0, room - oldTake).map(l => `+${l}`))
-  }
-  return lines
-}
-
-// What a call is about, per tool: the noun its distinct values are counted as.
-const GROUP_NOUNS: Record<string, { key: string; one: string; many: string }> = {
-  Read: { key: 'file_path', one: 'file', many: 'files' },
-  Grep: { key: 'pattern', one: 'pattern', many: 'patterns' },
-  Glob: { key: 'pattern', one: 'pattern', many: 'patterns' },
-  WebFetch: { key: 'url', one: 'page', many: 'pages' },
-  WebSearch: { key: 'query', one: 'query', many: 'queries' },
-}
-
-// `Read ×7 · 4 files`: the calls, then how many distinct targets they hit.
-export function groupLabel(group: GroupItem, icons: Pick<Icons, 'times' | 'dot'>): string {
-  const head = `${group.tool} ${icons.times}${group.items.length}`
-  const noun = GROUP_NOUNS[group.tool]
-  if (noun === undefined) return head
-  const distinct = new Set(group.items.map(item => str(item.input, noun.key)).filter(Boolean)).size
-  return distinct === 0 ? head : `${head} ${icons.dot} ${distinct} ${distinct === 1 ? noun.one : noun.many}`
-}
 
 // -- Layout and the compact transcript ----------------------------------------
 
