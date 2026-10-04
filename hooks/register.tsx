@@ -490,7 +490,8 @@ async function moveRowCursor(
 }
 
 // Where each view's window stood at its last drawing; a reload starts over
-// and the next drawing clamps whatever the wheel did meanwhile.
+// and the next drawing clamps whatever the wheel did meanwhile. Module-level
+// and keyed by view only: the plugin draws one pane (PANE) per session.
 const drawnFrames: Partial<Record<'detail' | 'turns' | 'team', ScrollFrame>> = {}
 
 // The engine's wheel and page keys over the pane: the pane is as tall as its

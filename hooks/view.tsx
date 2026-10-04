@@ -698,12 +698,16 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   const { Box, Text } = el
   const { icons } = data
   const layout = footerLayout(data.columns)
-  const headerRows = parts.header.reduce((sum, part) => sum + part.rows, 0)
+  // A pane too short for the header and a row of content drops the header.
+  const fullHeader = parts.header.reduce((sum, part) => sum + part.rows, 0)
+  const header = data.rows - fullHeader - layout.rows >= 1 ? parts.header : []
+  const headerRows = header === parts.header ? fullHeader : 0
   const windowRows = Math.max(1, data.rows - headerRows - layout.rows)
   const rows = contentRows(data.layout)
   const scrollTop = clampScroll(data.scrollTop ?? 0, rows.total, windowRows)
   const frame: ScrollFrame = { scrollTop, windowRows, total: rows.total, starts: rows.starts }
-  const more = overflowRows(scrollTop, rows.total, windowRows)
+  // A window of two rows or less has no room for the indicator rows.
+  const more = windowRows > 2 ? overflowRows(scrollTop, rows.total, windowRows) : { above: 0, below: 0 }
   act.measure(frame)
   // A row over the window's top or bottom edge: part of the window, so
   // nothing moves when it shows.
@@ -716,7 +720,7 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
     <Box flexDirection="column" width={data.columns} height={data.rows} backgroundColor={C.paneBackground}>
       {headerRows > 0 && (
         <Box key="pane-header" flexDirection="column" height={headerRows} flexShrink={0} overflow="hidden">
-          {parts.header.map((part, i) => (
+          {header.map((part, i) => (
             <Box key={`pane-header-${i}`} flexDirection="column" height={part.rows} flexShrink={0} overflow="hidden">
               {part.node}
             </Box>
