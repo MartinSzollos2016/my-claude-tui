@@ -4,15 +4,18 @@ import type { SessionMessage, ToolUseSummary } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import {
+  alignFromEnd,
   buildTurns,
   EMPTY_TURN_TEXT,
   isAgentFinished,
   isAgentRunning,
   searchTurns,
+  thinkingCounts,
   turnListText,
   turnTail,
   turnText,
   turnsKey,
+  type ApiLike,
 } from '../hooks/model'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
@@ -209,5 +212,51 @@ describe('searchTurns', () => {
     expect(searchTurns(big, 'ab')).toEqual([])
     expect(searchTurns(big, 'a'.repeat(50) + 'b')).toEqual([])
     expect(performance.now() - started).toBeLessThan(500)
+  })
+})
+
+describe('thinkingCounts', () => {
+  const api: ApiLike[] = [
+    { role: 'user', content: [{ type: 'text', text: 'First' }] },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: '', signature: 's' },
+        { type: 'redacted_thinking', data: 'opaque' },
+        { type: 'text', text: 'Hi' },
+        { type: 'tool_use', id: 't', name: 'Read', input: {} },
+      ],
+    },
+    {
+      role: 'user',
+      content: [
+        { type: 'tool_result', tool_use_id: 't', content: 'ok' },
+        { type: 'text', text: '<system-reminder>r</system-reminder>' },
+      ],
+    },
+    { role: 'assistant', content: [{ type: 'thinking', thinking: 'Check \u001b[31mthe file', signature: 's' }] },
+    { role: 'user', content: [{ type: 'text', text: 'Second' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+  ]
+
+  test('counts thinking and redacted blocks per turn, empty ones included', () => {
+    expect(thinkingCounts(api)).toEqual([
+      { count: 3, text: 'Check the file' },
+      { count: 0, text: '' },
+    ])
+  })
+
+  test('an assistant message before any prompt opens a turn; rows without content count nothing', () => {
+    expect(thinkingCounts([{ role: 'assistant', content: [{ type: 'thinking', thinking: 'x' }] }])).toEqual([
+      { count: 1, text: 'x' },
+    ])
+    expect(thinkingCounts([{ role: 'user' }, { role: 'assistant' }])).toEqual([{ count: 0, text: '' }])
+    expect(thinkingCounts([])).toEqual([])
+  })
+
+  test('alignFromEnd pairs the two lists from their last entries', () => {
+    expect(alignFromEnd(['b', 'c'], 3, 2)).toBe('c')
+    expect(alignFromEnd(['b', 'c'], 3, 1)).toBe('b')
+    expect(alignFromEnd(['b', 'c'], 3, 0)).toBe(undefined)
   })
 })

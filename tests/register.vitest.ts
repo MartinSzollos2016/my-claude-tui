@@ -300,6 +300,26 @@ describe('live data', () => {
 })
 
 describe('detail pane', () => {
+  test('counts the shown turn thinking from the API form, read once per transcript', async () => {
+    // A transcript of its own: the thinking cache is keyed by the transcript's
+    // fingerprint and lives in the module across tests.
+    const { $, world } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'Think about main.go', toolUses: [] },
+        { role: 'assistant', text: 'Thought it through.', toolUses: [] },
+      ],
+      api: [
+        { role: 'user', content: [{ type: 'text', text: 'Think about main.go' }] },
+        { role: 'assistant', content: [{ type: 'thinking', thinking: 'Look at main.go', signature: 's' }] },
+      ],
+    })
+    expect(text(await draw($))).toContain('\u{F09D1} 1')
+    await draw($)
+    expect(world.calls.filter(call => call === 'messages:api').length).toBe(1)
+    await press($, 't0:thinking')
+    expect(text(await draw($))).toContain('Look at main.go')
+  })
+
   test('searches the turn list and focuses the field on s', async () => {
     const { $, world } = fakeEngine({ messages: three })
     await press($, 'nav-search')
