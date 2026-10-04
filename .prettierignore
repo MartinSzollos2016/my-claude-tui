@@ -5,5 +5,8 @@
 node_modules/
 **/package-lock.json
 
+# Coverage reports
+/coverage/
+
 # Verbatim license text
 LICENSE
