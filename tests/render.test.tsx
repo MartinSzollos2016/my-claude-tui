@@ -520,7 +520,7 @@ describe('detail pane', () => {
       expect(labels.length).toBe(2)
       expect(labels[1]).toContain('#1')
       expect(labels[1]).toContain('Fix the bug')
-      expect(labels[1]).toContain('1 tool · 1 agent')
+      expect(labels[1]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
 
       await ui.press({ key: 'turn-0' })
       expect(await ui.find({ text: /Turns \(3\)/ })).toBeUndefined()
