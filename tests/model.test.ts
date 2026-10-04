@@ -49,6 +49,7 @@ import {
   moveCursor,
   cursorRows,
   rowText,
+  hoverCard,
   truncate,
   truncateMiddle,
   turnTable,
@@ -1469,5 +1470,39 @@ describe('rowText', () => {
     const out = { kind: 'output' as const, id: 'o1', text: 'All done' }
     expect(rowText([out], 'o1', none, ICON_SETS.nerd)).toBe('All done')
     expect(rowText([out], 'nope', none, ICON_SETS.nerd)).toBeUndefined()
+  })
+})
+
+describe('hoverCard', () => {
+  const bash = (command: string): ToolItem => ({
+    kind: 'tool',
+    id: 'b1',
+    tool: 'Bash',
+    input: { command },
+    summary: '',
+    isError: false,
+    isPending: false,
+    resultText: 'RESULT',
+  })
+
+  test('is the first lines of the input section, never the output', () => {
+    const card = hoverCard(bash(Array.from({ length: 9 }, (_, i) => `line${i}`).join('\n')), 40, ICON_SETS.nerd)!
+    expect(card).toHaveLength(6)
+    expect(card[0]).toBe('line0')
+    expect(card.join('\n')).not.toContain('RESULT')
+  })
+
+  test('lines are cut to the width, the whole card to 600 characters, untrusted text is cleaned', () => {
+    const wide = hoverCard(bash('x'.repeat(200)), 30, ICON_SETS.nerd)!
+    expect(wide[0]).toHaveLength(30)
+    expect(wide[0]!.endsWith('…')).toBe(true)
+    const many = hoverCard(bash(Array.from({ length: 6 }, () => 'y'.repeat(300)).join('\n')), 300, ICON_SETS.nerd)!
+    expect(many.join('\n').length).toBeLessThanOrEqual(600)
+    expect(hoverCard(bash('a\u001b[31mb'), 40, ICON_SETS.nerd)).toEqual(['ab'])
+    expect(hoverCard(bash('é'.repeat(100)), 30, ICON_SETS.ascii)![0]!.endsWith('...')).toBe(true)
+  })
+
+  test('a call with no input has no card', () => {
+    expect(hoverCard({ ...bash('x'), input: {} }, 40, ICON_SETS.nerd)).toBeUndefined()
   })
 })

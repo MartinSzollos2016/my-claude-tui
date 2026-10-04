@@ -793,6 +793,30 @@ export function rowText(
   return itemFullText(row, glyphs)
 }
 
+// -- Hover card ---------------------------------------------------------------
+
+const CARD_LINES = 6
+// What one card may carry in all, whatever the width: a pane draws many.
+const CARD_CHARS = 600
+
+// The preview a collapsed tool row shows on hover: the first lines of its
+// input frame (the command, the path and parameters), each cut to `width`
+// cells and the whole to CARD_CHARS characters. Undefined when the call
+// has no input to show.
+export function hoverCard(item: ToolItem, width: number, glyphs: Glyphs = DEFAULT_GLYPHS): string[] | undefined {
+  const section = cachedSections(item, glyphs).find(s => s.kind !== 'output' && s.kind !== 'error')
+  if (section === undefined || section.body.trim() === '') return undefined
+  const lines: string[] = []
+  let left = CARD_CHARS
+  for (const raw of section.body.split('\n').slice(0, CARD_LINES)) {
+    if (left <= 0) break
+    const line = [...truncateDisplay(sanitizeText(raw), Math.max(1, width), glyphs.ellipsis)].slice(0, left).join('')
+    lines.push(line)
+    left -= line.length + 1
+  }
+  return lines
+}
+
 // What a call is about, per tool: the noun its distinct values are counted as.
 const GROUP_NOUNS: Record<string, { key: string; one: string; many: string }> = {
   Read: { key: 'file_path', one: 'file', many: 'files' },

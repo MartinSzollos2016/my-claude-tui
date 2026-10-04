@@ -766,7 +766,9 @@ describe('renderPane', () => {
 
   test('expanded rows draw input and output frames, errors in red', () => {
     const tree = renderPane(el, { ...base, expanded: new Set(['b1', 'e1', 't0:o0']) }, act)
-    const frames = nodes(tree).filter(n => n.type === 'Box' && n.props['borderStyle'] === 'round')
+    const frames = nodes(tree).filter(
+      n => n.type === 'Box' && n.props['borderStyle'] === 'round' && !String(n.props['key']).startsWith('card-'),
+    )
     expect(frames.map(f => f.props['borderColor'])).toEqual([
       'suggestion',
       'permission',
@@ -1943,5 +1945,107 @@ describe('keyboard cursor', () => {
     ;(buttons(tree, 'nav-up')!.props['onPress'] as () => void)()
     ;(buttons(tree, 'nav-copy')!.props['onPress'] as (e: { surface: string }) => void)({ surface: 'terminal' })
     expect(calls).toEqual(['down', 'up', 'copyCursor:terminal'])
+  })
+})
+
+describe('hover preview card', () => {
+  const cardOf = (tree: unknown, id: string) => byKey(tree, `card-${id}`)
+  const bashTurn = (command: string, extra: Record<string, unknown> = {}) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'c1', tool: 'Bash', input: { command }, text: 'OUTPUT', ...extra }],
+      },
+    ])
+
+  test('a collapsed tool row has a hidden absolute card revealed by the hover of its row scope', () => {
+    const card = cardOf(renderPane(el, base, act), 'b1')!
+    expect(card.props['position']).toBe('absolute')
+    expect(card.props['display']).toBe('none')
+    expect(card.props['hover']).toEqual({ scope: 'row:b1', display: 'flex' })
+    expect(card.props['top']).toBe(1)
+    expect(card.props['left']).toBe(4)
+    expect(card.props['borderStyle']).toBe('round')
+    expect(card.props['borderColor']).toBe('inactive')
+    expect(text(card)).toContain('go test ./...')
+    expect(text(card)).not.toContain('ok')
+    for (const t of nodes(card).filter(n => n.type === 'Text')) expect(t.props['color']).toBe('inactive')
+  })
+
+  test('the card sits in the row box, whose Texts share the scope', () => {
+    const tree = renderPane(el, base, act)
+    const row = byKey(tree, 'item-b1')!
+    expect(nodes(row)).toContain(cardOf(tree, 'b1'))
+    const scoped = nodes(row).filter(n => n.type === 'Text' && (n.props['hover'] as { scope?: string })?.scope)
+    expect(scoped.length).toBeGreaterThan(0)
+    for (const t of scoped) expect((t.props['hover'] as { scope: string }).scope).toBe('row:b1')
+  })
+
+  test('an expanded row, a message, a folded run and a call with nothing to open have no card', () => {
+    const tree = renderPane(el, { ...base, expanded: new Set(['b1']) }, act)
+    expect(cardOf(tree, 'b1')).toBeUndefined()
+    expect(cardOf(tree, 't0:o0')).toBeUndefined()
+    const folded = renderPane(el, { ...base, turns: foldedTurn }, act)
+    expect(cardOf(folded, 'group:fr1')).toBeUndefined()
+    expect(cardOf(folded, 'fe')).toBeDefined()
+    const bare = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'n1', tool: 'Bash', input: {} }] },
+    ])
+    expect(cardOf(renderPane(el, { ...base, turns: bare }, act), 'n1')).toBeUndefined()
+  })
+
+  test('the card shows six lines cut to the pane width and at most 600 characters', () => {
+    const six = Array.from({ length: 10 }, (_, n) => `line${n} ${'w'.repeat(200)}`).join('\n')
+    const card = cardOf(renderPane(el, { ...base, turns: bashTurn(six), columns: 60 }, act), 'c1')!
+    const lines = nodes(card).filter(n => n.type === 'Text')
+    expect(lines).toHaveLength(6)
+    for (const l of lines) expect(displayWidth(text(l))).toBeLessThanOrEqual(52)
+    const narrow = bashTurn(Array.from({ length: 6 }, () => 'z'.repeat(300)).join('\n'))
+    const wide = cardOf(renderPane(el, { ...base, turns: narrow, columns: 400 }, act), 'c1')!
+    expect(text(wide).length).toBeLessThanOrEqual(600)
+  })
+
+  test('the ascii set draws the card with a classic border and ASCII text', () => {
+    const card = cardOf(renderPane(el, { ...base, icons: ICON_SETS.ascii }, act), 'b1')!
+    expect(card.props['borderStyle']).toBe('classic')
+    expect(text(card)).toMatch(/^[\x20-\x7e]+$/)
+  })
+
+  test('cards leave the pane text budget alone and stop at their own budget', () => {
+    const many = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: Array.from({ length: 300 }, (_, n) => ({
+          tool_use_id: `k${n}`,
+          tool: 'Bash',
+          input: { command: 'q'.repeat(590) },
+          text: 'x',
+        })),
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: many, columns: 700 }, act)
+    expect(cardOf(tree, 'k0')).toBeDefined()
+    expect(cardOf(tree, 'k299')).toBeUndefined()
+    expect(text(tree).length).toBeLessThan(100_000)
+    const open = renderPane(el, { ...base, turns: bashTurn('ls'), expanded: new Set(['c1']), columns: 700 }, act)
+    expect(text(open)).toContain('OUTPUT')
+  })
+
+  test('a card in a subagent trace is placed against its own row', () => {
+    const trace = buildTurns(
+      [{ role: 'assistant', text: '', toolUses: [{ tool_use_id: 'g', tool: 'Grep', input: { pattern: 'x' } }] }],
+      'ag/',
+    )
+    const tree = renderPane(
+      el,
+      { ...base, expanded: new Set(['a1']), traces: new Map([['ag', { items: trace[0]!.items }]]) },
+      act,
+    )
+    expect(cardOf(tree, 'ag/g')?.props['hover']).toEqual({ scope: 'row:ag/g', display: 'flex' })
   })
 })
