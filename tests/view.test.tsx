@@ -970,6 +970,41 @@ describe('trace tree guides', () => {
   })
 })
 
+describe('navigation groups', () => {
+  const one = buildTurns([{ role: 'user', text: 'hi', toolUses: [] }])
+  const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+  const groups = (tree: unknown) =>
+    nodes(tree)
+      .filter(n => String(n.props['key']).startsWith('nav-group-'))
+      .map(n => String(n.props['key']).replace('nav-group-', ''))
+  const seps = (tree: unknown) => nodes(tree).filter(n => String(n.props['key']).startsWith('nav-sep-'))
+
+  test('the row wraps and the buttons sit in three groups split by a muted dot', () => {
+    const tree = renderPane(el, { ...base, selected: 1, members }, act)
+    const row = nodes(tree).find(n => n.props['key'] === 'nav')
+    expect(row?.props['flexWrap']).toBe('wrap')
+    expect(row?.props['columnGap']).toBeGreaterThan(0)
+    expect(groups(tree)).toEqual(['move', 'views', 'expand'])
+    const dots = seps(tree)
+    expect(dots.map(text)).toEqual(['·', '·'])
+    for (const d of dots) expect(d.props['color']).toBe('inactive')
+    const inside = (group: string) =>
+      nodes(byKey(tree, `nav-group-${group}`))
+        .filter(n => n.type === 'Button')
+        .map(n => n.props['key'])
+    expect(inside('move')).toEqual(['nav-prev', 'nav-latest'])
+    expect(inside('views')).toEqual(['nav-turns', 'nav-search', 'nav-team'])
+    expect(inside('expand')).toEqual(['nav-expand', 'nav-collapse'])
+  })
+
+  test('a group with nothing to show is left out together with its separator', () => {
+    const tree = renderPane(el, { ...base, turns: one, isLatest: true }, act)
+    expect(groups(tree)).toEqual(['views', 'expand'])
+    expect(seps(tree)).toHaveLength(1)
+    expect(seps(renderPane(el, { ...base, icons: ICON_SETS.ascii }, act)).map(text)).toEqual(['.', '.'])
+  })
+})
+
 describe('context meter', () => {
   test('the header of the latest turn and the info bar draw the meter in the context color', () => {
     const latest = renderPane(el, { ...base, selected: 1, isLatest: true }, act)

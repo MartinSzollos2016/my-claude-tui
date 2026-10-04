@@ -50,6 +50,8 @@ export type Icons = {
   treeBranch: string
   treeLast: string
   treeGuide: string
+  // Between the groups of the navigation buttons.
+  groupSep: string
 }
 
 const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -93,6 +95,7 @@ const nerd: Icons = {
   treeBranch: '├─ ',
   treeLast: '└─ ',
   treeGuide: '│  ',
+  groupSep: '·',
 }
 
 const unicode: Icons = {
@@ -155,6 +158,7 @@ const ascii: Icons = {
   treeBranch: '|- ',
   treeLast: '`- ',
   treeGuide: '|  ',
+  groupSep: '.',
 }
 
 export const ICON_SETS: Record<IconSetName, Icons> = { nerd, unicode, ascii }
