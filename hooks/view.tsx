@@ -67,7 +67,7 @@ const G = {
   dot: '·',
 }
 
-export const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
 function itemIcon(item: Item): { glyph: string; color?: ThemeKey } {
   if (item.kind === 'output') return { glyph: G.output, color: C.accent }
@@ -92,7 +92,7 @@ function itemIcon(item: Item): { glyph: string; color?: ThemeKey } {
 
 export type Trace = { items: Item[] } | { denied: string }
 
-export type PaneData = {
+type PaneData = {
   turns: Turn[]
   selected: number
   expanded: ReadonlySet<string>
@@ -119,8 +119,8 @@ export type PaneData = {
 // The engine refuses a tree with a text over 10000 characters or over 100000
 // characters of text in total. Long blocks are cut into TEXT_CHUNK pieces,
 // and every block draws from one budget per pane, leaving room for the rows.
-export const TEXT_CHUNK = 8000
-export const PANE_TEXT_BUDGET = 70_000
+const TEXT_CHUNK = 8000
+const PANE_TEXT_BUDGET = 70_000
 
 const PREVIEW = {
   text: { lines: 100, chars: TEXT_CHUNK },
@@ -131,7 +131,7 @@ const PREVIEW = {
 // Render-time state: what is left of the pane's text budget.
 type Ctx = PaneData & { budget: { left: number } }
 
-export type PaneActions = {
+type PaneActions = {
   toggle: (id: string) => void
   prev: () => void
   next: () => void
@@ -534,7 +534,7 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
 
 // -- Info bar -----------------------------------------------------------------
 
-export type BarData = {
+type BarData = {
   project: string
   git: GitInfo | null
   mode: string | null

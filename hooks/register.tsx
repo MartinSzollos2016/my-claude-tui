@@ -1,11 +1,7 @@
-// my-claude-tui: tail-claude's detail view and info bar inside Claude Code.
-//
-//   /tail       opens the detail pane (tool calls, outputs, subagent traces)
-//   /tail bar   shows or hides the info bar above the prompt
-//
-// Live data comes from the engine ($.session.messages, $.agent.list,
-// $.session.usage); timings are captured by the tool.call and turn.complete
-// hooks. Rendering lives in view.tsx, transformations in model.ts.
+// tail-view: event wiring and state. Live data comes from the engine
+// ($.session.messages, $.agent.list, $.session.usage); timings are captured
+// by the tool.call and turn.complete hooks. Commands are in commands.ts,
+// rendering in view.tsx, transformations in model.ts.
 import { atom, read, update } from 'claude-code'
 import type { AgentStatus, EngineInterface, Register, Timer } from 'claude-code'
 
@@ -173,14 +169,14 @@ function startTicker($: EngineInterface) {
   ticker = $.clock.every(TICK_MS, () => detach(onTick($)))
 }
 
-// Names the tail-view theme matching the current one; picking it is the
-// person's, in /theme (the config API only accepts built-in themes).
 // Shows one turn in the detail view; the latest one follows new turns.
 async function pickTurn($: EngineInterface, index: number, latest: number) {
   await update($, selectedTurn, () => (index >= latest ? null : index))
   await update($, paneView, () => 'detail' as const)
 }
 
+// Names the tail-view theme matching the current one; picking it is the
+// person's, in /theme (the config API only accepts built-in themes).
 async function themeAdvice($: EngineInterface): Promise<string> {
   const row = (await $.config.list()).find(r => r.key === 'theme')
   return tailThemeAdvice(sanitizeText(typeof row?.value === 'string' ? row.value : ''))

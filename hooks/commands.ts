@@ -1,9 +1,9 @@
 // The slash commands tail-view registers. Each subcommand is its own command
 // so the slash menu lists it; `/tail <sub>` stays as a shorthand.
 
-export type Subcommand = 'turns' | 'bar' | 'compact' | 'width' | 'theme' | 'help'
+type Subcommand = 'turns' | 'bar' | 'compact' | 'width' | 'theme' | 'help'
 
-export type CommandSpec = {
+type CommandSpec = {
   name: string
   description: string
   argumentHint?: string

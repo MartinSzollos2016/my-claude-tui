@@ -389,7 +389,7 @@ function summaryDefault(name: string, f: Record<string, unknown>): string {
   return name
 }
 
-export type ToolCategory = 'read' | 'edit' | 'search' | 'task' | 'web' | 'other'
+type ToolCategory = 'read' | 'edit' | 'search' | 'task' | 'web' | 'other'
 
 export function toolCategory(name: string): ToolCategory {
   switch (name) {
@@ -429,24 +429,22 @@ export function itemSummary(item: Item): string {
   return item.summary === item.tool ? '' : item.summary
 }
 
-// The engine refuses a whole tree when one text child or Markdown text runs
-// over 10000 characters, so every block is capped well below that, by lines
-// and by characters (a minified file or a JSON transcript is one huge line).
-export const MAX_BLOCK_CHARS = 4000
+// Caps text to maxLines and maxChars, with a note on what was cut.
+type Clamped = { text: string; note?: string }
 
-export type Clamped = { text: string; note?: string }
-
-export function clampText(text: string, maxLines: number, maxChars = MAX_BLOCK_CHARS): Clamped {
+export function clampText(text: string, maxLines: number, maxChars: number): Clamped {
   const lines = text.split('\n')
   const kept = lines.length > maxLines ? lines.slice(0, maxLines).join('\n') : text
   const hiddenLines = Math.max(0, lines.length - maxLines)
   const chars = [...kept]
   if (chars.length > maxChars) {
     const hiddenChars = chars.length - maxChars
-    const more = hiddenLines > 0 ? `, ${hiddenLines} more lines` : ''
+    const more = hiddenLines > 0 ? `, ${hiddenLines} more line${hiddenLines === 1 ? '' : 's'}` : ''
     return { text: chars.slice(0, maxChars).join(''), note: `… (${hiddenChars} chars hidden${more})` }
   }
-  return hiddenLines > 0 ? { text: kept, note: `… (${hiddenLines} lines hidden)` } : { text }
+  return hiddenLines > 0
+    ? { text: kept, note: `… (${hiddenLines} line${hiddenLines === 1 ? '' : 's'} hidden)` }
+    : { text }
 }
 
 // Splits text into pieces of at most `size` characters, at a newline when
