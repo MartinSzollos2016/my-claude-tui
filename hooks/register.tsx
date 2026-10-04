@@ -44,14 +44,11 @@ import {
   alignFromEnd,
   callInput,
   compactCall,
-  durationSuffix,
   engineScroll,
   finishedSince,
   finishedWorkflows,
   gitDirFrom,
-  paneColumns,
   parseGitHead,
-  resultLine,
   runningTool,
   scrollToRow,
   searchTurns,
@@ -59,8 +56,6 @@ import {
   statusText,
   stepCursor,
   thinkingCounts,
-  turnListText,
-  turnText,
   workflowState,
   type EngineScroll,
   type RunningTool,
@@ -71,8 +66,10 @@ import {
 import { cursorRows, rowText } from './model/cursor'
 import { engineDuration } from './model/format'
 import { groupRuns } from './model/groups'
+import { turnListText, turnText } from './model/reports'
 import { sanitizePrompt, sanitizeText } from './model/sanitize'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
+import { durationSuffix, paneColumns, resultLine } from './model/transcript'
 import { buildTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
 import type { Item, Turn } from './model/types'
 import { shortPath, truncate } from './model/width'
