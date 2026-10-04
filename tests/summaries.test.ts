@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { helpText } from '../hooks/commands'
-import { clampText, compactCall, resultLine } from '../hooks/model'
+import { compactCall, resultLine } from '../hooks/model'
+import { clampText } from '../hooks/model/clamp'
 import { formatClock, shortMode } from '../hooks/model/format'
 import { itemName, itemSummary, toolCategory, toolSummary } from '../hooks/model/summaries'
 import { traceStats } from '../hooks/model/turns'

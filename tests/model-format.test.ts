@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
-import { chunkText, clampText, gitDirFrom, parseGitHead } from '../hooks/model'
+import { gitDirFrom, parseGitHead } from '../hooks/model'
+import { chunkText, clampText } from '../hooks/model/clamp'
 import {
   contextMeter,
   engineDuration,

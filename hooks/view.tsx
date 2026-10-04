@@ -16,10 +16,7 @@ import { ICON_SETS, type Icons } from './icons'
 import { agentStatusColor, C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 import {
   cachedSections,
-  chunkText,
-  clampDiff,
   clampScroll,
-  clampText,
   contentRows,
   EMPTY_TURN_TEXT,
   firstErrorLine,
@@ -31,7 +28,6 @@ import {
   pageScroll,
   pieceStarts,
   reserveSections,
-  splitDiff,
   splitMatch,
   taskMark,
   turnTable,
@@ -45,6 +41,8 @@ import {
   type TurnThinking,
   type WorkflowState,
 } from './model'
+import { chunkText, clampText } from './model/clamp'
+import { clampDiff, splitDiff } from './model/diff'
 import {
   contextMeter,
   formatClock,
