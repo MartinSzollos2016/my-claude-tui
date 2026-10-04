@@ -77,24 +77,26 @@ in `/theme`; `/tail theme` names the one matching your current theme.
 Each command shows up in the slash menu; `/tail <sub>` works too
 (`/tail width 70`, `/tail help`).
 
-| Command               | What it does                                                |
-| --------------------- | ----------------------------------------------------------- |
-| `/tail`               | open the detail pane at its width share                     |
-| `/tail-width <30-80>` | pane width as % of the terminal, kept across sessions       |
-| `/tail-theme`         | name the `Tail …` theme matching yours, to pick in `/theme` |
-| `/tail-compact`       | toggle one-line tool results in the transcript              |
-| `/tail-bar`           | show or hide the info bar above the prompt                  |
-| `/tail-help`          | list the commands and pane keys                             |
+| Command               | What it does                                                     |
+| --------------------- | ---------------------------------------------------------------- |
+| `/tail`               | open the detail pane at its width share                          |
+| `/tail-turns`         | list the session's turns (newest first) and open one in the pane |
+| `/tail-width <30-80>` | pane width as % of the terminal, kept across sessions            |
+| `/tail-theme`         | name the `Tail …` theme matching yours, to pick in `/theme`      |
+| `/tail-compact`       | toggle one-line tool results in the transcript                   |
+| `/tail-bar`           | show or hide the info bar above the prompt                       |
+| `/tail-help`          | list the commands and pane keys                                  |
 
 ## Keys (pane focused: `/tail`, or ctrl+x tab)
 
-| Key                    | Action                                     |
-| ---------------------- | ------------------------------------------ |
-| Tab / shift+Tab        | move between rows                          |
-| Enter / click on a row | expand / collapse row, drill into subagent |
-| `p` / `n` / `l`        | previous / next / latest turn              |
-| `e` / `c`              | expand all / collapse all                  |
-| Esc                    | back to the prompt                         |
+| Key                    | Action                                                     |
+| ---------------------- | ---------------------------------------------------------- |
+| Tab / shift+Tab        | move between rows                                          |
+| Enter / click on a row | expand / collapse row, drill into subagent                 |
+| `p` / `n` / `l`        | previous / next / latest turn                              |
+| `t` / `d`              | turn list / back to detail; Enter or click a turn opens it |
+| `e` / `c`              | expand all / collapse all                                  |
+| Esc                    | back to the prompt                                         |
 
 ## Requirements
 
