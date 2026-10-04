@@ -14,6 +14,7 @@ import type { SectionKind } from './model'
 
 export const THEME_KEYS = [
   'inverseText',
+  'text',
   'userMessageBackground',
   'claude',
   'suggestion',
@@ -42,6 +43,9 @@ export const C = {
   // of the text color), replacing the engine's grey sidebar fill so the
   // text reads at full contrast.
   paneBackground: 'inverseText',
+  // The theme's own foreground: drawn explicitly on the painted pane, since
+  // the terminal's default foreground can match the pane background.
+  text: 'text',
   // A hovered row: the subtle fill Claude Code gives the person's messages.
   rowHover: 'userMessageBackground',
   brand: 'claude',
