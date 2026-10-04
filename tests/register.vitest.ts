@@ -133,6 +133,79 @@ describe('commands', () => {
 })
 
 describe('live data', () => {
+  const done = { answer: '', isAborted: false, reason: 'answer' }
+  const finish = (turnId: string, durationMs: number, $: Parameters<typeof run>[1]) =>
+    run('turn.complete', $, { ...done, turnId, durationMs }, async () => ({ text: '' }))
+
+  test('two identical prompts keep their own time', async () => {
+    const { $, world } = fakeEngine()
+    const turn = async (turnId: string, durationMs: number, rows: SessionMessage[]) => {
+      await run('prompt.submit', $, { text: 'ok' }, async e => e)
+      world.messages = [...world.messages, ...rows]
+      await run('turn.start', $, { text: 'ok', turnId }, async e => e)
+      await settle()
+      await finish(turnId, durationMs, $)
+    }
+    await turn('a', 1_000, [{ role: 'user', text: 'ok', toolUses: [] }])
+    await turn('b', 9_000, [
+      { role: 'assistant', text: 'Sure.', toolUses: [] },
+      { role: 'user', text: 'ok', toolUses: [] },
+    ])
+    world.messages = [...world.messages, { role: 'assistant', text: 'Done.', toolUses: [] }]
+
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('1.0s')
+    expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('9.0s')
+  })
+
+  test('identical prompts queued before their rows appear still pair in order', async () => {
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'pokračuj' }, async e => e)
+    world.messages = [{ role: 'user', text: 'pokračuj', toolUses: [] }]
+    await run('prompt.submit', $, { text: 'pokračuj' }, async e => e)
+    await run('turn.start', $, { text: 'pokračuj', turnId: 'a' }, async e => e)
+    await run('turn.start', $, { text: 'pokračuj', turnId: 'b' }, async e => e)
+    await settle()
+    world.messages = [
+      { role: 'user', text: 'pokračuj', toolUses: [] },
+      { role: 'assistant', text: 'x', toolUses: [] },
+      { role: 'user', text: 'pokračuj', toolUses: [] },
+    ]
+    await finish('a', 2_000, $)
+    await finish('b', 7_000, $)
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('2.0s')
+    expect(String(byKey(list, 'turn-1')?.props['label'])).toContain('7.0s')
+  })
+
+  test('a delivery queued into a running turn adds no pending index', async () => {
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'one' }, async e => e)
+    world.messages = [{ role: 'user', text: 'one', toolUses: [] }]
+    await run('prompt.submit', $, { text: 'extra', turnId: 'a' }, async e => e)
+    await run('turn.start', $, { text: 'one', turnId: 'a' }, async e => e)
+    await run('turn.start', $, { text: 'note', turnId: 'n' }, async e => e)
+    await settle()
+    await finish('n', 3_000, $)
+    await finish('a', 4_000, $)
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('4.0s')
+  })
+
+  test('a turn started by a notification falls back to the transcript', async () => {
+    const { $, world } = fakeEngine()
+    world.messages = [{ role: 'user', text: 'ping', toolUses: [] }]
+    await run('turn.start', $, { text: 'ping', turnId: 'n' }, async e => e)
+    await settle()
+    await finish('n', 3_000, $)
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(String(byKey(list, 'turn-0')?.props['label'])).toContain('3.0s')
+  })
+
   test('times tool calls and turns, and notes the permission mode', async () => {
     const { $, world } = fakeEngine({ messages: main })
     await run('classic.UserPromptSubmit', $, { permission_mode: 'plan' }, async () => ({}))

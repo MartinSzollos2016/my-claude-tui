@@ -26,13 +26,16 @@ import {
 } from './model'
 import { COMMANDS, helpText, parseCommand } from './commands'
 import {
+  enqueueTurn,
   memo,
   nextSelectedTurn,
   recordToolEnd,
   recordToolStart,
   remember,
   statFor,
+  takeTurnIndex,
   toggleId,
+  turnIndexAtStart,
   turnStatFrom,
   type Memo,
 } from './session'
@@ -145,6 +148,25 @@ const ignore = (): undefined => undefined
 let ticker: Timer | undefined
 let frame = 0
 let lastPrompt = ''
+// Indexes (in buildTurns) of prompts submitted idle and not yet started; the
+// next main-loop turn.start takes the oldest.
+let pendingTurns: number[] = []
+// turnId -> the index its turn got, from turn.start to its turn.complete;
+// bounded in case a turn never completes.
+const turnIndexes = new Map<string, number>()
+const MAX_OPEN_TURNS = 50
+
+async function notePrompt($: EngineInterface): Promise<void> {
+  const turns = (await currentTurns($)).value
+  pendingTurns = enqueueTurn(pendingTurns, turns.length)
+}
+
+async function noteTurnStart($: EngineInterface, turnId: string, text: string): Promise<void> {
+  const turns = (await currentTurns($)).value
+  const taken = takeTurnIndex(pendingTurns, turnIndexAtStart(turns, sanitizePrompt(sanitizeText(text).trim())))
+  pendingTurns = taken.queue
+  remember(turnIndexes, turnId, taken.index, MAX_OPEN_TURNS)
+}
 
 function stopTicker() {
   ticker?.cancel()
@@ -294,9 +316,16 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     lastPrompt = sanitizePrompt(e.text.trim())
+    if (e.turnId === undefined) await notePrompt($)
     await update($, isWorking, () => true)
     await update($, selectedTurn, () => null)
     startTicker($)
+    return next(e)
+  })
+
+  // Observe only: the turn's index is noted before it starts unchanged.
+  on('turn.start', async ($, e, next) => {
+    await noteTurnStart($, e.turnId, e.text)
     return next(e)
   })
 
@@ -323,7 +352,9 @@ export const register: Register = on => {
       const stat: AgentStat = { model: e.usage?.model, durationMs: e.durationMs }
       await update($, agentStats, all => ({ ...all, [agentId]: stat }))
     } else {
-      const stat = turnStatFrom(e, lastPrompt, endedAt)
+      const index = turnIndexes.get(e.turnId)
+      turnIndexes.delete(e.turnId)
+      const stat = turnStatFrom(e, lastPrompt, endedAt, index)
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
       refreshGit($).catch(ignore)

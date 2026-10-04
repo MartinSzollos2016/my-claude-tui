@@ -11,8 +11,11 @@ import {
   recordToolStart,
   remember,
   statFor,
+  takeTurnIndex,
   toggleId,
+  turnIndexAtStart,
   turnStatFrom,
+  enqueueTurn,
 } from '../hooks/session'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
@@ -121,5 +124,56 @@ describe('remember', () => {
       ['a', 3],
       ['c', 4],
     ])
+  })
+})
+
+describe('turn index', () => {
+  const turns = buildTurns([prompt('ok'), prompt('ok'), prompt('Thanks')])
+
+  test('two identical prompts keep their own stat', () => {
+    const stats = [
+      { prompt: 'ok', turnIndex: 0, durationMs: 1_000, endedAt: 0 },
+      { prompt: 'ok', turnIndex: 1, durationMs: 9_000, endedAt: 0 },
+    ]
+    expect(statFor(stats, turns[0])?.durationMs).toBe(1_000)
+    expect(statFor(stats, turns[1])?.durationMs).toBe(9_000)
+    expect(statFor(stats, turns[2])).toBe(undefined)
+  })
+
+  test('a stat without an index still matches by prompt', () => {
+    expect(statFor([{ prompt: 'Thanks', durationMs: 5, endedAt: 0 }], turns[2])?.durationMs).toBe(5)
+    expect(statFor([{ prompt: 'ok', turnIndex: 1, durationMs: 5, endedAt: 0 }], turns[0])).toBe(undefined)
+  })
+
+  test('the starting turn is the last one when the transcript holds it, else the next', () => {
+    expect(turnIndexAtStart([], 'ok')).toBe(0)
+    expect(turnIndexAtStart(turns, 'Thanks')).toBe(2)
+    expect(turnIndexAtStart(turns, 'Something new')).toBe(3)
+    expect(turnIndexAtStart(turns, '')).toBe(2)
+  })
+
+  test('turnStatFrom records the index when it is known', () => {
+    expect(turnStatFrom({ durationMs: 1 }, 'ok', 0, 4).turnIndex).toBe(4)
+    expect('turnIndex' in turnStatFrom({ durationMs: 1 }, 'ok', 0)).toBe(false)
+  })
+})
+
+describe('pending turn indexes', () => {
+  test('are taken oldest first', () => {
+    const queue = enqueueTurn(enqueueTurn([], 4), 5)
+    const first = takeTurnIndex(queue, 99)
+    expect(first.index).toBe(4)
+    expect(takeTurnIndex(first.queue, 99)).toEqual({ index: 5, queue: [] })
+  })
+
+  test('an empty queue yields the fallback', () => {
+    expect(takeTurnIndex([], 7)).toEqual({ index: 7, queue: [] })
+  })
+
+  test('the queue is bounded, the oldest dropped', () => {
+    let queue: number[] = []
+    for (let i = 0; i < 100; i++) queue = enqueueTurn(queue, i)
+    expect(queue.length).toBeLessThan(100)
+    expect(queue.at(-1)).toBe(99)
   })
 })
