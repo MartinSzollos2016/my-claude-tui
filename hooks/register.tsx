@@ -322,12 +322,14 @@ async function notifyFinished($: EngineInterface, list?: readonly AgentInfo[], g
 const durationTails = new Map<string, string>()
 
 async function durationTail($: EngineInterface, durationMs: number, dot: string): Promise<string> {
-  const stat = statOfDuration(await read($, turnStats), durationMs)
+  const stats = await read($, turnStats)
+  const stat = statOfDuration(stats, durationMs)
   if (stat === undefined) return ''
   const key = `${stat.endedAt}|${stat.turnIndex}|${durationMs}|${dot}`
   const cached = durationTails.get(key)
   if (cached !== undefined) return cached
-  const turn = turnOfStat(stat, (await currentTurns($)).value)
+  const turns = await currentTurns($)
+  const turn = turnOfStat(stat, turns.value)
   if (turn === undefined) return ''
   const tail = durationSuffix(turn, dot)
   remember(durationTails, key, tail, MAX_STATS)
@@ -520,7 +522,8 @@ async function isCompact($: EngineInterface): Promise<boolean> {
 // Opens (or re-opens) the pane, asking for its share of `terminalColumns`
 // when known; a width the person dragged the dock to still wins.
 async function openPane($: EngineInterface, focus: boolean, terminalColumns?: number) {
-  const columns = terminalColumns === undefined ? undefined : paneColumns(terminalColumns, await widthShare($))
+  const share = await widthShare($)
+  const columns = terminalColumns === undefined ? undefined : paneColumns(terminalColumns, share)
   return $.ui.open({
     id: PANE,
     title: 'tail',
@@ -722,7 +725,8 @@ export const register: Register = on => {
     const chosen = await read($, selectedTurn)
     const selected = chosen === null || chosen > latest ? latest : chosen
     const turn = turns[selected]
-    const open = new Set(await read($, expanded))
+    const openIds = await read($, expanded)
+    const open = new Set(openIds)
     const agentList = await $.agent.list()
     const agents = new Map(agentList.map(a => [a.id, a.status] as const))
     const traces = await loadTraces($, turn?.items ?? [], open, agents)
@@ -758,30 +762,37 @@ export const register: Register = on => {
 
     const thinkingIds = turn && thinking && thinking.text !== '' ? [`t${turn.index}:thinking`] : []
 
+    const timed = await read($, timings)
+    const sessionModel = await $.session.model()
+    const working = await read($, isWorking)
+    const now = await $.clock.now()
+    const agentStatsNow = await read($, agentStats)
+    const fullIds = await read($, fullBlocks)
+
     return renderPane(
       el,
       {
         turns,
         selected: Math.max(0, selected),
         expanded: open,
-        timings: await read($, timings),
+        timings: timed,
         turnStat: statFor(allStats, turn, turns),
-        sessionModel: await $.session.model(),
+        sessionModel,
         contextPercent: usage.context.percent,
         isLatest: selected === latest,
         thinking,
-        isWorking: await read($, isWorking),
+        isWorking: working,
         icons,
-        now: await $.clock.now(),
+        now,
         frame,
         agents,
-        agentStats: await read($, agentStats),
+        agentStats: agentStatsNow,
         traces,
         cursor: cursorId,
         isFocused: e.props.isFocused,
         columns: e.props.bodyColumns,
         rows: e.props.scroll.bodyRows,
-        full: new Set(await read($, fullBlocks)),
+        full: new Set(fullIds),
         view,
         query,
         matches: isSearching ? searchCache?.value : undefined,
@@ -900,17 +911,21 @@ export const register: Register = on => {
     const agents = await $.agent.list()
     const latestTurn = (await currentTurns($)).value.at(-1)
     const working = await read($, isWorking)
+    const root = await $.session.root()
+    const branch = await read($, git)
+    const permissionMode = await read($, mode)
+    const icons = await currentIcons($)
 
     return renderBar(el, {
-      project: sanitizeText(shortPath(await $.session.root(), 1)),
-      git: await read($, git),
-      mode: await read($, mode),
+      project: sanitizeText(shortPath(root, 1)),
+      git: branch,
+      mode: permissionMode,
       runningAgents: agents.filter(a => isAgentRunning(a.status)).length,
       contextTokens: usage.context.tokens,
       contextPercent: usage.context.percent,
       costUsd: usage.cost?.usd,
       columns: e.props.bodyColumns,
-      icons: await currentIcons($),
+      icons,
       workflow: workflowState(latestTurn, workflowAgents.length, working),
     })
   })
