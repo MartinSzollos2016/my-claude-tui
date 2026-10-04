@@ -10,8 +10,8 @@ import { atom, read, update } from 'claude-code'
 import type { AgentStatus, EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentStat, GitInfo, ToolTiming, TurnStat } from '../types'
-import { buildTurns, isSubagent, sanitizePrompt, sanitizeText, shortPath, traceItems, type Item, type Turn } from './model'
-import { tailThemeAdvice } from './theme'
+import { buildTurns, isSubagent, paneColumns, resultLine, sanitizePrompt, sanitizeText, shortPath, traceItems, type Item, type Turn } from './model'
+import { C, tailThemeAdvice } from './theme'
 import { renderBar, renderPane, type El, type Trace } from './view'
 
 const PANE = 'tail'
@@ -156,8 +156,62 @@ async function themeAdvice($: EngineInterface): Promise<string> {
   return tailThemeAdvice(sanitizeText(typeof row?.value === 'string' ? row.value : ''))
 }
 
-function openPane($: EngineInterface, focus: boolean) {
-  return $.ui.open(focus ? { id: PANE, title: 'tail', focus: true } : { id: PANE, title: 'tail' })
+// Persisted preferences ($.store, across sessions).
+const WIDTH_KEY = 'paneWidth'
+const COMPACT_KEY = 'isCompact'
+const DEFAULT_WIDTH = 60
+const MIN_WIDTH = 30
+const MAX_WIDTH = 80
+
+async function widthShare($: EngineInterface): Promise<number> {
+  const stored = await $.store.get(WIDTH_KEY)
+  return typeof stored === 'number' && stored >= MIN_WIDTH && stored <= MAX_WIDTH ? stored : DEFAULT_WIDTH
+}
+
+async function isCompact($: EngineInterface): Promise<boolean> {
+  return (await $.store.get(COMPACT_KEY)) !== false
+}
+
+// Opens (or re-opens) the pane, asking for its share of `terminalColumns`
+// when known; a width the person dragged the dock to still wins.
+async function openPane($: EngineInterface, focus: boolean, terminalColumns?: number) {
+  const columns = terminalColumns === undefined ? undefined : paneColumns(terminalColumns, await widthShare($))
+  return $.ui.open({
+    id: PANE,
+    title: 'tail',
+    ...(focus ? { focus: true as const } : {}),
+    ...(columns === undefined ? {} : { columns }),
+  })
+}
+
+// The pane opened at session start before any width was known: size it
+// once, from the first drawing that reports the terminal width, if it is
+// still docked.
+let isAutoSized = false
+
+async function autoSize($: EngineInterface, terminalColumns: number | undefined) {
+  if (isAutoSized || terminalColumns === undefined) return
+  isAutoSized = true
+  const pane = (await $.ui.panes()).find(p => p.id === PANE)
+  if (pane?.isPlaced) await openPane($, false, terminalColumns)
+}
+
+async function setWidth($: EngineInterface, arg: string, terminalColumns: number): Promise<string> {
+  const share = Number(arg)
+  if (!Number.isInteger(share) || share < MIN_WIDTH || share > MAX_WIDTH) {
+    return `Give the pane width as a share of the terminal between ${MIN_WIDTH} and ${MAX_WIDTH} (percent), e.g. /tail width 60.`
+  }
+  await $.store.set(WIDTH_KEY, share)
+  const pane = (await $.ui.panes()).find(p => p.id === PANE)
+  if (pane?.isPlaced) await openPane($, false, terminalColumns)
+  return `Pane width set to ${share}% of the terminal (a width you drag the dock to still wins).`
+}
+
+async function toggleCompact($: EngineInterface): Promise<string> {
+  const next = !(await isCompact($))
+  await $.store.set(COMPACT_KEY, next)
+  $.ui.invalidate('ui.render')
+  return next ? 'Compact transcript on: tool results are one line, details in /tail.' : 'Compact transcript off: tool results are drawn in full.'
 }
 
 export const register: Register = on => {
@@ -166,8 +220,8 @@ export const register: Register = on => {
     await $.command.register({
       name: 'tail',
       description:
-        'Open the tail-claude detail view; "/tail bar" toggles the info bar, "/tail theme" names the matching black/white pane theme',
-      argumentHint: '[bar|theme]',
+        'Open the tail-claude detail view; bar: info bar, compact: one-line tool results, width N: pane share %, theme: pane theme',
+      argumentHint: '[bar|compact|width N|theme]',
     })
     void refreshGit($)
     void openPane($, false)
@@ -181,7 +235,9 @@ export const register: Register = on => {
       return { text: hidden ? 'Info bar hidden.' : 'Info bar shown.' }
     }
     if (arg === 'theme') return { text: await themeAdvice($) }
-    await openPane($, true)
+    if (arg === 'compact') return { text: await toggleCompact($) }
+    if (arg === 'width' || arg.startsWith('width ')) return { text: await setWidth($, arg.slice(5).trim(), e.presentation.columns) }
+    await openPane($, true, e.presentation.columns)
     return { text: 'Detail view opened: Tab walks rows, Enter expands, p/n/l turns, e/c expand/collapse all.' }
   })
 
@@ -309,7 +365,25 @@ export const register: Register = on => {
     )
   })
 
+  // The transcript stays a conversation; tool detail lives in the pane.
+  on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
+    if (!(await isCompact($))) return next(e)
+    const { Text } = $.ui.resolve(e) as unknown as El
+    const line = resultLine(e.props.output, e.props.isErrored)
+    return (
+      <Text color={e.props.isErrored ? C.error : undefined} dimColor={!e.props.isErrored}>
+        {`⎿ ${line}`}
+      </Text>
+    )
+  })
+
+  on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
+    if (!e.props.isExpanded || !(await isCompact($))) return next(e)
+    return next({ ...e, props: { ...e.props, isExpanded: false } })
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    void autoSize($, e.viewport?.columns)
     if (e.props.hasSurvey || (await read($, isBarHidden))) return next(e)
     await read($, tick)
 
