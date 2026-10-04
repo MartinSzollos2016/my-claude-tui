@@ -26,6 +26,8 @@ import {
 } from './model'
 import { COMMANDS, helpText, parseCommand } from './commands'
 import {
+  discardStale,
+  dropPending,
   enqueueTurn,
   memo,
   nextSelectedTurn,
@@ -156,16 +158,37 @@ let pendingTurns: number[] = []
 const turnIndexes = new Map<string, number>()
 const MAX_OPEN_TURNS = 50
 
-async function notePrompt($: EngineInterface): Promise<void> {
-  const turns = (await currentTurns($)).value
-  pendingTurns = enqueueTurn(pendingTurns, turns.length)
+// The index of the last main-loop turn that completed with a known index.
+let lastDoneIndex = -1
+
+// Queues the index the submitted prompt's turn will get; undefined when the
+// transcript could not be read (the turn then falls back at turn.start).
+async function notePrompt($: EngineInterface): Promise<number | undefined> {
+  try {
+    const index = (await currentTurns($)).value.length
+    // A new prompt always lands after the last completed turn; if not, the
+    // transcript restarted (a cleared or another session) and the old state is moot.
+    if (index <= lastDoneIndex) {
+      lastDoneIndex = -1
+      pendingTurns = []
+    }
+    pendingTurns = enqueueTurn(pendingTurns, index)
+    return index
+  } catch {
+    return undefined
+  }
 }
 
 async function noteTurnStart($: EngineInterface, turnId: string, text: string): Promise<void> {
-  const turns = (await currentTurns($)).value
-  const taken = takeTurnIndex(pendingTurns, turnIndexAtStart(turns, sanitizePrompt(sanitizeText(text).trim())))
-  pendingTurns = taken.queue
-  remember(turnIndexes, turnId, taken.index, MAX_OPEN_TURNS)
+  try {
+    const turns = (await currentTurns($)).value
+    const queue = discardStale(pendingTurns, lastDoneIndex)
+    const taken = takeTurnIndex(queue, turnIndexAtStart(turns, sanitizePrompt(sanitizeText(text).trim())))
+    pendingTurns = taken.queue
+    remember(turnIndexes, turnId, taken.index, MAX_OPEN_TURNS)
+  } catch {
+    // No index: the stat matches by prompt.
+  }
 }
 
 function stopTicker() {
@@ -316,11 +339,14 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     lastPrompt = sanitizePrompt(e.text.trim())
-    if (e.turnId === undefined) await notePrompt($)
+    const pushed = e.turnId === undefined ? await notePrompt($) : undefined
     await update($, isWorking, () => true)
     await update($, selectedTurn, () => null)
     startTicker($)
-    return next(e)
+    const result = await next(e)
+    // Dropped: no turn.start will follow, so its index must not stay queued.
+    if (pushed !== undefined && 'drop' in result) pendingTurns = dropPending(pendingTurns, pushed)
+    return result
   })
 
   // Observe only: the turn's index is noted before it starts unchanged.
@@ -354,6 +380,7 @@ export const register: Register = on => {
     } else {
       const index = turnIndexes.get(e.turnId)
       turnIndexes.delete(e.turnId)
+      if (index !== undefined) lastDoneIndex = Math.max(lastDoneIndex, index)
       const stat = turnStatFrom(e, lastPrompt, endedAt, index)
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
