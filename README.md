@@ -7,6 +7,12 @@ A Claude Code mod that brings [tail-claude](https://github.com/kylesnowschwartz/
   one-line summaries, durations), expandable to the input/result, and subagent
   rows that drill into the agent's **Execution Trace** (nested, expandable).
   Header: model, tool/output counts, subagent icons, tokens, ctx %, duration.
+- **Long output**: results, inputs and outputs are previewed (100 lines /
+  8k chars for results, 60 lines for code) with a **show all** / **show less**
+  toggle per block. Claude Code refuses a pane with a text over 10k
+  characters or 100k characters in total, so long blocks are cut into pieces
+  and the pane keeps a 70k text budget; past it a block says so instead of
+  breaking the pane.
 - **Info bar** above the prompt: project · branch(*dirty) · permission mode ·
   running agents, and context tokens/% plus cost on the right. `/tail bar`
   toggles it.
