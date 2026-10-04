@@ -18,6 +18,10 @@ export type TurnStat = {
 // What a subagent's own turn.complete reported.
 export type AgentStat = { model?: string; durationMs?: number }
 
+// The icon sets /tail-icons offers; the choice is kept in $.store under
+// 'tail-view.icons' and read by every view.
+export type IconSetName = 'nerd' | 'unicode' | 'ascii'
+
 export type GitInfo = { branch: string }
 
 declare module 'claude-code' {

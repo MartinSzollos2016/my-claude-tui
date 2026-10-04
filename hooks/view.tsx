@@ -45,6 +45,7 @@ import {
   type TurnThinking,
   type WorkflowState,
 } from './model'
+import { ICON_SETS, type Icons } from './icons'
 import { agentStatusColor, C, contextColor, modeColor, modelColor, TONE, type ThemeKey } from './theme'
 
 // Text narrowed to theme keys: tsc rejects a raw color (hex, rgb, ansi)
@@ -60,26 +61,6 @@ export type El = Pick<Elements['terminal'], 'Button' | 'Markdown' | 'Code'> & {
   Text: ElementConstructor<ThemedTextProps>
   // Optional: the mobile surface draws no field.
   Input?: Elements['terminal']['Input']
-}
-
-const G = {
-  robot: '\u{F167A}',
-  wrench: '\u{F0BE0}',
-  folderSearch: '\u{F0968}',
-  penNib: '\uEE75',
-  book: '\uE28B',
-  web: '\u{F059F}',
-  output: '\u{F0182}',
-  thinking: '\u{F09D1}',
-  clock: '\uF017',
-  token: '\uEDE8',
-  collapsed: '\uF054',
-  expanded: '\uF078',
-  drill: '\uF061',
-  selected: '│',
-  system: '\uF120',
-  branch: '\uF418',
-  dot: '·',
 }
 
 // A hovered button reads at full contrast: its idle label is the theme grey.
@@ -98,40 +79,38 @@ function scopeOf(prefix: string, id: string): string {
 }
 const buttonHover = (scope: string) => ({ scope, ...HOVER_TEXT })
 
-const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-
 // The state of a tool call as a glyph, so it reads without color too.
-function statusMark(status: ItemStatus, frame: number): { glyph: string; color: ThemeKey } {
+function statusMark(status: ItemStatus, frame: number, icons: Icons): { glyph: string; color: ThemeKey } {
   switch (status) {
     case 'done':
-      return { glyph: '✓', color: C.ongoing }
+      return { glyph: icons.done, color: C.ongoing }
     case 'error':
-      return { glyph: '✗', color: C.error }
+      return { glyph: icons.error, color: C.error }
     case 'running':
-      return { glyph: SPINNER[frame % SPINNER.length]!, color: C.ongoing }
+      return { glyph: icons.spinner[frame % icons.spinner.length]!, color: C.ongoing }
     case 'interrupted':
-      return { glyph: '⏸', color: C.interrupted }
+      return { glyph: icons.interrupted, color: C.interrupted }
     case 'idle':
-      return { glyph: G.dot, color: C.muted }
+      return { glyph: icons.dot, color: C.muted }
   }
 }
 
-function itemIcon(item: Item): { glyph: string; color?: ThemeKey } {
-  if (item.kind === 'output') return { glyph: G.output, color: C.accent }
-  if (item.isError) return { glyph: G.wrench, color: C.error }
+function itemIcon(item: Item, icons: Icons): { glyph: string; color?: ThemeKey } {
+  if (item.kind === 'output') return { glyph: icons.output, color: C.accent }
+  if (item.isError) return { glyph: icons.wrench, color: C.error }
   switch (toolCategory(item.tool)) {
     case 'read':
-      return { glyph: G.book }
+      return { glyph: icons.book }
     case 'edit':
-      return { glyph: G.penNib }
+      return { glyph: icons.penNib }
     case 'search':
-      return { glyph: G.folderSearch }
+      return { glyph: icons.folderSearch }
     case 'task':
-      return { glyph: G.robot, color: isSubagent(item) ? C.accent : undefined }
+      return { glyph: icons.robot, color: isSubagent(item) ? C.accent : undefined }
     case 'web':
-      return { glyph: G.web }
+      return { glyph: icons.web }
     default:
-      return { glyph: G.wrench }
+      return { glyph: icons.wrench }
   }
 }
 
@@ -151,6 +130,8 @@ type PaneData = {
   contextPercent?: number
   isLatest: boolean
   isWorking: boolean
+  // The glyph set; Nerd Font when left out.
+  icons?: Icons
   now: number
   frame: number
   agents: ReadonlyMap<string, AgentStatus>
@@ -184,7 +165,7 @@ const PREVIEW = {
 } as const
 
 // Render-time state: what is left of the pane's text budget.
-type Ctx = PaneData & { budget: { left: number } }
+type Ctx = PaneData & { icons: Icons; budget: { left: number } }
 
 type PaneActions = {
   copy: (text: string, surface?: RenderSurface) => void
@@ -223,7 +204,7 @@ function hasExpandedContent(item: Item): boolean {
 
 export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const { Box, Text } = el
-  const data: Ctx = { ...input, budget: { left: PANE_TEXT_BUDGET } }
+  const data: Ctx = { ...input, icons: input.icons ?? ICON_SETS.nerd, budget: { left: PANE_TEXT_BUDGET } }
   const turn = data.turns[data.selected]
   if (data.view === 'team') return paneBody(el, data, renderTeam(el, data, act))
 
@@ -239,7 +220,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       {renderHeader(el, turn, data)}
       {turn.prompt !== '' && (
         <Text color={C.muted} wrap="truncate-end">
-          {'❯ '}
+          {`${data.icons.prompt} `}
           {truncate(turn.prompt, data.columns * 2)}
         </Text>
       )}
@@ -268,7 +249,7 @@ function renderTurnList(el: El, data: Ctx, act: PaneActions) {
     .filter(turn => !isFiltered || snippets.has(turn.index))
     .map(turn => {
       const index = turn.index
-      const marker = index === data.selected ? '›' : ' '
+      const marker = index === data.selected ? data.icons.marker : ' '
       const number = `#${index + 1}`.padEnd(5)
       const tail = turnTail(turn, data.stats[index])
       const prompt = truncate(turn.prompt || '(no prompt)', Math.max(10, width - number.length - tail.length - 6))
@@ -390,7 +371,7 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
   }
   const taskRows: { task: TaskEntry; label: string }[] = []
   for (const task of tasks) {
-    const owner = task.owner ? `  → ${truncate(task.owner, 40)}` : ''
+    const owner = task.owner ? `  ${data.icons.arrow} ${truncate(task.owner, 40)}` : ''
     const label = `${taskMark(task.status)} #${truncate(task.id, 20)} ${truncate(task.subject, 200)}${owner}`
     if (label.length > data.budget.left) break
     data.budget.left -= label.length
@@ -417,7 +398,7 @@ function renderTeam(el: El, data: Ctx, act: PaneActions) {
         {members.length === 0 && <Text color={C.muted}>No teammates in this session.</Text>}
         {memberRows.map((row, i) => (
           <Box key={`member-${i}`} flexDirection="row">
-            <Text color={agentStatusColor(row.member.status)}>{'● '}</Text>
+            <Text color={agentStatusColor(row.member.status)}>{`${data.icons.bullet} `}</Text>
             <Text bold color={C.text}>
               {row.name}
             </Text>
@@ -456,6 +437,7 @@ function paneBody(el: El, data: Ctx, children: RenderChildren) {
 }
 
 function renderHeader(el: El, turn: Turn, data: Ctx) {
+  const { icons } = data
   const { Box, Text } = el
   const stat = data.turnStat
   const model = shortModel(stat?.model ?? data.sessionModel)
@@ -465,32 +447,34 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
     <Box flexDirection="row" justifyContent="space-between" width={data.columns}>
       <Box flexDirection="row" flexShrink={1}>
         <Text bold color={C.brand}>
-          {G.robot}{' '}
+          {icons.robot}{' '}
         </Text>
         <Text bold color={C.text}>
           Claude{' '}
         </Text>
         <Text color={modelColor(model) ?? C.text}>{model}</Text>
-        {(turn.toolCount > 0 || turn.outputCount > 0) && <Text color={C.muted}> {G.dot} </Text>}
-        {turn.toolCount > 0 && <Text color={C.muted}>{`${G.wrench} ${turn.toolCount}  `}</Text>}
-        {turn.outputCount > 0 && <Text color={C.accent}>{G.output} </Text>}
+        {(turn.toolCount > 0 || turn.outputCount > 0) && <Text color={C.muted}> {icons.dot} </Text>}
+        {turn.toolCount > 0 && <Text color={C.muted}>{`${icons.wrench} ${turn.toolCount}  `}</Text>}
+        {turn.outputCount > 0 && <Text color={C.accent}>{icons.output} </Text>}
         {turn.outputCount > 0 && <Text color={C.muted}>{`${turn.outputCount}  `}</Text>}
         {data.thinking !== undefined && data.thinking.count > 0 && (
-          <Text color={C.muted}>{`${G.thinking} ${data.thinking.count}  `}</Text>
+          <Text color={C.muted}>{`${icons.thinking} ${data.thinking.count}  `}</Text>
         )}
         {subagents.map(item => (
-          <Text color={isAgentRunning(data.agents.get(item.agentId)) ? C.ongoing : C.accent}>{`${G.robot} `}</Text>
+          <Text color={isAgentRunning(data.agents.get(item.agentId)) ? C.ongoing : C.accent}>{`${icons.robot} `}</Text>
         ))}
       </Box>
       <Box flexDirection="row" flexShrink={0}>
         {stat?.outputTokens !== undefined && (
-          <Text color={C.muted}>{`${G.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}  `}</Text>
+          <Text color={C.muted}>{`${icons.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}  `}</Text>
         )}
         {data.isLatest && data.contextPercent !== undefined && (
           <Text color={contextColor(data.contextPercent)}>{`ctx ${Math.round(data.contextPercent)}%  `}</Text>
         )}
-        {stat && <Text color={C.muted}>{`${G.clock} ${formatDuration(stat.durationMs)}  `}</Text>}
-        {data.isLatest && data.isWorking && <Text color={C.ongoing}>{`${SPINNER[data.frame % SPINNER.length]} `}</Text>}
+        {stat && <Text color={C.muted}>{`${icons.clock} ${formatDuration(stat.durationMs)}  `}</Text>}
+        {data.isLatest && data.isWorking && (
+          <Text color={C.ongoing}>{`${icons.spinner[data.frame % icons.spinner.length]} `}</Text>
+        )}
         {stat && <Text color={C.muted}>{formatClock(stat.endedAt)}</Text>}
       </Box>
     </Box>
@@ -591,6 +575,7 @@ function renderNav(el: El, data: Ctx, act: PaneActions) {
 // The turn's thinking as one row above the items, when any of it is
 // readable; expanded, it reads as Markdown like the model's output.
 function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
+  const { icons } = data
   const { Box, Button, Text } = el
   const thinking = data.thinking
   if (thinking === undefined || thinking.text === '') return undefined
@@ -600,9 +585,9 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
   return (
     <Box key={`item-${id}`} flexDirection="column">
       <Box flexDirection="row">
-        <Text color={isOpen ? C.text : C.muted}>{`${isOpen ? G.expanded : G.collapsed} `}</Text>
+        <Text color={isOpen ? C.text : C.muted}>{`${isOpen ? icons.expanded : icons.collapsed} `}</Text>
         <Text color={C.muted}>{'  '}</Text>
-        <Text color={C.accent}>{`${G.thinking} `}</Text>
+        <Text color={C.accent}>{`${icons.thinking} `}</Text>
         <Button
           key={id}
           plain
@@ -633,35 +618,37 @@ function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
 // A Workflow row says where it stands: running while the latest turn works,
 // done once it answered, no result when its turn ended without one.
 function withWorkflowNote(item: Item, summary: string, data: Ctx): string {
+  const { icons } = data
   if (item.kind !== 'tool' || item.tool !== 'Workflow') return summary
   const note = !item.isPending ? 'done' : data.isLatest && data.isWorking ? 'running' : 'no result'
-  return summary === '' ? note : `${summary} ${G.dot} ${note}`
+  return summary === '' ? note : `${summary} ${icons.dot} ${note}`
 }
 
 function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: number) {
+  const { icons } = data
   const { Box, Button, Text } = el
   const isOpen = data.expanded.has(item.id)
   const canOpen = hasExpandedContent(item)
-  const icon = itemIcon(item)
+  const icon = itemIcon(item, icons)
   const name = itemName(item)
   const summary = withWorkflowNote(item, itemSummary(item), data)
   const width = Math.max(20, data.columns - depth * 4)
 
   const chevron = !canOpen
-    ? G.selected
+    ? icons.selected
     : isSubagent(item)
       ? isOpen
-        ? G.expanded
-        : G.drill
+        ? icons.expanded
+        : icons.drill
       : isOpen
-        ? G.expanded
-        : G.collapsed
+        ? icons.expanded
+        : icons.collapsed
 
   // Tool rows lead with their state; output rows keep the column blank.
   const agent = item.kind === 'tool' && item.agentId ? data.agents.get(item.agentId) : undefined
   const mark =
     item.kind === 'tool'
-      ? statusMark(itemStatus(item, { ...data, isAgentRunning: isAgentRunning(agent) }), data.frame)
+      ? statusMark(itemStatus(item, { ...data, isAgentRunning: isAgentRunning(agent) }), data.frame, icons)
       : undefined
 
   const duration = itemDuration(item, data)
@@ -703,7 +690,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, depth: numb
             </Text>
           )}
           <Text color={C.ongoing} hover={hover}>
-            {durationText !== '' ? `${G.dot} ` : '  '}
+            {durationText !== '' ? `${icons.dot} ` : '  '}
           </Text>
           <Text color={C.muted} hover={hover}>
             {durationText.padEnd(7)}
@@ -865,6 +852,7 @@ function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx,
 }
 
 function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, depth: number) {
+  const { icons } = data
   const { Box, Text } = el
   const trace = data.traces.get(item.agentId)
   const model = data.agentStats[item.agentId]?.model
@@ -889,12 +877,12 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box flexDirection="row" marginLeft={4}>
-        <Text color={C.muted}>{`${G.system}  `}</Text>
+        <Text color={C.muted}>{`${icons.system}  `}</Text>
         <Text bold color={C.text}>
           Execution Trace
         </Text>
-        <Text color={C.muted}>{` ${G.dot} ${stats.tools} tool calls, ${stats.messages} messages`}</Text>
-        {model !== undefined && <Text color={C.muted}>{` ${G.dot} `}</Text>}
+        <Text color={C.muted}>{` ${icons.dot} ${stats.tools} tool calls, ${stats.messages} messages`}</Text>
+        {model !== undefined && <Text color={C.muted}>{` ${icons.dot} `}</Text>}
         {model !== undefined && <Text color={modelColor(model) ?? C.text}>{shortModel(model)}</Text>}
       </Box>
       {trace.items.map(child => renderItem(el, child, data, act, depth + 1))}
@@ -914,27 +902,30 @@ type BarData = {
   contextPercent?: number
   costUsd?: number
   columns: number
+  // The glyph set; Nerd Font when left out.
+  icons?: Icons
 }
 
-function workflowBadge(state: WorkflowState | undefined): string {
+function workflowBadge(state: WorkflowState | undefined, icons: Icons): string {
   if (state === undefined || !state.isRunning) return ''
   if (state.agents === 0) return 'workflow running'
-  return `workflow running ${G.dot} ${state.agents} agent${state.agents === 1 ? '' : 's'}`
+  return `workflow running ${icons.dot} ${state.agents} agent${state.agents === 1 ? '' : 's'}`
 }
 
 export function renderBar(el: El, data: BarData) {
   const { Box, Text } = el
-  const sep = <Text color={C.muted}>{` ${G.dot} `}</Text>
+  const icons = data.icons ?? ICON_SETS.nerd
+  const sep = <Text color={C.muted}>{` ${icons.dot} `}</Text>
   const mode = data.mode ? shortMode(data.mode) : ''
   const modeKey = modeColor(data.mode)
-  const workflow = workflowBadge(data.workflow)
+  const workflow = workflowBadge(data.workflow, icons)
 
   return (
     <Box flexDirection="row" justifyContent="space-between" width={data.columns}>
       <Box flexDirection="row" flexShrink={1}>
         <Text dimColor>{data.project}</Text>
         {data.git && sep}
-        {data.git && <Text color={C.branch}>{`${G.branch} `}</Text>}
+        {data.git && <Text color={C.branch}>{`${icons.branch} `}</Text>}
         {data.git && <Text dimColor>{data.git.branch}</Text>}
         {mode !== '' && sep}
         {mode !== '' && (
@@ -943,7 +934,7 @@ export function renderBar(el: El, data: BarData) {
           </Text>
         )}
         {data.runningAgents > 0 && sep}
-        {data.runningAgents > 0 && <Text color={C.ongoing}>{`agents running ${G.dot} ${data.runningAgents}`}</Text>}
+        {data.runningAgents > 0 && <Text color={C.ongoing}>{`agents running ${icons.dot} ${data.runningAgents}`}</Text>}
         {workflow !== '' && sep}
         {workflow !== '' && <Text color={C.ongoing}>{workflow}</Text>}
       </Box>

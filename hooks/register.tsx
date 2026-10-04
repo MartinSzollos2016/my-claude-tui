@@ -13,7 +13,7 @@ import type {
   Timer,
 } from 'claude-code'
 
-import type { AgentStat } from '../types'
+import type { AgentStat, IconSetName } from '../types'
 import {
   alignFromEnd,
   buildTurns,
@@ -62,6 +62,7 @@ import {
   turnStatFrom,
   type Memo,
 } from './session'
+import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
 import { renderBar, renderPane, type El, type Trace } from './view'
 
@@ -276,6 +277,8 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
     }
     case 'compact':
       return { text: await toggleCompact($) }
+    case 'icons':
+      return { text: await setIcons($, parsed.arg) }
     case 'width':
       return { text: await setWidth($, parsed.arg, e.presentation.columns) }
     case 'help':
@@ -340,6 +343,8 @@ async function openMatch($: EngineInterface, value: string, turns: readonly Turn
 // Persisted preferences ($.store, across sessions).
 const WIDTH_KEY = 'paneWidth'
 const COMPACT_KEY = 'isCompact'
+const ICONS_KEY = 'tail-view.icons'
+const DEFAULT_ICONS: IconSetName = 'nerd'
 const DEFAULT_WIDTH = 80
 const MIN_WIDTH = 30
 const MAX_WIDTH = 80
@@ -347,6 +352,15 @@ const MAX_WIDTH = 80
 async function widthShare($: EngineInterface): Promise<number> {
   const stored = await $.store.get(WIDTH_KEY)
   return typeof stored === 'number' && stored >= MIN_WIDTH && stored <= MAX_WIDTH ? stored : DEFAULT_WIDTH
+}
+
+async function iconSetName($: EngineInterface): Promise<IconSetName> {
+  const stored = await $.store.get(ICONS_KEY)
+  return isIconSetName(stored) ? stored : DEFAULT_ICONS
+}
+
+async function currentIcons($: EngineInterface): Promise<Icons> {
+  return ICON_SETS[await iconSetName($)]
 }
 
 async function isCompact($: EngineInterface): Promise<boolean> {
@@ -388,6 +402,17 @@ async function setWidth($: EngineInterface, arg: string, terminalColumns: number
   return `Pane width set to ${share}% of the terminal (a width you drag the dock to still wins).`
 }
 
+// /tail-icons: names the current set, or stores another and redraws.
+async function setIcons($: EngineInterface, arg: string): Promise<string> {
+  const options = ICON_SET_NAMES.join('|')
+  if (arg === '') return `Icon set: ${await iconSetName($)}. Change it with /tail-icons ${options}.`
+  if (!isIconSetName(arg)) return `Unknown icon set. Use /tail-icons ${options}.`
+  await $.store.set(ICONS_KEY, arg)
+  $.ui.invalidate('ui.render')
+  await bump($)
+  return `Icon set: ${arg}.`
+}
+
 async function toggleCompact($: EngineInterface): Promise<string> {
   const next = !(await isCompact($))
   await $.store.set(COMPACT_KEY, next)
@@ -417,6 +442,7 @@ export const register: Register = on => {
   on('command.run', { command: 'tail-turns' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-width' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-compact' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-icons' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-bar' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-help' }, ($, e) => runCommand($, e))
 
@@ -531,6 +557,7 @@ export const register: Register = on => {
         isLatest: selected === latest,
         thinking,
         isWorking: await read($, isWorking),
+        icons: await currentIcons($),
         now: await $.clock.now(),
         frame,
         agents,
@@ -577,9 +604,10 @@ export const register: Register = on => {
     if (!(await isCompact($))) return next(e)
     const { Text } = $.ui.resolve(e) as unknown as El
     const line = resultLine(e.props.output, e.props.isErrored)
+    const icons = await currentIcons($)
     return (
       <Text color={e.props.isErrored ? C.error : undefined} dimColor={!e.props.isErrored}>
-        {`⎿ ${line}`}
+        {`${icons.result} ${line}`}
       </Text>
     )
   })
@@ -588,6 +616,7 @@ export const register: Register = on => {
     if (!(await isCompact($))) return next(e)
     const { Box, Text } = $.ui.resolve(e) as unknown as El
     const { name, summary } = compactCall(e.props.tool, e.props.input)
+    const icons = await currentIcons($)
     const mark = e.props.isInterrupted
       ? C.interrupted
       : e.props.isErrored
@@ -598,13 +627,13 @@ export const register: Register = on => {
     return (
       <Box flexDirection="row">
         <Text color={mark} dimColor={mark === undefined}>
-          {'● '}
+          {`${icons.bullet} `}
         </Text>
         <Text bold>{name}</Text>
         <Text dimColor wrap="truncate-end">
           {summary ? `  ${summary}` : ''}
         </Text>
-        {e.props.isInterrupted && <Text color={C.interrupted}> · interrupted</Text>}
+        {e.props.isInterrupted && <Text color={C.interrupted}>{` ${icons.dot} interrupted`}</Text>}
       </Box>
     )
   })
@@ -634,6 +663,7 @@ export const register: Register = on => {
       contextPercent: usage.context.percent,
       costUsd: usage.cost?.usd,
       columns: e.props.bodyColumns,
+      icons: await currentIcons($),
       workflow: workflowState(latestTurn, workflowAgents.length, working),
     })
   })
