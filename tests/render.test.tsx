@@ -377,6 +377,47 @@ describe('detail pane', () => {
     await ui.unmount()
   })
 
+  test('a collapsed row has a hidden preview card that its row scope reveals', async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: main }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    const card = findKey(await ui.drawn(), 'card-r1')
+    expect(card?.hover).toMatchObject({ scope: 'row:r1', display: 'flex' })
+    expect(card?.props?.['display']).toBe('none')
+    expect(card?.props?.['position']).toBe('absolute')
+    expect(textsOf(card).join('')).toContain('/a/b/main.go')
+    await ui.press({ key: 'r1' })
+    expect(findKey(await ui.drawn(), 'card-r1')).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('j moves the cursor down a row and marks it, y then shows', async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: main }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    const marks = async () => textsOf(await ui.drawn()).filter(t => t === '\u258c').length
+    expect(await marks()).toBe(0)
+    expect(findKey(await ui.drawn(), 'nav-copy')).toBeUndefined()
+    expect(findKey(await ui.drawn(), 'nav-down')?.props?.['hotkey']).toBe('j')
+    expect(findKey(await ui.drawn(), 'nav-up')?.props?.['hotkey']).toBe('k')
+    await ui.press({ key: 'nav-down' })
+    await ui.press({ key: 'nav-down' })
+    expect(await marks()).toBe(1)
+    const found = findKey(await ui.drawn(), 'nav-copy')
+    expect(found?.props?.['hotkey']).toBe('y')
+    await ui.unmount()
+  })
+
   test('frames the command apart from its output, colored by outcome', async ($, on) => {
     mock.store(on)
     const bash: SessionMessage[] = [
@@ -783,6 +824,47 @@ describe('commands', () => {
     expect((await $.command.run(run('tail-width', '75'))).text).toContain('75%')
     await $.command.run(run('tail'))
     expect(opened.at(-1)).toBe(150)
+  })
+})
+
+describe('transcript spinner and turn duration', () => {
+  test('the turn duration line carries the counts of the last turn', async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.messages', () => ({ value: main }))
+    on('ui.render', { component: 'TurnDuration' }, ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return <Text>engine line</Text>
+    })
+    const ui = await $.ui.mount({
+      plugin: 'tail-view',
+      surface: 'terminal',
+      component: 'TurnDuration',
+      requestId: 'td',
+      props: { word: 'Baked', durationMs: 3_000 },
+    })
+    const drawn = textsOf(await ui.drawn()).join('')
+    expect(drawn).toBe('Baked for 3s · 1 tool · 1 agent')
+    expect(drawn).not.toContain('engine line')
+    await ui.unmount()
+  })
+
+  test('the spinner is left to the engine while no tool runs', async ($, on) => {
+    mock.store(on)
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('ui.render', { component: 'Spinner' }, ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return <Text>{`engine ${String(e.props.message)}`}</Text>
+    })
+    const ui = await $.ui.mount({
+      plugin: 'tail-view',
+      surface: 'terminal',
+      component: 'Spinner',
+      requestId: 'sp',
+      props: { word: 'Sauteing', message: null, suffix: '…', mode: 'requesting' },
+    })
+    expect(textsOf(await ui.drawn()).join('')).toBe('engine null')
+    await ui.unmount()
   })
 })
 
