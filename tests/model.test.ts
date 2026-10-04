@@ -515,7 +515,17 @@ describe('itemStatus', () => {
   })
 })
 
-const MULTI = ['ellipsis', 'border', 'taskDone', 'taskActive', 'taskTodo', 'treeBranch', 'treeLast', 'treeGuide']
+const MULTI = [
+  'ellipsis',
+  'border',
+  'taskDone',
+  'taskActive',
+  'taskTodo',
+  'treeBranch',
+  'treeLast',
+  'treeGuide',
+  'keyLatest',
+]
 
 describe('icon sets', () => {
   test('every set has the same keys', () => {
