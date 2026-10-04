@@ -33,7 +33,7 @@ export default defineConfig({
         'hooks/{model/**/*,theme,commands}.ts': { lines: 98, statements: 98, functions: 98, branches: 90 },
         'hooks/session.ts': { lines: 98, statements: 98, functions: 98, branches: 90 },
         'hooks/{register.tsx,session.ts}': { lines: 60, statements: 60, functions: 50, branches: 50 },
-        'hooks/{view.tsx,view/**/*.{ts,tsx}}': { lines: 95, statements: 95, functions: 90, branches: 85 },
+        'hooks/view/**/*.{ts,tsx}': { lines: 95, statements: 95, functions: 90, branches: 85 },
       },
     },
   },

@@ -1,17 +1,14 @@
-// Rendering: the detail view (pane) and the info bar (band). Takes plain
-// data plus callbacks and returns element trees; no engine calls here.
-
-import type { GitInfo } from '../types'
-import { ICON_SETS, type Icons } from './icons'
-import { C, contextColor, modeColor, modelColor } from './theme'
-import type { WorkflowState } from './model/activity'
-import { contextMeter, formatClock, formatDuration, formatTokens, shortMode, shortModel } from './model/format'
-import { clampScroll, contentRows, overflowRows, type ScrollFrame } from './model/scroll'
-import { reserveSections } from './model/sections'
-import { EMPTY_TURN_TEXT } from './model/turn-table'
-import { isAgentRunning, isSubagent } from './model/turns'
-import type { Turn } from './model/types'
-import { displayWidth } from './model/width'
+// The pane: the header, the view's content in a window of its own scroll, and the
+// pinned footer under it; renderPane is what register.tsx draws.
+import { ICON_SETS } from '../icons'
+import { contextMeter, formatClock, formatDuration, formatTokens, shortModel } from '../model/format'
+import { clampScroll, contentRows, overflowRows, type ScrollFrame } from '../model/scroll'
+import { reserveSections } from '../model/sections'
+import { EMPTY_TURN_TEXT } from '../model/turn-table'
+import { isAgentRunning, isSubagent } from '../model/turns'
+import type { Turn } from '../model/types'
+import { displayWidth } from '../model/width'
+import { C, contextColor, modelColor } from '../theme'
 import {
   CARD_BUDGET,
   drawn,
@@ -25,14 +22,12 @@ import {
   type PaneActions,
   type PaneData,
   type PaneParts,
-} from './view/context'
-import { focusChord, footerRowsOf, renderFooter, STATUS_INSET } from './view/footer'
-import { renderRows, renderThinking } from './view/items'
-import { BAR_METER_COLUMNS, cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, type El } from './view/kit'
-import { renderTeam } from './view/team'
-import { renderTurnList } from './view/turn-list'
-
-// -- Detail view --------------------------------------------------------------
+} from './context'
+import { focusChord, footerRowsOf, renderFooter, STATUS_INSET } from './footer'
+import { renderRows, renderThinking } from './items'
+import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, type El } from './kit'
+import { renderTeam } from './team'
+import { renderTurnList } from './turn-list'
 
 export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const { Box, Text } = el
@@ -214,67 +209,6 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
           <Text color={C.ongoing}>{icons.spinner[data.frame % icons.spinner.length]}</Text>
         )}
         {stat && <Text color={C.muted}>{formatClock(stat.endedAt)}</Text>}
-      </Box>
-    </Box>
-  )
-}
-
-// -- Info bar -----------------------------------------------------------------
-
-type BarData = {
-  workflow?: WorkflowState
-  project: string
-  git: GitInfo | null
-  mode: string | null
-  runningAgents: number
-  contextTokens?: number
-  contextPercent?: number
-  costUsd?: number
-  columns: number
-  // The glyph set; Nerd Font when left out.
-  icons?: Icons
-}
-
-function workflowBadge(state: WorkflowState | undefined, icons: Icons): string {
-  if (state === undefined || !state.isRunning) return ''
-  if (state.agents === 0) return 'workflow running'
-  return `workflow running ${icons.dot} ${state.agents} agent${state.agents === 1 ? '' : 's'}`
-}
-
-export function renderBar(el: El, data: BarData) {
-  const { Box, Text } = el
-  const icons = data.icons ?? ICON_SETS.nerd
-  const sep = <Text color={C.muted}>{` ${icons.dot} `}</Text>
-  const mode = data.mode ? shortMode(data.mode) : ''
-  const modeKey = modeColor(data.mode)
-  const workflow = workflowBadge(data.workflow, icons)
-
-  return (
-    <Box flexDirection="row" justifyContent="space-between" width={data.columns}>
-      <Box flexDirection="row" flexShrink={1}>
-        <Text dimColor>{data.project}</Text>
-        {data.git && sep}
-        {data.git && <Text color={C.branch}>{`${icons.branch} `}</Text>}
-        {data.git && <Text dimColor>{data.git.branch}</Text>}
-        {mode !== '' && sep}
-        {mode !== '' && (
-          <Text color={modeKey} dimColor={modeKey === undefined} bold={modeKey !== undefined}>
-            {mode}
-          </Text>
-        )}
-        {data.runningAgents > 0 && sep}
-        {data.runningAgents > 0 && <Text color={C.ongoing}>{`agents running ${icons.dot} ${data.runningAgents}`}</Text>}
-        {workflow !== '' && sep}
-        {workflow !== '' && <Text color={C.ongoing}>{workflow}</Text>}
-      </Box>
-      <Box flexDirection="row" flexShrink={0}>
-        {data.contextTokens !== undefined && <Text dimColor>{`${formatTokens(data.contextTokens)} ctx `}</Text>}
-        {data.contextPercent !== undefined && (
-          <Text color={contextColor(data.contextPercent)}>
-            {`${data.columns >= BAR_METER_COLUMNS ? `${contextMeter(data.contextPercent, METER_CELLS, icons)} ` : ''}${Math.round(data.contextPercent)}%`}
-          </Text>
-        )}
-        {data.costUsd !== undefined && <Text dimColor>{`  $${data.costUsd.toFixed(2)}`}</Text>}
       </Box>
     </Box>
   )

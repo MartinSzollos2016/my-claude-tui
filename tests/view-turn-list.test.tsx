@@ -3,7 +3,7 @@ import { ICON_SETS } from '../hooks/icons'
 import { C } from '../hooks/theme'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
-import { renderPane } from '../hooks/view'
+import { renderPane } from '../hooks/view/pane'
 import { act, base, byKey, el, measured, nodes, text } from './fixtures/view'
 
 describe('turn table', () => {

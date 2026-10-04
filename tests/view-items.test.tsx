@@ -5,7 +5,7 @@ import { rowText } from '../hooks/model/cursor'
 import { resetSectionCache, sectionCacheSize } from '../hooks/model/sections'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
-import { renderPane } from '../hooks/view'
+import { renderPane } from '../hooks/view/pane'
 import { act, acts, base, byKey, calls, el, foldedTimings, foldedTurn, nodes, text, type Node } from './fixtures/view'
 
 describe('trace tree guides', () => {

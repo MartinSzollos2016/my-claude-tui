@@ -163,3 +163,5 @@ export const foldedTurn = buildTurns([
 ])
 
 export const foldedTimings = { fr1: { start: 0, end: 800 }, fr2: { start: 800, end: 1500 }, fg1: { start: 0, end: 90 } }
+
+export const foldedOpen = new Set(['group:fr1', 'group:fg1', 'fe'])
