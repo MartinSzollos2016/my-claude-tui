@@ -25,6 +25,9 @@ import {
   EMPTY_TURN_TEXT,
   formatDuration,
   firstErrorLine,
+  groupLabel,
+  groupRuns,
+  type GroupItem,
   fitPath,
   formatTokens,
   isAgentRunning,
@@ -239,10 +242,23 @@ function itemDuration(item: Item, data: Pick<PaneData, 'agentStats' | 'timings' 
   return (timing.end ?? (item.isPending ? data.now : timing.start)) - timing.start
 }
 
-// The longest measured call among the turn's rows and its loaded traces.
+type Timed = Pick<PaneData, 'agentStats' | 'timings' | 'now'>
+
+// A group's time: the sum of its measured calls, none when none is measured.
+function groupDuration(group: GroupItem, data: Timed): number | undefined {
+  const times = group.items.map(item => itemDuration(item, data)).filter(d => d !== undefined)
+  return times.length === 0 ? undefined : times.reduce((sum, d) => sum + d, 0)
+}
+
+// The longest measured row among the turn's and its loaded traces' (a
+// folded run counts as its total).
 function longestCall(input: PaneData, turn: Turn | undefined): number {
-  const traced = [...input.traces.values()].flatMap(trace => ('items' in trace ? trace.items : []))
-  return Math.max(0, ...[...(turn?.items ?? []), ...traced].map(item => itemDuration(item, input) ?? 0))
+  const lists = [turn?.items ?? [], ...[...input.traces.values()].map(trace => ('items' in trace ? trace.items : []))]
+  const rows = lists.flatMap(items => groupRuns(items))
+  return Math.max(
+    0,
+    ...rows.map(row => (row.kind === 'group' ? groupDuration(row, input) : itemDuration(row, input)) ?? 0),
+  )
 }
 
 function hasExpandedContent(item: Item): boolean {
@@ -300,7 +316,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
             {data.isWorking && data.isLatest ? `Working${data.icons.ellipsis}` : EMPTY_TURN_TEXT}
           </Text>
         )}
-        {turn.items.map(item => renderItem(el, item, data, act))}
+        {renderRows(el, turn.items, data, act)}
       </Box>
       {renderFooter(el, data, act)}
     </Box>,
@@ -744,40 +760,31 @@ function withWorkflowNote(item: Item, summary: string, data: Ctx): string {
 // still continue, and whether it is the last of its siblings.
 type TreePlace = { path: readonly boolean[]; isLast: boolean }
 
-function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: TreePlace) {
-  const trunc = cutter(data.icons)
+// What one row of the item list shows; renderLine lays it out in the fixed
+// columns (chevron, status, icon, label, model, duration, bar).
+type Line = {
+  id: string
+  isOpen: boolean
+  canOpen: boolean
+  chevron: string
+  mark?: { glyph: string; color: ThemeKey }
+  icon: { glyph: string; color?: ThemeKey }
+  // The label cut to the room (cells) the fixed columns leave.
+  label: (room: number) => string
+  duration?: number
+  model?: string
+  onPress: () => void
+}
+
+function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined, below?: RenderChildren) {
   const { icons } = data
   const { Box, Button, Text } = el
-  const isOpen = data.expanded.has(item.id)
-  const canOpen = hasExpandedContent(item)
-  const icon = itemIcon(item, icons)
-  const name = itemName(item)
-  const summary = withWorkflowNote(item, itemSummary(item), data)
+  const { id, isOpen, canOpen, icon, mark, duration, model } = line
   const guide = place === undefined ? '' : treePrefix(place.path, place.isLast, icons)
   // Only the first level is moved in; deeper rows start in the same column
   // and the tree prefix alone draws their indent.
   const indent = place === undefined || place.path.length > 0 ? 0 : TRACE_INDENT
   const width = Math.max(20, data.columns - (place === undefined ? 0 : TRACE_INDENT))
-
-  const chevron = !canOpen
-    ? icons.selected
-    : isSubagent(item)
-      ? isOpen
-        ? icons.expanded
-        : icons.drill
-      : isOpen
-        ? icons.expanded
-        : icons.collapsed
-
-  // Tool rows lead with their state; output rows keep the column blank.
-  const agent = item.kind === 'tool' && item.agentId ? data.agents.get(item.agentId) : undefined
-  const mark =
-    item.kind === 'tool'
-      ? statusMark(itemStatus(item, { ...data, isAgentRunning: isAgentRunning(agent) }), data.frame, icons)
-      : undefined
-
-  const duration = itemDuration(item, data)
-  const model = item.kind === 'tool' && item.agentId ? data.agentStats[item.agentId]?.model : undefined
   const modelText = model === undefined ? '' : `${shortModel(model)}  `
   const durationText =
     duration === undefined ? '' : duration >= 1000 ? formatDuration(duration) : duration > 0 ? '<1s' : ''
@@ -787,24 +794,19 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
   const hasBar = data.columns >= BAR_MIN_COLUMNS
   const barRoom = hasBar ? BAR_CELLS + 1 : 0
   const room = width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - 2 - 7 - barRoom
-  const prefix = `${padEndDisplay(name, 12)} - `
-  const label =
-    summary && item.kind === 'tool' && pathOf(item) !== ''
-      ? prefix + fitPath(item, summary, Math.max(8, room - displayWidth(prefix)), icons.ellipsis)
-      : trunc(summary ? prefix + summary : name, Math.max(8, room))
-  const hover = { scope: scopeOf('row:', item.id), backgroundColor: C.rowHover }
-  const toggle = () => canOpen && act.toggle(item.id)
+  const label = line.label(room)
+  const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
 
   return (
-    <Box key={`item-${item.id}`} flexDirection="column" marginLeft={indent}>
+    <Box key={`item-${id}`} flexDirection="column" marginLeft={indent}>
       <Box flexDirection="row" width={width}>
         {guide !== '' && (
-          <Text key={`guide-${item.id}`} color={C.muted}>
+          <Text key={`guide-${id}`} color={C.muted}>
             {guide}
           </Text>
         )}
-        <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${chevron} `}</Text>
-        <Text key={`status-${item.id}`} color={mark?.color ?? C.muted} hover={hover}>
+        <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${line.chevron} `}</Text>
+        <Text key={`status-${id}`} color={mark?.color ?? C.muted} hover={hover}>
           {mark === undefined ? '  ' : `${mark.glyph} `}
         </Text>
         <Text color={icon.color ?? C.muted} hover={hover}>
@@ -812,7 +814,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
         </Text>
         <Box flexGrow={1} flexShrink={1}>
           {canOpen ? (
-            <Button key={item.id} plain dimColor label={label} hover={{ ...hover, ...HOVER_TEXT }} onPress={toggle} />
+            <Button key={id} plain dimColor label={label} hover={{ ...hover, ...HOVER_TEXT }} onPress={line.onPress} />
           ) : (
             <Text color={C.muted} wrap={endWrap(data.icons)} hover={hover}>
               {label}
@@ -833,7 +835,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
           </Text>
           {hasBar && (
             <Text
-              key={`bar-${item.id}`}
+              key={`bar-${id}`}
               color={duration !== undefined && duration > 0 && duration >= data.maxMs ? C.accent : C.muted}
               hover={hover}
             >
@@ -845,8 +847,103 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
           )}
         </Box>
       </Box>
-      {isOpen && canOpen && renderExpanded(el, item, data, act, place)}
+      {below}
     </Box>
+  )
+}
+
+// The rows of a turn (no `path`) or of a trace (the guides of its parent
+// levels): single items, and folded runs of calls.
+function renderRows(el: El, items: readonly Item[], data: Ctx, act: PaneActions, path?: readonly boolean[]) {
+  const rows = groupRuns(items)
+  return rows.map((row, i) => {
+    const at = path === undefined ? undefined : { path, isLast: i === rows.length - 1 }
+    return row.kind === 'group' ? renderGroup(el, row, data, act, at) : renderItem(el, row, data, act, at)
+  })
+}
+
+// A folded run: `Read ×7 · 4 files` with the total time as one bar. Open, it
+// lists the original rows under tree guides.
+function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, place?: TreePlace) {
+  const { icons } = data
+  const { Box } = el
+  const isOpen = data.expanded.has(group.id)
+  const status = group.items.some(item => item.isPending) ? 'running' : 'done'
+  const children = isOpen && (
+    <Box flexDirection="column">
+      {group.items.map((child, i) =>
+        renderItem(el, child, data, act, {
+          path: place === undefined ? [] : [...place.path, !place.isLast],
+          isLast: i === group.items.length - 1,
+        }),
+      )}
+    </Box>
+  )
+  return renderLine(
+    el,
+    {
+      id: group.id,
+      isOpen,
+      canOpen: true,
+      chevron: isOpen ? icons.expanded : icons.collapsed,
+      mark: statusMark(status, data.frame, icons),
+      icon: itemIcon(group.items[0]!, icons),
+      label: room => cutter(icons)(groupLabel(group, icons), Math.max(8, room)),
+      duration: groupDuration(group, data),
+      onPress: () => act.toggle(group.id),
+    },
+    data,
+    place,
+    children,
+  )
+}
+
+function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: TreePlace) {
+  const trunc = cutter(data.icons)
+  const { icons } = data
+  const isOpen = data.expanded.has(item.id)
+  const canOpen = hasExpandedContent(item)
+  const name = itemName(item)
+  const summary = withWorkflowNote(item, itemSummary(item), data)
+
+  const chevron = !canOpen
+    ? icons.selected
+    : isSubagent(item)
+      ? isOpen
+        ? icons.expanded
+        : icons.drill
+      : isOpen
+        ? icons.expanded
+        : icons.collapsed
+
+  // Tool rows lead with their state; output rows keep the column blank.
+  const agent = item.kind === 'tool' && item.agentId ? data.agents.get(item.agentId) : undefined
+  const mark =
+    item.kind === 'tool'
+      ? statusMark(itemStatus(item, { ...data, isAgentRunning: isAgentRunning(agent) }), data.frame, icons)
+      : undefined
+
+  const prefix = `${padEndDisplay(name, 12)} - `
+  return renderLine(
+    el,
+    {
+      id: item.id,
+      isOpen,
+      canOpen,
+      chevron,
+      mark,
+      icon: itemIcon(item, icons),
+      label: room =>
+        summary && item.kind === 'tool' && pathOf(item) !== ''
+          ? prefix + fitPath(item, summary, Math.max(8, room - displayWidth(prefix)), icons.ellipsis)
+          : trunc(summary ? prefix + summary : name, Math.max(8, room)),
+      duration: itemDuration(item, data),
+      model: item.kind === 'tool' && item.agentId ? data.agentStats[item.agentId]?.model : undefined,
+      onPress: () => canOpen && act.toggle(item.id),
+    },
+    data,
+    place,
+    isOpen && canOpen && renderExpanded(el, item, data, act, place),
   )
 }
 
@@ -1101,12 +1198,7 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
         {model !== undefined && <Text color={C.muted}>{` ${icons.dot} `}</Text>}
         {model !== undefined && <Text color={modelColor(model) ?? C.text}>{shortModel(model)}</Text>}
       </Box>
-      {trace.items.map((child, i) =>
-        renderItem(el, child, data, act, {
-          path: place === undefined ? [] : [...place.path, !place.isLast],
-          isLast: i === trace.items.length - 1,
-        }),
-      )}
+      {renderRows(el, trace.items, data, act, place === undefined ? [] : [...place.path, !place.isLast])}
     </Box>
   )
 }
