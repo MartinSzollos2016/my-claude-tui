@@ -4,6 +4,7 @@
 // rendering in view.tsx, transformations in model.ts.
 import { atom, read, update } from 'claude-code'
 import type {
+  AgentInfo,
   AgentStatus,
   CommandRunInput,
   CommandRunResult,
@@ -20,6 +21,7 @@ import {
   buildTurns,
   compactCall,
   finishedSince,
+  finishedWorkflows,
   gitDirFrom,
   isAgentFinished,
   isAgentRunning,
@@ -220,14 +222,24 @@ let runningTools: readonly RunningTool[] = []
 // The status line as last set, so an unchanged text is not set again.
 let lastStatus: string | undefined
 
+// The switches and the icon set, read once per tick and passed on.
+type Prefs = { isStatusOn: boolean; isNotifyOn: boolean; icons: Icons }
+
+async function loadPrefs($: EngineInterface): Promise<Prefs> {
+  return {
+    isStatusOn: (await $.store.get(STATUS_KEY)) !== false,
+    isNotifyOn: (await $.store.get(NOTIFY_KEY)) === true,
+    icons: await currentIcons($),
+  }
+}
+
 // Sets the status line to what the running tools say now, when that differs
 // from what is showing; off in /tail-status, it is cleared instead.
-async function syncStatus($: EngineInterface): Promise<void> {
-  const isOn = (await $.store.get(STATUS_KEY)) !== false
-  const icons = await currentIcons($)
+async function syncStatus($: EngineInterface, given?: Prefs): Promise<void> {
+  const prefs = given ?? (await loadPrefs($))
   const now = await $.clock.now()
   // Read after the awaits: the latest state wins whichever sync ends last.
-  const text = isOn ? statusText(runningTools, now, icons) : undefined
+  const text = prefs.isStatusOn ? statusText(runningTools, now, prefs.icons) : undefined
   if (text === lastStatus) return
   lastStatus = text
   $.ui.status(text)
@@ -239,37 +251,39 @@ function clearStatus($: EngineInterface): void {
   $.ui.status(undefined)
 }
 
-// Agents' statuses at the last look, the ids already announced and whether a
-// Workflow was running then, for the finish toasts.
+// Agents' statuses at the last look, the ids already announced and the
+// Workflow calls seen pending, for the finish toasts.
 let agentStatuses: ReadonlyMap<string, AgentStatus> = new Map()
 let notifiedAgents: readonly string[] = []
-let wasWorkflowRunning = false
+let trackedWorkflows: ReadonlySet<string> = new Set()
 const MAX_TOAST_TEXT = 60
 
 // Toasts a subagent or a Workflow that finished since the last look, when
 // /tail-notify is on. The look is kept either way, so turning it on later
-// announces only what finishes from then on.
-async function notifyFinished($: EngineInterface): Promise<void> {
-  const agents = await $.agent.list()
+// announces only what finishes from then on. A Workflow counts as finished
+// only when its own call got a result: an interrupt is not a finish.
+async function notifyFinished($: EngineInterface, list?: readonly AgentInfo[], given?: Prefs): Promise<void> {
+  const agents = list ?? (await $.agent.list())
   const latestTurn = (await currentTurns($)).value.at(-1)
   const working = await read($, isWorking)
-  const isOn = (await $.store.get(NOTIFY_KEY)) === true
-  const icons = await currentIcons($)
+  const prefs = given ?? (await loadPrefs($))
 
   // Nothing is awaited from here: concurrent looks cannot both see a change.
   const snapshot = agents.map(a => ({ id: a.id, status: a.status, description: a.description }))
-  const finished = finishedSince(agentStatuses, snapshot).filter(a => !notifiedAgents.includes(a.id))
+  const finished = finishedSince(agentStatuses, snapshot).filter(
+    a => !notifiedAgents.includes(a.id) && !workflowAgents.includes(a.id),
+  )
   agentStatuses = new Map(snapshot.map(a => [a.id, a.status]))
-  const isRunning = workflowState(latestTurn, workflowAgents.length, working).isRunning
-  const isWorkflowDone = wasWorkflowRunning && !isRunning
-  wasWorkflowRunning = isRunning
-  if (!isOn) return
+  const workflows = finishedWorkflows(trackedWorkflows, latestTurn, working)
+  trackedWorkflows = workflows.tracked
+  if (!prefs.isNotifyOn) return
 
   for (const agent of finished) {
     notifiedAgents = noteNotified(notifiedAgents, agent.id)
-    $.ui.toast(`Subagent finished: ${truncate(sanitizeText(agent.description).trim(), MAX_TOAST_TEXT, icons.ellipsis)}`)
+    const text = truncate(sanitizeText(agent.description).trim(), MAX_TOAST_TEXT, prefs.icons.ellipsis)
+    $.ui.toast(`Subagent finished: ${text}`)
   }
-  if (isWorkflowDone) $.ui.toast('Workflow finished')
+  if (workflows.finished.length > 0) $.ui.toast('Workflow finished')
 }
 
 // The index of the last main-loop turn that completed with a known index.
@@ -324,8 +338,9 @@ async function onTick($: EngineInterface): Promise<void> {
   const working = await read($, isWorking)
   const agents = await $.agent.list()
   if (!working && !agents.some(a => isAgentRunning(a.status))) stopTicker()
-  await syncStatus($)
-  await notifyFinished($)
+  const prefs = await loadPrefs($)
+  await syncStatus($, prefs)
+  await notifyFinished($, agents, prefs)
   await bump($)
 }
 
@@ -627,7 +642,7 @@ export const register: Register = on => {
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
       await update($, isWorking, () => false)
       runningTools = []
-      syncStatus($).catch(ignore)
+      clearStatus($)
       refreshGit($).catch(ignore)
     }
     notifyFinished($).catch(ignore)

@@ -159,7 +159,12 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       root: async () => '/r/project',
       surfaces: async () => world.surfaces,
     },
-    agent: { list: async () => world.agents },
+    agent: {
+      list: async () => {
+        world.calls.push('agent.list')
+        return world.agents
+      },
+    },
     clock: {
       now: async () => world.now,
       every: (_ms: number, fn: () => void) => {

@@ -959,14 +959,70 @@ describe('finish toasts', () => {
       async () => ({ text: '' }),
     )
 
-  test('a Workflow ended by its turn finishing toasts from turn.complete', async () => {
+  const doneRows: SessionMessage[] = [
+    workflowRows[0]!,
+    {
+      role: 'assistant',
+      text: '',
+      toolUses: [{ tool_use_id: 'w1', tool: 'Workflow', input: { name: 'review' }, text: 'done' }],
+    },
+  ]
+
+  test('a Workflow whose result arrives with its turn ending toasts once', async () => {
+    const { $, world } = fakeEngine({ messages: workflowRows })
+    await say($, 'tail-notify', 'on')
+    await start($)
+    await tick(world)
+    world.messages = doneRows
+    await endTurn($)
+    await settle()
+    expect(world.toasts).toEqual(['Workflow finished'])
+  })
+
+  test('an interrupted turn leaves a pending Workflow without a toast', async () => {
     const { $, world } = fakeEngine({ messages: workflowRows })
     await say($, 'tail-notify', 'on')
     await start($)
     await tick(world)
     await endTurn($)
     await settle()
-    expect(world.toasts).toEqual(['Workflow finished'])
+    await tick(world)
+    expect(world.toasts).toEqual([])
+    // Its result turning up later is not an announcement either.
+    world.messages = doneRows
+    await tick(world)
+    expect(world.toasts).toEqual([])
+  })
+
+  test('a dropped prompt does not announce a pending Workflow', async () => {
+    const { $, world } = fakeEngine({ messages: workflowRows })
+    await say($, 'tail-notify', 'on')
+    await start($)
+    await tick(world)
+    await run('prompt.submit', $, { text: 'again' }, async () => ({ drop: 'blocked' }))
+    await tick(world)
+    expect(world.toasts).toEqual([])
+  })
+
+  test('an agent the Workflow started does not toast on its own', async () => {
+    const { $, world } = fakeEngine({ messages: workflowRows })
+    await say($, 'tail-notify', 'on')
+    await start($)
+    await run('tool.call', $, { tool_use_id: 'x', tool: 'Read', agentId: 'wf-1' }, async () => ({}))
+    await settle()
+    world.agents = [info('running', 'wf-1')] as never
+    await tick(world)
+    world.agents = [info('completed', 'wf-1')] as never
+    await tick(world)
+    expect(world.toasts).toEqual([])
+  })
+
+  test('a tick reads the agent list once', async () => {
+    const { $, world } = fakeEngine()
+    await start($)
+    world.calls.length = 0
+    await tick(world)
+    expect(world.calls.filter(c => c === 'agent.list')).toHaveLength(1)
   })
 
   test('no Workflow toast while notifications are off', async () => {
