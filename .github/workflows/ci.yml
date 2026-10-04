@@ -50,6 +50,9 @@ jobs:
       - name: Check
         run: npm run check
 
+      - name: Install from the marketplace
+        run: scripts/smoke-install.sh
+
       # Istanbul coverage of the logic the unit tests import directly; the
       # engine-mounted render tests cannot be instrumented.
       - name: Coverage
