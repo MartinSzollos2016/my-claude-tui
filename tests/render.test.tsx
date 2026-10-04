@@ -375,21 +375,17 @@ describe('/tail theme', () => {
     presentation: { isFullscreen: true, columns: 160 },
   } as CommandRunInput
 
-  test('switches to the tail-view variant of the current theme and back', async ($, on) => {
-    let theme = 'dark'
-    on('config.list', () => ({ value: [themeRow(theme)] }))
+  test('advises the matching tail-view theme without writing config', async ($, on) => {
+    let writes = 0
+    on('config.list', () => ({ value: [themeRow('dark-daltonized')] }))
     on('config.set', (_$, e) => {
-      theme = String(e.value)
+      writes += 1
       return { value: e.value }
     })
 
-    const on1 = await $.command.run(RUN_THEME)
-    expect(theme).toBe('custom:tail-view:dark')
-    expect(on1.text).toContain('tail-view variant')
-
-    const off = await $.command.run(RUN_THEME)
-    expect(theme).toBe('dark')
-    expect(off.text).toContain('back to dark')
+    const ran = await $.command.run(RUN_THEME)
+    expect(writes).toBe(0)
+    expect(ran.text).toContain('"Tail Dark (colorblind-friendly)"')
   })
 
   test('leaves auto to /theme without writing', async ($, on) => {

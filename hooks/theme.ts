@@ -111,20 +111,33 @@ export function modeColor(mode: string | null): ThemeKey | undefined {
 // on the dark themes, white on the light ones. The engine loads them as
 // `custom:tail-view:<base>`.
 
-export const BUILTIN_THEMES = ['dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi'] as const
+// Base theme -> the name its themes/<base>.json variant shows in /theme.
+export const TAIL_THEMES = {
+  dark: 'Tail Dark',
+  'dark-daltonized': 'Tail Dark (colorblind-friendly)',
+  'dark-ansi': 'Tail Dark (ANSI colors only)',
+  light: 'Tail Light',
+  'light-daltonized': 'Tail Light (colorblind-friendly)',
+  'light-ansi': 'Tail Light (ANSI colors only)',
+} as const
+
+type BuiltinTheme = keyof typeof TAIL_THEMES
 
 const TAIL_THEME_PREFIX = 'custom:tail-view:'
 
-const isBuiltinTheme = (theme: string): theme is (typeof BUILTIN_THEMES)[number] =>
-  (BUILTIN_THEMES as readonly string[]).includes(theme)
+const isBuiltinTheme = (theme: string): theme is BuiltinTheme => Object.hasOwn(TAIL_THEMES, theme)
 
-// The theme /tail theme switches to: the tail-view variant of a built-in
-// theme, or back to the built-in one. Undefined for `auto` and for custom
-// themes, which only the person can map.
-export function toggleTailTheme(current: string): string | undefined {
+// What /tail theme says. Claude Code's config API only takes the built-in
+// themes, so the mod cannot switch to a custom one itself: it names the
+// variant matching the current theme for the person to pick in /theme.
+export function tailThemeAdvice(current: string): string {
   if (current.startsWith(TAIL_THEME_PREFIX)) {
     const base = current.slice(TAIL_THEME_PREFIX.length)
-    return isBuiltinTheme(base) ? base : undefined
+    if (isBuiltinTheme(base)) return `Already using "${TAIL_THEMES[base]}".`
   }
-  return isBuiltinTheme(current) ? TAIL_THEME_PREFIX + current : undefined
+  if (isBuiltinTheme(current)) {
+    return `Pick "${TAIL_THEMES[current]}" in /theme: ${current} with a ${current.startsWith('dark') ? 'black' : 'white'} pane column and frame.`
+  }
+  const names = Object.values(TAIL_THEMES).map(n => `"${n}"`).join(', ')
+  return `Pick one of ${names} in /theme for a black or white pane column and frame.`
 }
