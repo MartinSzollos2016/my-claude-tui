@@ -1124,6 +1124,35 @@ describe('own scroll', () => {
     expect(byKey(pane({ rows: 9 }), 'more-below')).toBeDefined()
   })
 
+  test('a short inline pane keeps the header line, a window of rows and a one-row footer', () => {
+    const footerRows = (tree: Node) =>
+      kids(byKey(tree, 'footer')).filter(n => n.props['key'] !== 'footer-hidden').length
+    // Inline above the prompt the engine spares few rows: the full footer and
+    // header would leave the window two rows, so the pane goes compact.
+    for (const rows of [6, 8, 9]) {
+      const short = pane({ placement: 'inline', rows, isFocused: true })
+      expect(short.props['height'], `${rows}`).toBe(rows)
+      expect(byKey(short, 'pane-header')?.props['height']).toBe(1)
+      expect(byKey(byKey(short, 'pane-header'), 'brand-mark')).toBeDefined()
+      expect(byKey(short, 'prompt')).toBeUndefined()
+      expect(footerRows(short)).toBe(1)
+      expect(byKey(short, 'footer-rule')).toBeUndefined()
+      expect(text(byKey(short, 'footer-status'))).toContain('keys on')
+      // Every key keeps its hotkey, drawn or not.
+      expect(byKey(short, 'nav-turns')?.props['hotkey']).toBe('t')
+      expect(byKey(short, 'pane-window')?.props['height']).toBe(rows - 2)
+    }
+    // With room for the full layout an inline pane draws as a docked one.
+    const tall = pane({ placement: 'inline', rows: 14 })
+    expect(byKey(tall, 'pane-header')?.props['height']).toBe(2)
+    expect(footerRows(tall)).toBe(4)
+    expect(byKey(tall, 'pane-window')?.props['height']).toBe(8)
+    // A docked pane as short keeps its layout.
+    const docked = pane({ placement: 'dock', rows: 8 })
+    expect(byKey(docked, 'pane-header')?.props['height']).toBe(2)
+    expect(footerRows(docked)).toBe(4)
+  })
+
   test('each drawing reports where its window stands, for the scroll of the engine', () => {
     measured.length = 0
     pane({ rows: 10, scrollTop: 99 })

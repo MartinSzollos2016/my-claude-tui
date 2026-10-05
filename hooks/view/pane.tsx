@@ -3,6 +3,7 @@
 import { ICON_SETS } from '../icons'
 import { C, contextColor, modelColor } from '../theme'
 import { contextMeter, formatClock, formatDuration, formatTokens, shortModel } from '../model/format'
+import { compactFooter } from '../model/footer'
 import { clampScroll, contentRows, overflowRows, type ScrollFrame } from '../model/scroll'
 import { reserveSections } from '../model/sections'
 import { EMPTY_TURN_TEXT } from '../model/turn-table'
@@ -108,6 +109,9 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   })
 }
 
+// The fewest content rows an inline pane keeps before it goes compact.
+const MIN_INLINE_WINDOW = 4
+
 // The pane body, painted edge to edge in the theme's background and exactly
 // as tall as the engine's window, so the engine has nothing to scroll: the
 // header stays on top, the content moves up by `scrollTop` rows (a negative
@@ -116,11 +120,17 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   const { Box, Text } = el
   const { icons } = data
-  const layout = footerRowsOf(data, act)
+  const full = footerRowsOf(data, act)
+  const sumRows = (list: PaneParts['header']) => list.reduce((sum, part) => sum + part.rows, 0)
+  // Inline above the prompt the engine spares few rows: a pane that would
+  // leave its window under MIN_INLINE_WINDOW keeps the header's first line and
+  // the footer's status line only.
+  const isCompact = data.placement === 'inline' && data.rows - sumRows(parts.header) - full.rows < MIN_INLINE_WINDOW
+  const layout = isCompact ? compactFooter(full) : full
+  const wanted = isCompact ? parts.header.slice(0, 1) : parts.header
   // A pane too short for the header and a row of content drops the header.
-  const fullHeader = parts.header.reduce((sum, part) => sum + part.rows, 0)
-  const header = data.rows - fullHeader - layout.rows >= 1 ? parts.header : []
-  const headerRows = header === parts.header ? fullHeader : 0
+  const header = data.rows - sumRows(wanted) - layout.rows >= 1 ? wanted : []
+  const headerRows = sumRows(header)
   const windowRows = Math.max(1, data.rows - headerRows - layout.rows)
   const rows = contentRows(data.layout)
   const scrollTop = clampScroll(data.scrollTop ?? 0, rows.total, windowRows)

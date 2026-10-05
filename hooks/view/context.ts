@@ -45,6 +45,9 @@ export type PaneData = {
   columns: number
   // The rows the engine gives the pane's body: the pane is drawn exactly this tall.
   rows: number
+  // Where the engine seated the pane: docked beside the transcript, or inline
+  // above the prompt, where a short pane goes compact. Docked when left out.
+  placement?: 'dock' | 'inline'
   // How many rows the shown view's content is scrolled up in its window; 0
   // when left out, clamped to the content when drawn.
   scrollTop?: number

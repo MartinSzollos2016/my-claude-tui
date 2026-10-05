@@ -86,6 +86,19 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
       </Box>
     )
   }
+  if (layout.isCompact === true)
+    return (
+      <Box key="footer" flexDirection="column" width={data.columns} backgroundColor={C.paneBackground}>
+        {statusBox(inner)}
+        <Box key="footer-hidden" display="none">
+          {[
+            ...plan.rows.flatMap(row => [...(row.left ?? []), ...row.keys]),
+            ...(isPageInRow ? [] : page),
+            ...plan.hidden,
+          ].map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+        </Box>
+      </Box>
+    )
   return (
     <Box key="footer" flexDirection="column" width={data.columns} backgroundColor={C.paneBackground}>
       <Text key="footer-rule" color={C.muted}>

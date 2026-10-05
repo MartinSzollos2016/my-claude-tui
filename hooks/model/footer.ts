@@ -8,6 +8,9 @@ export type FooterLayout = {
   columns: 'two' | 'stacked'
   // Whether the buttons carry their labels; without, only key and glyph.
   labels: boolean
+  // The status line alone, every key kept by its hotkey only: a pane too
+  // short for the rule and the rows of keys.
+  isCompact?: true
 }
 
 const FOOTER_TWO_COLUMNS_FROM = 64
@@ -20,6 +23,9 @@ export function footerLayout(columns: number, groupRows?: number): FooterLayout 
   if (isTwo) return { rows, columns: 'two', labels: true }
   return { rows, columns: 'stacked', labels: columns >= FOOTER_LABELS_FROM }
 }
+
+// The footer of a short pane: one row, the status line.
+export const compactFooter = (layout: FooterLayout): FooterLayout => ({ ...layout, rows: 1, isCompact: true })
 
 // The cells after each key of a row that belong to it, so a click between
 // two keys lands on one: the gap to the next key, and for the last key of a
