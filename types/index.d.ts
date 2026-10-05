@@ -47,6 +47,10 @@ declare module 'claude-code' {
       full: string[]
       // The turn search's query; '' lists every turn.
       query: string
+      // The search field's instance: its key generation (bumped by clear, a new
+      // key resets the field) and the text it is drawn with. Typing changes the
+      // query alone, so a late drawing never overwrites what is typed.
+      searchField: { gen: number; seed: string }
       timings: Record<string, ToolTiming>
       turnStats: TurnStat[]
       agentStats: Record<string, AgentStat>

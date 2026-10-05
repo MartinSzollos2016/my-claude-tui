@@ -131,6 +131,7 @@ export const act = {
   showTeam: () => calls.push('showTeam'),
   pickTurn: (i: number) => calls.push(`pick:${i}`),
   search: (query: string) => calls.push(`search:${query}`),
+  clearSearch: () => calls.push('clearSearch'),
   submitSearch: (query: string) => calls.push(`submit:${query}`),
   focusSearch: () => calls.push('focusSearch'),
   cursorDown: (at: { scrollTop: number; windowRows: number; total: number; starts: Record<string, number> }) =>

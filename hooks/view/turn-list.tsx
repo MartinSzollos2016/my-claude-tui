@@ -24,6 +24,10 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
   const trunc = cutter(data.icons)
   const { Box, Button, Input, Text } = el
   const query = data.query ?? ''
+  // The field is drawn with a seed that typing never changes: the engine puts
+  // a drawn value into the field each time it differs, and drawings arrive
+  // late, so drawing the query back would undo the keys typed meanwhile.
+  const field = data.searchField ?? { gen: 0, seed: query }
   const isFiltered = query.trim() !== ''
   const snippets = new Map((data.matches ?? []).map(match => [match.index, match.snippet] as const))
   const table = turnTable(data.turns, data.stats, data.columns, data.icons)
@@ -81,9 +85,9 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
       node: (
         <Box key="turns-search" flexDirection="row" gap={2}>
           <Input
-            key="turn-search"
+            key={searchFieldKey(field.gen)}
             placeholder="Search turns"
-            value={query}
+            value={field.seed}
             submitLabel="open"
             onInput={value => act.search(value)}
             onSubmit={value => act.submitSearch(value)}
@@ -95,7 +99,7 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
               dimColor
               hover={buttonHover('btn:search-clear')}
               label="clear"
-              onPress={() => act.search('')}
+              onPress={() => act.clearSearch()}
             />
           )}
         </Box>
@@ -159,6 +163,10 @@ const SNIPPET_INDENT = '      '
 
 // A turn row's id in the content's rows: where the turn list's cursor finds it.
 export const turnRowId = (index: number) => `turn:${index}`
+
+// The search field's key: clear bumps the generation, and the new key is a new
+// field, empty, where the engine would keep an unchanged value's typing.
+export const searchFieldKey = (gen: number) => (gen === 0 ? 'turn-search' : `turn-search-${gen}`)
 
 const NO_MATCH_HINT = 'Clear the search or try fewer words.'
 

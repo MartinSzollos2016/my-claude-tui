@@ -755,7 +755,7 @@ describe('renderPane', () => {
     ;(input?.props['onInput'] as (value: string) => void)('x')
     ;(input?.props['onSubmit'] as (value: string) => void)('y')
     ;(byKey(tree, 'search-clear')?.props['onPress'] as () => void)()
-    expect(calls).toEqual(expect.arrayContaining(['search:x', 'submit:y', 'search:']))
+    expect(calls).toEqual(expect.arrayContaining(['search:x', 'submit:y', 'clearSearch']))
 
     expect(text(renderPane(el, { ...base, view: 'turns', query: 'zzz', matches: [] }, act))).toContain(
       'No turn matches "zzz".',
