@@ -62,7 +62,7 @@ import { searchTurns, type TurnMatch } from './model/search'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
 import { alignFromEnd, thinkingCounts, type TurnThinking } from './model/thinking'
 import { durationSuffix, inlineRows, paneColumns, paneRows, resultLine, terminalWidth } from './model/transcript'
-import { buildTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
+import { incrementalTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
 import type { Item, Turn } from './model/types'
 import { shortPath, truncate } from './model/width'
 import { renderBar } from './view/bar'
@@ -131,10 +131,13 @@ async function turnThinking($: EngineInterface, key: string): Promise<TurnThinki
   return thinkingCache.value
 }
 
-// The session's turns, rebuilt only when the transcript's fingerprint moved.
+// The session's turns, rebuilt only when the transcript's fingerprint moved;
+// a rebuild sanitizes only the rows that are new or changed.
+const sessionTurns = incrementalTurns()
+
 async function currentTurns($: EngineInterface): Promise<Memo<Turn[]>> {
   const messages = await $.session.messages()
-  turnsCache = memo(turnsCache, turnsKey(messages), () => buildTurns(messages))
+  turnsCache = memo(turnsCache, turnsKey(messages), () => sessionTurns.build(messages))
   return turnsCache
 }
 
