@@ -1,5 +1,6 @@
 // Turn search: the turns whose prompt or reply match a query, with a snippet.
 import type { Turn } from './types'
+import { expandTabs } from './width'
 
 export type TurnMatch = { index: number; snippet: string }
 
@@ -55,7 +56,7 @@ function snippetAt(text: string, at: number, ellipsis: string): string {
   const head = start > 0 ? ellipsis : ''
   const tail = end < chars.length ? ellipsis : ''
   const body = chars.slice(start > 0 ? start + width : start, end < chars.length ? end - width : end).join('')
-  return head + body.replaceAll('\n', ' ') + tail
+  return head + expandTabs(body).replaceAll('\n', ' ') + tail
 }
 
 // A snippet in three parts around the first hit of `query` (case-insensitive,

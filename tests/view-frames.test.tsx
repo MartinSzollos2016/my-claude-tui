@@ -69,6 +69,52 @@ describe('diff blocks', () => {
   })
 })
 
+describe('tabs', () => {
+  const T8 = ' '.repeat(8)
+  const call = (tool: string, input: Record<string, unknown>, result: string, isError = false) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'x1', tool, input, text: result, ...(isError ? { isError: true as const } : {}) }],
+      },
+    ])
+  const drawn = (turns: ReturnType<typeof buildTurns>, extra: Record<string, unknown> = {}) =>
+    renderPane(el, { ...base, turns, selected: 0, expanded: new Set(['x1']), ...extra }, act)
+  const sources = (tree: unknown) =>
+    nodes(tree)
+      .filter(n => n.type === 'Code')
+      .map(n => n.props['source'] as string)
+
+  test('an output drawn as text expands its tabs to stops of 8 and copies them as they are', () => {
+    const tree = drawn(call('Bash', { command: 'ls' }, 'id\tname\n1\talpha'))
+    expect(text(tree)).toContain(`id      name\n1${' '.repeat(7)}alpha`)
+    expect(text(tree)).not.toContain('\t')
+    calls.length = 0
+    ;(byKey(tree, 'copy:x1:output')?.props['onPress'] as (p: unknown) => void)({ surface: 'terminal' })
+    expect(calls).toEqual(['copy:terminal:id\tname\n1\talpha'])
+  })
+
+  test('numbered code expands tabs after its numbers, a diff after its marker', () => {
+    const read = drawn(call('Read', { file_path: '/a/b.go' }, '     1→func a() {\n     2→\treturn\n     3→}'))
+    expect(sources(read)).toContain(`func a() {\n${T8}return\n}`)
+    const edit = drawn(call('Edit', { file_path: '/a/b.go', old_string: '\tx', new_string: '\ty' }, 'ok'))
+    expect(sources(edit)).toContain(`@@ -1,1 +1,1 @@\n-${T8}x\n+${T8}y`)
+  })
+
+  test('an error line and a message frame draw no tab', () => {
+    const error = drawn(call('Bash', { command: 'go test' }, 'ok\tpkg/a\nFAIL\tpkg/b', true))
+    expect(text(error)).toContain(`FAIL${' '.repeat(4)}pkg/b`)
+    expect(text(error)).not.toContain('\t')
+    const message = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: 'a\tb', toolUses: [] },
+    ])
+    expect(sources(drawn(message, { expanded: new Set(['t0:o0']) }))).toContain(`a${' '.repeat(7)}b`)
+  })
+})
+
 describe('code blocks', () => {
   const readTurn = (path: string, result: string, tool = 'Read') =>
     buildTurns([

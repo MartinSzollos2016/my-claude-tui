@@ -7,7 +7,7 @@ import { sanitizeText } from './sanitize'
 import { inputSections } from './sections'
 import type { ToolItem } from './types'
 import { str } from './values'
-import { truncateDisplay } from './width'
+import { expandTabs, truncateDisplay } from './width'
 
 const CARD_LINES = 6
 // A card is a glance, not a frame: never wider than this, however wide the pane.
@@ -28,7 +28,7 @@ export function hoverCard(item: ToolItem, width: number, glyphs: Glyphs = DEFAUL
   let left = CARD_CHARS
   for (const raw of source.slice(0, CARD_LINES)) {
     if (left <= 0) break
-    const line = [...truncateDisplay(sanitizeText(raw), room, glyphs.ellipsis)].slice(0, left).join('')
+    const line = [...truncateDisplay(expandTabs(sanitizeText(raw)), room, glyphs.ellipsis)].slice(0, left).join('')
     lines.push(line)
     left -= line.length + 1
   }

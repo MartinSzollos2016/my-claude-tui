@@ -87,6 +87,36 @@ export function displayWidth(text: string): number {
   return width
 }
 
+// Terminals set a tab stop every 8 cells, and what tools print in columns
+// (cat -n, git, ls, column, Go) lines up on them; the engine itself draws a
+// tab narrow, so the drawn text runs short of what the terminal shows.
+const TAB_SIZE = 8
+
+// Each tab replaced by the spaces up to the next tab stop of its line, the
+// text before it measured in cells. A text without tabs comes back as it is.
+export function expandTabs(text: string, tabSize = TAB_SIZE): string {
+  if (!text.includes('\t')) return text
+  const size = Math.max(1, tabSize)
+  const expandLine = (line: string): string => {
+    let out = ''
+    let column = 0
+    for (const [i, run] of line.split('\t').entries()) {
+      if (i > 0) {
+        const pad = size - (column % size)
+        out += ' '.repeat(pad)
+        column += pad
+      }
+      out += run
+      column += displayWidth(run)
+    }
+    return out
+  }
+  return text
+    .split('\n')
+    .map(line => (line.includes('\t') ? expandLine(line) : line))
+    .join('\n')
+}
+
 // Pads with spaces to `width` cells; text that is wider is left whole.
 export function padEndDisplay(text: string, width: number): string {
   return text + ' '.repeat(Math.max(0, width - displayWidth(text)))

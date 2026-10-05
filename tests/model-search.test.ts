@@ -22,6 +22,14 @@ describe('splitMatch', () => {
     expect(splitMatch('😀😀', '😀')).toEqual({ before: '', match: '😀', after: '😀' })
   })
 
+  test('a snippet draws no tab: its tabs are expanded to stops of 8', () => {
+    const turns = buildTurns([
+      { role: 'user', text: 'ok\tpkg/a\nFAIL\tpkg/b', toolUses: [] },
+      { role: 'assistant', text: 'ok', toolUses: [] },
+    ])
+    expect(searchTurns(turns, 'pkg/b')[0]?.snippet).toBe(`ok      pkg/a FAIL    pkg/b`)
+  })
+
   test('agrees with searchTurns: the snippet it made holds the match it finds', () => {
     const long = `${'a'.repeat(60)} needle ${'b'.repeat(60)}`
     const turns = buildTurns([
