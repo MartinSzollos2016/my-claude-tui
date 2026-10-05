@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { helpText, parseCommand } from '../hooks/commands'
+import { helpText, parseCommand, unknownText } from '../hooks/commands'
 
 describe('parseCommand', () => {
   test('routes subcommands and their /tail shorthand alike', () => {
@@ -7,7 +7,8 @@ describe('parseCommand', () => {
     expect(parseCommand('tail', 'width 70')).toEqual({ sub: 'width', arg: '70' })
     expect(parseCommand('tail-width', ' 70 ')).toEqual({ sub: 'width', arg: '70' })
     expect(parseCommand('tail', 'help')).toEqual({ sub: 'help', arg: '' })
-    expect(parseCommand('tail', 'nonsense')).toEqual({ sub: 'open', arg: 'nonsense' })
+    expect(parseCommand('tail', 'nonsense')).toEqual({ sub: 'unknown', arg: 'nonsense' })
+    expect(parseCommand('tail', '  ')).toEqual({ sub: 'open', arg: '' })
     expect(parseCommand('tail-turns', '')).toEqual({ sub: 'turns', arg: '' })
     expect(parseCommand('tail', 'turns')).toEqual({ sub: 'turns', arg: '' })
     expect(parseCommand('tail-icons', ' ascii ')).toEqual({ sub: 'icons', arg: 'ascii' })
@@ -24,5 +25,14 @@ describe('helpText', () => {
   test('names both view keys of the pane: t for the turn list, d for the detail view', () => {
     expect(helpText()).toMatch(/\bt turn list\b/)
     expect(helpText()).toMatch(/\bd detail view\b/)
+  })
+})
+
+describe('unknownText', () => {
+  test('names the word it did not know and lists the valid subcommands', () => {
+    const answer = unknownText('foo')
+    expect(answer).toContain('"foo"')
+    for (const sub of ['turns', 'bar', 'compact', 'icons', 'width', 'status', 'notify', 'help'])
+      expect(answer).toContain(sub)
   })
 })
