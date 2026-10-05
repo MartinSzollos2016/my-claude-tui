@@ -1,8 +1,16 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
-import { buildTurns, isAgentFinished, isAgentRunning, itemStatus, traceItems, turnsKey } from '../hooks/model/turns'
+import {
+  buildTurns,
+  incrementalTurns,
+  isAgentFinished,
+  isAgentRunning,
+  itemStatus,
+  traceItems,
+  turnsKey,
+} from '../hooks/model/turns'
 import type { ToolItem } from '../hooks/model/types'
-import { prompt, read, transcript } from './fixtures/model'
+import { main, prompt, read, transcript } from './fixtures/model'
 
 describe('buildTurns', () => {
   test('groups assistant rows under the prompt that opened them', () => {
@@ -140,5 +148,80 @@ describe('agent status', () => {
     for (const status of ['completed', 'failed', 'killed'] as const) expect(isAgentFinished(status)).toBe(true)
     for (const status of ['pending', 'running', 'waiting', 'idle', undefined] as const)
       expect(isAgentFinished(status)).toBe(false)
+  })
+})
+
+describe('incrementalTurns', () => {
+  // Undefined fields count: the result must match a fresh build field for field.
+  const exact = (value: unknown) => JSON.stringify(value, (_, v: unknown) => (v === undefined ? '<undefined>' : v))
+  const same = (built: unknown, messages: readonly SessionMessage[], idPrefix?: string) => {
+    expect(built).toEqual(buildTurns(messages, idPrefix))
+    expect(exact(built)).toBe(exact(buildTurns(messages, idPrefix)))
+  }
+  // New row objects and strings, as the engine may hand out on each read.
+  const copy = (rows: readonly SessionMessage[]): SessionMessage[] =>
+    rows.map(r => ({
+      ...r,
+      text: ` ${r.text}`.slice(1),
+      toolUses: r.toolUses.map(u => ({ ...u, input: JSON.parse(JSON.stringify(u.input)) as Record<string, unknown> })),
+    }))
+  const long = (seed: string) => `${seed} \u001b[31m${'x'.repeat(5000)}‮${seed}`
+
+  test('matches a fresh build while the transcript grows row by row', () => {
+    const turns = incrementalTurns()
+    const rows: SessionMessage[] = []
+    for (const m of [...transcript, ...main, prompt('<command-name>/tail</command-name>'), prompt(long('p'))]) {
+      rows.push(m)
+      same(turns.build(copy(rows)), rows)
+    }
+  })
+
+  test('matches a fresh build when the last message is edited or a tool answered', () => {
+    const turns = incrementalTurns()
+    const rows: SessionMessage[] = [prompt('go'), { role: 'assistant', text: 'Wor', toolUses: [] }]
+    same(turns.build(copy(rows)), rows)
+    rows[1] = { role: 'assistant', text: 'Working \u001b]52;c;x\u0007on it', toolUses: [{ ...read }] }
+    same(turns.build(copy(rows)), rows)
+    rows[1] = { ...rows[1], toolUses: [{ ...read, text: long('out') }] }
+    same(turns.build(copy(rows)), rows)
+    rows[1] = { ...rows[1], toolUses: [{ ...read, text: long('out'), isError: true }] }
+    same(turns.build(copy(rows)), rows)
+    rows[1] = { ...rows[1], toolUses: [{ ...read, text: long('out'), result: { interrupted: true } }] }
+    same(turns.build(copy(rows)), rows)
+    rows[1] = { ...rows[1], toolUses: [{ ...read, input: { file_path: '/b.go' }, text: 'x', durationMs: 5 }] }
+    same(turns.build(copy(rows)), rows)
+    rows[1] = { ...rows[1], text: long('a') }
+    same(turns.build(copy(rows)), rows)
+    rows[1] = { ...rows[1], text: long('b') }
+    same(turns.build(copy(rows)), rows)
+  })
+
+  test('matches a fresh build when the rolling window drops the first rows', () => {
+    const turns = incrementalTurns()
+    const rows: SessionMessage[] = [...transcript, ...transcript, ...main]
+    same(turns.build(copy(rows)), rows)
+    // The window shifts: the transcript starts mid-turn, an anonymous turn
+    // opens and every turn index (and output id) moves down.
+    for (let n = 1; n < 6; n++) same(turns.build(copy(rows.slice(n))), rows.slice(n))
+  })
+
+  test('keeps the id prefix it is given', () => {
+    const turns = incrementalTurns()
+    same(turns.build(copy(transcript), 'agent-1/'), transcript, 'agent-1/')
+    same(turns.build(copy(transcript)), transcript)
+  })
+
+  test('sanitizes only what changed after a row is appended', () => {
+    const turns = incrementalTurns()
+    const rows: SessionMessage[] = [...transcript, ...main]
+    turns.build(copy(rows))
+    const before = { ...turns.work }
+    expect(before.messages).toBeGreaterThan(0)
+    expect(before.tools).toBeGreaterThan(0)
+    turns.build(copy(rows))
+    expect(turns.work).toEqual(before)
+    rows.push({ role: 'assistant', text: 'One more.', toolUses: [{ ...read, tool_use_id: 'n1' }] })
+    turns.build(copy(rows))
+    expect(turns.work).toEqual({ messages: before.messages + 1, tools: before.tools + 1 })
   })
 })
