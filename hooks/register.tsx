@@ -571,7 +571,8 @@ async function clearSearch($: EngineInterface): Promise<void> {
 }
 
 // Enter in the search field: keeps the query and opens the newest match,
-// the first one the list shows.
+// the first one the list shows. searchTurns reuses the lowercased turns the
+// list's search left behind.
 async function openMatch($: EngineInterface, value: string, turns: readonly Turn[]): Promise<void> {
   await update($, searchQuery, () => value)
   const newest = searchTurns(turns, value).at(-1)

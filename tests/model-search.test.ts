@@ -98,6 +98,33 @@ describe('searchTurns', () => {
     expect(lone.test(match!.snippet)).toBe(false)
   })
 
+  test('typing narrows, deleting widens, and new turns are searched afresh', () => {
+    const before = buildTurns([prompt('alpha one'), prompt('alpine two'), prompt('beta three')])
+    expect(searchTurns(before, 'al').map(m => m.index)).toEqual([0, 1])
+    expect(searchTurns(before, 'alp').map(m => m.index)).toEqual([0, 1])
+    expect(searchTurns(before, 'alph').map(m => m.index)).toEqual([0])
+    expect(searchTurns(before, 'ALPHA ').map(m => m.index)).toEqual([0])
+    expect(searchTurns(before, 'a').map(m => m.index)).toEqual([0, 1, 2])
+    expect(searchTurns(before, 'e').map(m => m.index)).toEqual([0, 1, 2])
+    expect(searchTurns(before, 'et').map(m => m.index)).toEqual([2])
+    // The same query over rebuilt turns: other text, other hits.
+    const after = buildTurns([prompt('gamma'), prompt('beta alpha')])
+    expect(searchTurns(after, 'alph')).toEqual([{ index: 1, snippet: 'beta alpha' }])
+    expect(searchTurns(after, 'alpha').map(m => m.index)).toEqual([1])
+    expect(searchTurns(before, 'alpha').map(m => m.index)).toEqual([0])
+  })
+
+  test('a repeated search gives the same snippets, whatever the ellipsis', () => {
+    const long = buildTurns([prompt(`${'İ'.repeat(100)}Needle${'x'.repeat(100)}`)])
+    const first = searchTurns(long, 'needle')
+    expect(searchTurns(long, 'needle')).toEqual(first)
+    expect(searchTurns(long, 'needl')).toEqual(first)
+    const dots = searchTurns(long, 'needle', '...')[0]!.snippet
+    expect(dots.startsWith('...')).toBe(true)
+    expect(dots).toContain('Needle')
+    expect(splitMatch(first[0]!.snippet, 'needle').match).toBe('Needle')
+  })
+
   test('stays linear on a long input', () => {
     const big = buildTurns([prompt('x'), { role: 'assistant', text: 'a'.repeat(1_000_000), toolUses: [] }])
     const started = performance.now()
