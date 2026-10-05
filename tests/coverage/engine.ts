@@ -126,6 +126,12 @@ type World = {
   focused: string[]
   timers: (() => void)[]
   calls: string[]
+  // Every round trip to the engine, in order: its calls ('agent.list') and
+  // the state reads and writes ('state.get:tick', 'state.set:timings').
+  trips: string[]
+  // How many of those started while no other was in flight: the rounds a
+  // hook waits through, calls made together counting once.
+  rounds: number
 }
 
 export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; world: World } {
@@ -155,7 +161,20 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     focused: [],
     timers: [],
     calls: [],
+    trips: [],
+    rounds: 0,
     ...given,
+  }
+  let inFlight = 0
+  // Logs a round trip and counts it as a new round when nothing else waits.
+  const track = (name: string, result: unknown): unknown => {
+    if (typeof (result as { then?: unknown } | null)?.then !== 'function') return result
+    world.trips.push(name)
+    if (inFlight === 0) world.rounds++
+    inFlight++
+    return (result as Promise<unknown>).finally(() => {
+      inFlight--
+    })
   }
   const $ = {
     session: {
@@ -237,6 +256,12 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       read: async (path: string) => world.files[path] ?? '',
     },
   }
+  for (const [area, calls] of Object.entries($) as [string, Record<string, unknown>][])
+    for (const [name, fn] of Object.entries(calls))
+      if (typeof fn === 'function')
+        calls[name] = (...args: unknown[]) => track(`${area}.${name}`, (fn as (...a: unknown[]) => unknown)(...args))
+  // The state stand-in (tests/coverage/claude-code.ts) logs through this.
+  Object.defineProperty($, '__track', { value: track })
   return { $: $ as unknown as EngineInterface, world }
 }
 

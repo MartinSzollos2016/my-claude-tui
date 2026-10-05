@@ -131,14 +131,31 @@ async function turnThinking($: EngineInterface, key: string): Promise<TurnThinki
   return thinkingCache.value
 }
 
+// How many transcript reads a drawing of the pane finished, and how many of
+// them the ticker had seen at its last look.
+let drawnReads = 0
+let tickSeenReads = 0
+
 // The session's turns, rebuilt only when the transcript's fingerprint moved;
 // a rebuild sanitizes only the rows that are new or changed.
+// `isDrawing`: the pane's drawing reads it, which spares the next tick a read.
 const sessionTurns = incrementalTurns()
 
-async function currentTurns($: EngineInterface): Promise<Memo<Turn[]>> {
+async function currentTurns($: EngineInterface, isDrawing = false): Promise<Memo<Turn[]>> {
   const messages = await $.session.messages()
   turnsCache = memo(turnsCache, turnsKey(messages), () => sessionTurns.build(messages))
+  if (isDrawing) drawnReads += 1
   return turnsCache
+}
+
+// The turns for a tick's look: the pane's drawing reads the transcript after
+// each tick, so when one finished since the last look, its turns serve; else
+// the tick reads them itself. A read in flight is never shared: each look
+// that reads gets rows as fresh as its own call.
+async function tickTurns($: EngineInterface): Promise<Memo<Turn[]>> {
+  const isFresh = turnsCache !== undefined && drawnReads !== tickSeenReads
+  tickSeenReads = drawnReads
+  return isFresh && turnsCache !== undefined ? turnsCache : currentTurns($)
 }
 
 // Traces by agentId. A finished agent's trace is final and never read again;
@@ -168,14 +185,18 @@ async function loadTraces(
   const traces = new Map<string, Trace>()
   let frontier = items.filter(item => isSubagent(item) && open.has(item.id))
 
+  // One level at a time, its traces read together.
   while (frontier.length > 0) {
+    const ids = [
+      ...new Set(frontier.flatMap(item => (isSubagent(item) && !traces.has(item.agentId) ? [item.agentId] : []))),
+    ]
+    const loaded = await Promise.all(ids.map(id => loadTrace($, id, agents.get(id))))
     const next: Item[] = []
-    for (const item of frontier) {
-      if (!isSubagent(item) || traces.has(item.agentId)) continue
-      const trace = await loadTrace($, item.agentId, agents.get(item.agentId))
-      traces.set(item.agentId, trace)
+    ids.forEach((id, i) => {
+      const trace = loaded[i]!
+      traces.set(id, trace)
       if ('items' in trace) next.push(...trace.items.filter(child => isSubagent(child) && open.has(child.id)))
-    }
+    })
     frontier = next
   }
   return traces
@@ -240,11 +261,8 @@ async function isStatusOn($: EngineInterface): Promise<boolean> {
 type Prefs = { isStatusOn: boolean; isNotifyOn: boolean; icons: Icons }
 
 async function loadPrefs($: EngineInterface): Promise<Prefs> {
-  return {
-    isStatusOn: await isStatusOn($),
-    isNotifyOn: (await $.store.get(NOTIFY_KEY)) === true,
-    icons: await currentIcons($),
-  }
+  const [statusOn, notify, icons] = await Promise.all([isStatusOn($), $.store.get(NOTIFY_KEY), currentIcons($)])
+  return { isStatusOn: statusOn, isNotifyOn: notify === true, icons }
 }
 
 // Sets the status line and the spinner text to what the running tools say
@@ -289,11 +307,16 @@ const MAX_TOAST_TEXT = 60
 // /tail-notify is on. The look is kept either way, so turning it on later
 // announces only what finishes from then on. A Workflow counts as finished
 // only when its own call got a result: an interrupt is not a finish.
-async function notifyFinished($: EngineInterface, list?: readonly AgentInfo[], given?: Prefs): Promise<void> {
-  const agents = list ?? (await $.agent.list())
-  const latestTurn = (await currentTurns($)).value.at(-1)
-  const working = await read($, isWorking)
-  const prefs = given ?? (await loadPrefs($))
+// `tick`: what the ticker already read; its look takes the turns the pane
+// last read when that is newer than its own last look.
+type TickLook = { agents: readonly AgentInfo[]; prefs: Prefs; isWorking: boolean }
+
+async function notifyFinished($: EngineInterface, tick?: TickLook): Promise<void> {
+  const [agents, turns, working, prefs] =
+    tick === undefined
+      ? await Promise.all([$.agent.list(), currentTurns($), read($, isWorking), loadPrefs($)])
+      : [tick.agents, await tickTurns($), tick.isWorking, tick.prefs]
+  const latestTurn = turns.value.at(-1)
 
   // Nothing is awaited from here: concurrent looks cannot both see a change.
   const snapshot = agents.map(a => ({ id: a.id, status: a.status, description: a.description }))
@@ -384,12 +407,9 @@ function stopTicker() {
 
 async function onTick($: EngineInterface): Promise<void> {
   frame += 1
-  const working = await read($, isWorking)
-  const agents = await $.agent.list()
+  const [working, agents, prefs] = await Promise.all([read($, isWorking), $.agent.list(), loadPrefs($)])
   if (!working && !agents.some(a => isAgentRunning(a.status))) stopTicker()
-  const prefs = await loadPrefs($)
-  await syncStatus($, prefs)
-  await notifyFinished($, agents, prefs)
+  await Promise.all([syncStatus($, prefs), notifyFinished($, { agents, prefs, isWorking: working })])
   await bump($)
 }
 
@@ -519,9 +539,9 @@ async function scrollPane($: EngineInterface, move: EngineScroll): Promise<UiScr
 let scrolledTurn: string | undefined
 
 // The detail scroll for drawing `turnKey`: kept for the same turn, back to
-// the top (and stored so) for another one.
-async function detailScroll($: EngineInterface, turnKey: string): Promise<number> {
-  const stored = (await read($, paneScroll)).detail
+// the top (and stored so) for another one. `stored`: the detail scroll as
+// the drawing read it.
+async function detailScroll($: EngineInterface, turnKey: string, stored: number): Promise<number> {
   const isOtherTurn = scrolledTurn !== undefined && scrolledTurn !== turnKey
   scrolledTurn = turnKey
   if (!isOtherTurn || stored === 0) return stored
@@ -790,8 +810,9 @@ export const register: Register = on => {
     const id = e.tool_use_id
     const start = await $.clock.now()
     trackWorkflow($, e.tool, e.agentId).catch(ignore)
+    // The pane reads the timings: their change alone draws it again. The
+    // info bar draws no timing; the ticker started here redraws it.
     await update($, timings, all => recordToolStart(all, id, start))
-    await bump($)
     startTicker($)
     const isMain = e.agentId === undefined
     if (isMain) {
@@ -804,7 +825,6 @@ export const register: Register = on => {
     } finally {
       const end = await $.clock.now()
       await update($, timings, all => recordToolEnd(all, id, end, start))
-      await bump($)
       if (isMain) {
         runningTools = runningTools.filter(r => r.id !== id)
         syncStatus($).catch(ignore)
@@ -844,40 +864,79 @@ export const register: Register = on => {
     if (viewport !== undefined)
       autoSize($, terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)).catch(ignore)
     const el = $.ui.resolve(e) as unknown as El
-    await read($, tick)
 
-    const turnsMemo = await currentTurns($)
+    // Each read is a round trip to the engine: the independent ones go
+    // together, then those that need the turn, the view or the agents.
+    const [
+      ,
+      turnsMemo,
+      chosen,
+      openIds,
+      agentList,
+      usage,
+      allStats,
+      view,
+      scrolled,
+      query,
+      icons,
+      stored,
+      timed,
+      sessionModel,
+      working,
+      now,
+      agentStatsNow,
+      fullIds,
+      isBarOff,
+      field,
+    ] = await Promise.all([
+      read($, tick),
+      currentTurns($, true),
+      read($, selectedTurn),
+      read($, expanded),
+      $.agent.list(),
+      $.session.usage(),
+      read($, turnStats),
+      read($, paneView),
+      read($, paneScroll),
+      read($, searchQuery),
+      currentIcons($),
+      read($, cursor),
+      read($, timings),
+      $.session.model(),
+      read($, isWorking),
+      $.clock.now(),
+      read($, agentStats),
+      read($, fullBlocks),
+      read($, isBarHidden),
+      read($, searchField),
+    ])
     const turns = turnsMemo.value
     const latest = turns.length - 1
-    const chosen = await read($, selectedTurn)
     const selected = chosen === null || chosen > latest ? latest : chosen
     const turn = turns[selected]
-    const openIds = await read($, expanded)
     const open = new Set(openIds)
-    const agentList = await $.agent.list()
     const agents = new Map(agentList.map(a => [a.id, a.status] as const))
-    const traces = await loadTraces($, turn?.items ?? [], open, agents)
-    const usage = await $.session.usage()
-    const allStats = await read($, turnStats)
+    const turnKey = turn === undefined ? '' : `${turn.index}\u0000${turn.prompt}`
+    // The turn list's cursor is read only where it is drawn: a read
+    // subscribes the drawing, and the detail view need not follow it.
+    const [traces, detailTop, thinkingByTurn, turnCursorAt] = await Promise.all([
+      loadTraces($, turn?.items ?? [], open, agents),
+      detailScroll($, turnKey, scrolled.detail),
+      view === 'detail' && turn ? turnThinking($, turnsMemo.key) : [],
+      view === 'turns' ? read($, turnCursor) : null,
+    ])
 
     const step = async (delta: number | null) => {
       await update($, cursor, () => null)
       await update($, selectedTurn, cur => nextSelectedTurn(cur, latest, delta))
       await scrollToTop($)
     }
-    const view = await read($, paneView)
-    const turnKey = turn === undefined ? '' : `${turn.index}\u0000${turn.prompt}`
-    const detailTop = await detailScroll($, turnKey)
-    const scrolled = await read($, paneScroll)
-    const query = await read($, searchQuery)
     const isSearching = view === 'turns' && query.trim() !== ''
-    const icons = await currentIcons($)
     if (isSearching)
       searchCache = memo(searchCache, `${turnsMemo.key}\n${icons.ellipsis}\n${query}`, () =>
         searchTurns(turns, query, icons.ellipsis),
       )
 
-    const thinkingByTurn = view === 'detail' && turn ? await turnThinking($, turnsMemo.key) : []
     const thinking = alignFromEnd(thinkingByTurn, turns.length, selected)
     tasksCache = memo(tasksCache, turnsMemo.key, () => taskBoard(turns))
     const tasks = tasksCache.value
@@ -887,18 +946,10 @@ export const register: Register = on => {
       return trace && 'items' in trace ? trace.items : undefined
     }
     const rowIds = cursorRows(turn?.items ?? [], open, childrenOf)
-    const stored = await read($, cursor)
     const cursorId = stored !== null && rowIds.includes(stored) ? stored : null
     const cursorText = cursorId === null ? undefined : rowText(turn?.items ?? [], cursorId, childrenOf, icons)
 
     const thinkingIds = turn && thinking && thinking.text !== '' ? [`t${turn.index}:thinking`] : []
-
-    const timed = await read($, timings)
-    const sessionModel = await $.session.model()
-    const working = await read($, isWorking)
-    const now = await $.clock.now()
-    const agentStatsNow = await read($, agentStats)
-    const fullIds = await read($, fullBlocks)
 
     return renderPane(
       el,
@@ -921,8 +972,8 @@ export const register: Register = on => {
         traces,
         cursor: cursorId,
         isFocused: e.props.isFocused,
-        isBarShown: !(await read($, isBarHidden)),
-        turnCursor: view === 'turns' ? await read($, turnCursor) : null,
+        isBarShown: !isBarOff,
+        turnCursor: turnCursorAt,
         columns: e.props.bodyColumns,
         rows:
           e.props.placement === 'inline'
@@ -933,7 +984,7 @@ export const register: Register = on => {
         full: new Set(fullIds),
         view,
         query,
-        searchField: await read($, searchField),
+        searchField: field,
         matches: isSearching ? searchCache?.value : undefined,
         stats: turns.map(t => statFor(allStats, t, turns)),
         members: teamMembers(agentList),
@@ -1057,17 +1108,22 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     noteViewport(e.viewport)
     if (e.props.hasSurvey || (await read($, isBarHidden))) return next(e)
-    await read($, tick)
 
     const el = $.ui.resolve(e) as unknown as El
-    const usage = await $.session.usage()
-    const agents = await $.agent.list()
-    const latestTurn = (await currentTurns($)).value.at(-1)
-    const working = await read($, isWorking)
-    const root = await $.session.root()
-    const branch = await read($, git)
-    const permissionMode = await read($, mode)
-    const icons = await currentIcons($)
+    const [, usage, agents, working, root, branch, permissionMode, icons] = await Promise.all([
+      read($, tick),
+      $.session.usage(),
+      $.agent.list(),
+      read($, isWorking),
+      $.session.root(),
+      read($, git),
+      read($, mode),
+      currentIcons($),
+    ])
+    // Only a running Workflow needs the latest turn, so only while working;
+    // the turns the pane or the ticker read last are at most a tick old, so
+    // the bar does not read the transcript again.
+    const latestTurn = working ? (turnsCache ?? (await currentTurns($))).value.at(-1) : undefined
 
     return renderBar(el, {
       project: sanitizeText(shortPath(root, 1)),
