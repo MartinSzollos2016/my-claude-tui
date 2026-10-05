@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { parseCommand } from '../hooks/commands'
+import { helpText, parseCommand } from '../hooks/commands'
 
 describe('parseCommand', () => {
   test('routes subcommands and their /tail shorthand alike', () => {
@@ -17,5 +17,12 @@ describe('parseCommand', () => {
     expect(parseCommand('tail-notify', 'on')).toEqual({ sub: 'notify', arg: 'on' })
     expect(parseCommand('tail', 'notify off')).toEqual({ sub: 'notify', arg: 'off' })
     expect(parseCommand('other', '')).toBe(undefined)
+  })
+})
+
+describe('helpText', () => {
+  test('names both view keys of the pane: t for the turn list, d for the detail view', () => {
+    expect(helpText()).toMatch(/\bt turn list\b/)
+    expect(helpText()).toMatch(/\bd detail view\b/)
   })
 })
