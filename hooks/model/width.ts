@@ -65,9 +65,13 @@ const WIDE_RANGES: readonly (readonly [number, number])[] = [
 const ZERO_WIDTH = /^[\p{M}\p{Cf}\u200b-\u200d\ufe00-\ufe0f]+$/u
 const EMOJI_PRESENTATION = '\ufe0f'
 
+// Every wide range starts at or above it.
+const FIRST_WIDE = 0x1100
+
 function graphemeWidth(grapheme: string): number {
   const first = grapheme.codePointAt(0)!
   if (ZERO_WIDTH.test(grapheme)) return 0
+  if (first < FIRST_WIDE) return grapheme.includes(EMOJI_PRESENTATION) ? 2 : 1
   if (WIDE_RANGES.some(([from, to]) => first >= from && first <= to)) return 2
   if (grapheme.includes(EMOJI_PRESENTATION)) return 2
   // A flag: two regional indicators.
@@ -75,16 +79,26 @@ function graphemeWidth(grapheme: string): number {
   return 1
 }
 
-const graphemesOf = (text: string): string[] =>
-  SEGMENTER === undefined ? Array.from(text) : Array.from(SEGMENTER.segment(text), part => part.segment)
+// The graphemes of a text; `null` for a runtime without Intl.Segmenter.
+export const graphemesOf = (text: string, segmenter: Intl.Segmenter | null = SEGMENTER ?? null): string[] =>
+  segmenter === null ? Array.from(text) : Array.from(segmenter.segment(text), part => part.segment)
 
-const PRINTABLE_ASCII = /^[\x20-\x7e]*$/
+// Text whose every UTF-16 unit is one grapheme of one cell: printable ASCII,
+// Latin-1 and Latin Extended up to the combining marks (U+0300) without the
+// soft hyphen (U+00AD), general punctuation (U+2010-2027), arrows, box drawing
+// and block elements, and the Private Use Area of Nerd icons. None is in
+// WIDE_RANGES or zero-width, and nothing here joins a neighbour into one
+// grapheme; a variation selector after one is outside the class.
+const NARROW = /^[\x20-\x7e\u00a0-\u00ac\u00ae-\u02ff\u2010-\u2027\u2190-\u21ff\u2500-\u259f\ue000-\uf8ff]*$/
+
+const sumWidths = (graphemes: readonly string[]): number => {
+  let width = 0
+  for (const grapheme of graphemes) width += graphemeWidth(grapheme)
+  return width
+}
 
 export function displayWidth(text: string): number {
-  if (PRINTABLE_ASCII.test(text)) return text.length
-  let width = 0
-  for (const grapheme of graphemesOf(text)) width += graphemeWidth(grapheme)
-  return width
+  return NARROW.test(text) ? text.length : sumWidths(graphemesOf(text))
 }
 
 // Terminals set a tab stop every 8 cells, and what tools print in columns
@@ -122,27 +136,35 @@ export function padEndDisplay(text: string, width: number): string {
   return text + ' '.repeat(Math.max(0, width - displayWidth(text)))
 }
 
-// The longest run of whole graphemes from the start that fits `cells`.
-function takeDisplay(graphemes: readonly string[], cells: number): { text: string; width: number } {
+// The longest run of whole graphemes from the start (or, `fromEnd`, from the
+// end) that fits `cells`: how many there are and their width.
+function takeDisplay(graphemes: readonly string[], cells: number, fromEnd = false): { count: number; width: number } {
   let width = 0
-  let text = ''
-  for (const grapheme of graphemes) {
-    const w = graphemeWidth(grapheme)
+  let count = 0
+  for (; count < graphemes.length; count++) {
+    const w = graphemeWidth(graphemes[fromEnd ? graphemes.length - 1 - count : count]!)
     if (width + w > cells) break
     width += w
-    text += grapheme
   }
-  return { text, width }
+  return { count, width }
 }
+
+const headOf = (graphemes: readonly string[], cells: number): string =>
+  graphemes.slice(0, takeDisplay(graphemes, cells).count).join('')
 
 // Cuts to `max` cells, the ellipsis included, at the end; never splits a
 // grapheme. Line breaks become spaces.
 export function truncateDisplay(s: string, max: number, ellipsis = '…'): string {
   const one = s.replaceAll('\n', ' ')
-  if (displayWidth(one) <= max) return one
   const room = max - displayWidth(ellipsis)
-  if (room < 0) return takeDisplay(graphemesOf(one), max).text
-  return takeDisplay(graphemesOf(one), room).text + ellipsis
+  // One cell per UTF-16 unit: cut by length.
+  if (NARROW.test(one)) {
+    if (one.length <= max) return one
+    return room < 0 ? one.slice(0, Math.max(0, max)) : one.slice(0, room) + ellipsis
+  }
+  const graphemes = graphemesOf(one)
+  if (sumWidths(graphemes) <= max) return one
+  return room < 0 ? headOf(graphemes, max) : headOf(graphemes, room) + ellipsis
 }
 
 // Cuts to `max` code points, the ellipsis included, at the end.
@@ -159,14 +181,14 @@ export function truncate(s: string, max: number, ellipsis = '…'): string {
 // grapheme.
 export function truncateMiddle(s: string, max: number, ellipsis = '…'): string {
   const one = s.replaceAll('\n', ' ')
-  if (displayWidth(one) <= max) return one
+  const graphemes = NARROW.test(one) ? one.split('') : graphemesOf(one)
+  if (sumWidths(graphemes) <= max) return one
   const width = displayWidth(ellipsis)
-  if (max <= width) return takeDisplay(graphemesOf(ellipsis), Math.max(0, max)).text
+  if (max <= width) return headOf(graphemesOf(ellipsis), Math.max(0, max))
   const keep = max - width
-  const graphemes = graphemesOf(one)
   const head = takeDisplay(graphemes, Math.floor(keep / 3))
-  const tail = takeDisplay(graphemes.toReversed(), keep - head.width)
-  return `${head.text}${ellipsis}${graphemesOf(tail.text).toReversed().join('')}`
+  const tail = takeDisplay(graphemes, keep - head.width, true)
+  return `${graphemes.slice(0, head.count).join('')}${ellipsis}${graphemes.slice(graphemes.length - tail.count).join('')}`
 }
 
 // A duration as a bar of up to `cells` cells in eighths of a block, relative
