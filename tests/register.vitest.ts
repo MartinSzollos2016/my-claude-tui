@@ -1681,3 +1681,102 @@ describe('turn list cursor', () => {
     expect(marks(await draw($))).toEqual([])
   })
 })
+
+// Round trips to the engine (tests/coverage/engine.ts counts them): a call
+// the hook awaits before it can make the next one costs a whole round.
+describe('engine round trips', () => {
+  const agentUse = (n: number) => ({
+    tool_use_id: `p${n}`,
+    tool: 'Agent',
+    input: { subagent_type: 'Explore', description: `Job ${n}` },
+    agentId: `agent-p${n}`,
+    text: 'ok',
+  })
+  const twoAgents: SessionMessage[] = [
+    { role: 'user', text: 'Fan out', toolUses: [] },
+    { role: 'assistant', text: '', toolUses: [agentUse(1), agentUse(2)] },
+  ]
+  const running = (id: string) => ({ id, description: id, type: 'Explore', status: 'running' as const })
+  const reset = (world: { trips: string[]; rounds: number; calls: string[] }) => {
+    world.trips.length = 0
+    world.calls.length = 0
+    world.rounds = 0
+  }
+  const writes = (world: { trips: string[] }, key: string) => world.trips.filter(t => t === `state.set:${key}`).length
+
+  test('a pane drawing reads everything it needs in one round', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    await draw($)
+    await settle()
+    reset(world)
+    await draw($)
+    expect(world.rounds).toBe(1)
+    expect(world.trips.filter(t => t === 'state.get:scroll')).toHaveLength(1)
+    // The detail view does not read the turn list's cursor, so moving it does
+    // not draw the detail view again.
+    expect(world.trips).not.toContain('state.get:turnCursor')
+  })
+
+  test('the expanded subagents of one level load their traces together', async () => {
+    const { $, world } = fakeEngine({
+      messages: twoAgents,
+      agentMessages: { 'agent-p1': child, 'agent-p2': child },
+      agents: [running('agent-p1'), running('agent-p2')],
+    })
+    await press($, 'p1')
+    await press($, 'p2')
+    reset(world)
+    await draw($)
+    expect(world.calls.filter(c => c.startsWith('messages:agent-p')).sort()).toEqual([
+      'messages:agent-p1',
+      'messages:agent-p2',
+    ])
+    expect(world.rounds).toBe(2)
+  })
+
+  test('the turn list reads its cursor', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    await say($, 'tail-turns')
+    await settle()
+    reset(world)
+    await draw($)
+    expect(world.trips).toContain('state.get:turnCursor')
+  })
+
+  test('the info bar reads in one round after its switch, and idle it reads no transcript', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    await run('ui.render', $, BAR_EVENT)
+    reset(world)
+    await run('ui.render', $, BAR_EVENT)
+    expect(world.rounds).toBe(2)
+    expect(world.calls).not.toContain('messages:main')
+  })
+
+  test('a tick reuses the transcript the pane read since the last tick', async () => {
+    const { $, world } = fakeEngine({ messages: main, agents: [running('a')] })
+    await run('prompt.submit', $, { text: 'go' }, async e => e)
+    world.timers[0]!()
+    await settle()
+    await draw($)
+    reset(world)
+    world.timers[0]!()
+    await settle()
+    expect(world.calls).not.toContain('messages:main')
+    expect(world.trips.filter(t => t === 'state.get:isWorking')).toHaveLength(1)
+    // With nothing read since, the next tick reads it itself.
+    reset(world)
+    world.timers[0]!()
+    await settle()
+    expect(world.calls.filter(c => c === 'messages:main')).toHaveLength(1)
+  })
+
+  test('a tool call changes what the pane draws once at its start and once at its end', async () => {
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'go' }, async e => e)
+    await settle()
+    reset(world)
+    await run('tool.call', $, { tool_use_id: 'r1', tool: 'Read', input: {} }, async () => ({}))
+    await settle()
+    expect(writes(world, 'tick') + writes(world, 'timings')).toBe(2)
+  })
+})
