@@ -604,6 +604,8 @@ async function isCompact($: EngineInterface): Promise<boolean> {
 
 // Opens (or re-opens) the pane, asking for its share of `terminalColumns`
 // when known; a width the person dragged the dock to still wins.
+// No `closeOnEscape`: Esc (in the search field too) only hands the keys back
+// to the prompt and the pane stays open.
 async function openPane($: EngineInterface, focus: boolean, terminalColumns?: number) {
   const share = await widthShare($)
   const columns = terminalColumns === undefined ? undefined : paneColumns(terminalColumns, share)
