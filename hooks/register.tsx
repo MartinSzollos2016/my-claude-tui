@@ -16,7 +16,7 @@ import type {
 } from 'claude-code'
 
 import type { AgentStat, IconSetName } from '../types'
-import { COMMANDS, helpText, parseCommand } from './commands'
+import { COMMANDS, helpText, parseCommand, unknownText } from './commands'
 import {
   discardStale,
   dropPending,
@@ -421,6 +421,8 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       }
     case 'help':
       return { text: helpText() }
+    case 'unknown':
+      return { text: unknownText(parsed.arg) }
     case 'turns': {
       const surfaces = await $.session.surfaces()
       if (isTextOnly(surfaces)) return { text: await turnsReport($, true) }

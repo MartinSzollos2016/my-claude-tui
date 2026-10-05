@@ -47,15 +47,26 @@ export const COMMANDS: readonly CommandSpec[] = [
 ]
 
 // Routes a run to its subcommand and argument: `/tail-width 70` and
-// `/tail width 70` both give ['width', '70']; a bare `/tail` opens the pane.
-export function parseCommand(command: string, args: string): { sub: Subcommand | 'open'; arg: string } | undefined {
+// `/tail width 70` both give ['width', '70']; a bare `/tail` opens the pane,
+// `/tail foo` is 'unknown' with the word it did not know.
+export function parseCommand(
+  command: string,
+  args: string,
+): { sub: Subcommand | 'open' | 'unknown'; arg: string } | undefined {
   const spec = COMMANDS.find(c => c.name === command)
   if (!spec) return undefined
   const trimmed = args.trim()
   if (spec.sub) return { sub: spec.sub, arg: trimmed }
   const [first = '', ...rest] = trimmed.split(/\s+/)
   const sub = COMMANDS.find(c => c.sub === first)?.sub
-  return sub ? { sub, arg: rest.join(' ') } : { sub: 'open', arg: trimmed }
+  if (sub) return { sub, arg: rest.join(' ') }
+  return first === '' ? { sub: 'open', arg: '' } : { sub: 'unknown', arg: first }
+}
+
+// The answer to `/tail <word>` with a word that is no subcommand.
+export function unknownText(word: string): string {
+  const subs = COMMANDS.flatMap(c => (c.sub ? [c.sub] : []))
+  return `Unknown /tail subcommand "${word}". Valid: ${subs.join(', ')}. /tail alone opens the pane, /tail-help lists the keys.`
 }
 
 export function helpText(): string {
