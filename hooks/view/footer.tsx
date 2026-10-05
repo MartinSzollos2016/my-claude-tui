@@ -165,12 +165,13 @@ export function footerPlan(groups: FooterGroups, layout: FooterLayout, columns: 
   }
 }
 
-// The keys a view does not draw: those that act on the detail turn, outside
+// The keys a view does not draw: its own key (d in the detail view, t in the
+// turn list and on the team board), those that act on the detail turn outside
 // the detail view; on the team board the cursor and the board's own key too.
 const HIDDEN_KEYS: Record<'detail' | 'turns' | 'team', ReadonlySet<string>> = {
-  detail: new Set(),
-  turns: new Set(['prev', 'next', 'latest', 'copy', 'expand', 'collapse']),
-  team: new Set(['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'team', 'expand', 'collapse']),
+  detail: new Set(['detail']),
+  turns: new Set(['prev', 'next', 'latest', 'copy', 'turns', 'expand', 'collapse']),
+  team: new Set(['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'turns', 'team', 'expand', 'collapse']),
 }
 
 // The rows the footer of this pane draws, for the window's height: the plan
@@ -320,9 +321,10 @@ export function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): F
       key('copy', 'y', 'copy', icons.keyCopy, isDetail && hasCursor, press => act.copyCursor(press.surface)),
     ],
     views: [
-      isDetail
-        ? key('turns', 't', 'turns', icons.keyTurns, true, act.showTurns)
-        : key('detail', 'd', 'detail', icons.keyDetail, true, act.showDetail),
+      // Both view keys stay bound in every view: the key of the view the pane
+      // is in is hidden and does nothing, so it never reaches the prompt.
+      key('turns', 't', 'turns', icons.keyTurns, isDetail, act.showTurns),
+      key('detail', 'd', 'detail', icons.keyDetail, !isDetail, act.showDetail),
       key('search', 's', 'search', icons.keySearch, true, act.focusSearch),
       key('team', 'm', 'team', icons.keyTeam, hasTeam && data.view !== 'team', act.showTeam),
     ],

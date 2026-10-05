@@ -15,10 +15,10 @@ describe('footerPlan', () => {
     return footerPlan(footerGroups(data, act, frame), footerLayout(100), 100)
   }
 
-  test('the turn list keeps two rows of keys and hides six', () => {
+  test('the turn list keeps two rows of keys and hides seven', () => {
     const turns = plan({ view: 'turns' })
     expect(turns.rows.map(row => row.id)).toEqual(['1', '2'])
-    expect(turns.hidden).toHaveLength(6)
+    expect(turns.hidden).toHaveLength(7)
   })
 
   test('the team board keeps one row', () => {
@@ -159,7 +159,7 @@ describe('pinned footer', () => {
       expect(tree.props['paddingBottom']).toBeUndefined()
     }
     expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'nav-detail')?.props['hotkey']).toBe('d')
-    expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'nav-turns')).toBeUndefined()
+    expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'nav-turns')?.props['hotkey']).toBe('t')
   })
 
   test('has one rule, two group rows and the status row at 100 columns', () => {
@@ -169,6 +169,7 @@ describe('pinned footer', () => {
       'footer-row-1',
       'footer-row-2',
       'footer-status',
+      'footer-hidden',
     ])
     expect(text(kids(footer)[0])).toBe('─'.repeat(100))
     expect(kids(footer)[0]?.props['color']).toBe(C.muted)
@@ -270,9 +271,10 @@ describe('pinned footer', () => {
     return hidden === undefined ? [] : nodes(hidden).filter(n => n.type === 'Button')
   }
 
-  test('the detail view draws every key and hides none', () => {
+  test('the detail view draws every key but its own d, which keeps the keyboard and does nothing', () => {
     const footer = footerOf()
-    expect(hiddenKeys(footer)).toEqual([])
+    expect(hiddenKeys(footer).map(k => [k.props['key'], k.props['hotkey']])).toEqual([['nav-detail', 'd']])
+    expect(acts(footer, 'nav-detail')).toBe(false)
   })
 
   test('the turn list draws only its keys: the cursor, the views and the page keys', () => {
@@ -288,6 +290,7 @@ describe('pinned footer', () => {
       ['nav-next', 'n'],
       ['nav-latest', 'l'],
       ['nav-copy', 'y'],
+      ['nav-turns', 't'],
       ['nav-expand', 'e'],
       ['nav-collapse', 'c'],
     ])
@@ -300,7 +303,19 @@ describe('pinned footer', () => {
     const rows = rowsOf(footer)
     expect(rows.map(r => r.props['key'])).toEqual(['footer-row-2'])
     expect(line(rows[0])).toBe('d: detail  s: search  │  b: ▲ page  f: ▼ page')
-    expect(hiddenKeys(footer).map(k => k.props['hotkey'])).toEqual(['p', 'n', 'l', 'j', 'k', 'o', 'y', 'm', 'e', 'c'])
+    expect(hiddenKeys(footer).map(k => k.props['hotkey'])).toEqual([
+      'p',
+      'n',
+      'l',
+      'j',
+      'k',
+      'o',
+      'y',
+      't',
+      'm',
+      'e',
+      'c',
+    ])
   })
 
   test('stacked, the turn list and the team board keep only their rows', () => {
@@ -336,6 +351,7 @@ describe('pinned footer', () => {
       'footer-row-views',
       'footer-row-expand',
       'footer-status',
+      'footer-hidden',
     ])
     expect(line(rowsOf(footer)[0])).toBe('p: ‹ prev  n: next ›  l: latest')
     expect(text(footer)).not.toContain('│')
@@ -356,7 +372,7 @@ describe('pinned footer', () => {
       for (const icons of [ICON_SETS.nerd, ICON_SETS.unicode, ICON_SETS.ascii]) {
         const footer = footerOf({ columns: 36, isLatest: false, icons, ...extra })
         const keys = nodes(footer).filter(n => n.type === 'Button')
-        expect(keys.length).toBe(14)
+        expect(keys.length).toBe(15)
         for (const k of keys) {
           const shown = String(k.props['label'])
           expect(shown, String(k.props['key'])).not.toBe('')
@@ -383,7 +399,9 @@ describe('pinned footer', () => {
       for (const name of idle) expect(acts(footer, `nav-${name}`), name).toBe(false)
       expect(byKey(footer, 'nav-detail')?.props['hotkey']).toBe('d')
       expect(acts(footer, 'nav-search')).toBe(true)
-      expect(byKey(footer, 'nav-turns')).toBeUndefined()
+      // t, the turn list's own key, is bound and does nothing: it never reaches the prompt.
+      expect(byKey(footer, 'nav-turns')?.props['hotkey']).toBe('t')
+      expect(acts(footer, 'nav-turns')).toBe(false)
     }
     expect(acts(footerOf({ view: 'turns', members }), 'nav-team')).toBe(true)
     expect(acts(footerOf({ view: 'team', members }), 'nav-team')).toBe(false)
