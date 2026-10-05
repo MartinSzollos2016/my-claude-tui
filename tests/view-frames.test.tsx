@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { buildTurns } from '../hooks/model/turns'
 import { renderPane } from '../hooks/view/pane'
-import { act, base, byKey, calls, el, nodes, text } from './fixtures/view'
+import { act, base, byKey, calls, el, measured, nodes, text } from './fixtures/view'
 
 describe('diff blocks', () => {
   const editTurn = (input: Record<string, unknown>, tool = 'Edit') =>
@@ -112,6 +112,42 @@ describe('tabs', () => {
       { role: 'assistant', text: 'a\tb', toolUses: [] },
     ])
     expect(sources(drawn(message, { expanded: new Set(['t0:o0']) }))).toContain(`a${' '.repeat(7)}b`)
+  })
+})
+
+describe('row estimate of what a frame draws', () => {
+  const call = (tool: string, input: Record<string, unknown>, result: string) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'w1', tool, input, text: result }] },
+    ])
+  const total = (turns: ReturnType<typeof buildTurns>) => {
+    measured.length = 0
+    renderPane(el, { ...base, turns, selected: 0, stats: [undefined], expanded: new Set(['w1']) }, act)
+    return measured[0]!.total
+  }
+
+  // Measured live: a Write of a .md file draws through Code's markdown, which
+  // draws no empty line; numbered code (a Read) keeps its empty lines.
+  test('a markdown file drawn without line numbers counts no row for an empty line', () => {
+    const doc = ['# Plan', '', 'one', '', '', '- a', '- b', '', 'end'].join('\n')
+    const write = (path: string) => total(call('Write', { file_path: path, content: doc }, 'ok'))
+    expect(write('/a/plan.md')).toBe(write('/a/plan.go') - 4)
+    const numbered = doc
+      .split('\n')
+      .map((line, i) => `${String(i + 1).padStart(6)}→${line}`)
+      .join('\n')
+    const read = (path: string) => total(call('Read', { file_path: path }, numbered))
+    expect(read('/a/plan.md')).toBe(read('/a/plan.go'))
+  })
+
+  test('tabbed output counts the rows of the expanded text it draws', () => {
+    // 12 tab stops and a character: 97 cells, two rows in the 92-cell body.
+    const line = `${'x\t'.repeat(12)}y`
+    const tabbed = Array.from({ length: 30 }, () => line).join('\n')
+    const bash = (out: string) => total(call('Bash', { command: 'gh run list' }, out))
+    expect(bash(tabbed)).toBe(bash(Array.from({ length: 30 }, () => 'z'.repeat(97)).join('\n')))
+    expect(bash(tabbed)).toBe(bash(Array.from({ length: 30 }, () => 'z').join('\n')) + 30)
   })
 })
 
