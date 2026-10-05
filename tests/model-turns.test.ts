@@ -6,6 +6,7 @@ import {
   isAgentFinished,
   isAgentRunning,
   itemStatus,
+  textPrint,
   traceItems,
   turnsKey,
 } from '../hooks/model/turns'
@@ -203,6 +204,34 @@ describe('incrementalTurns', () => {
     // The window shifts: the transcript starts mid-turn, an anonymous turn
     // opens and every turn index (and output id) moves down.
     for (let n = 1; n < 6; n++) same(turns.build(copy(rows.slice(n))), rows.slice(n))
+  })
+
+  test('a long text changed where the fingerprint does not look is still rebuilt', () => {
+    // Equal length, equal at every sampled index: only full equality tells them apart.
+    const n = 10_000
+    const unsampled = Array.from({ length: n }, (_, i) => i).find(i => {
+      const probe = 'x'.repeat(i) + 'y' + 'x'.repeat(n - i - 1)
+      return textPrint(probe) === textPrint('x'.repeat(n))
+    })!
+    expect(unsampled).toBeDefined()
+    const first = 'x'.repeat(n)
+    const second = 'x'.repeat(unsampled) + 'y' + 'x'.repeat(n - unsampled - 1)
+    expect(textPrint(second)).toBe(textPrint(first))
+    for (const at of ['text', 'prompt', 'result', 'input'] as const) {
+      const turns = incrementalTurns()
+      const rows = (text: string): SessionMessage[] => [
+        prompt(at === 'prompt' ? text : 'go'),
+        {
+          role: 'assistant',
+          text: at === 'text' ? text : '',
+          toolUses: [
+            { ...read, input: { file_path: at === 'input' ? text : '/a.go' }, text: at === 'result' ? text : 'ok' },
+          ],
+        },
+      ]
+      same(turns.build(copy(rows(first))), rows(first))
+      same(turns.build(copy(rows(second))), rows(second))
+    }
   })
 
   test('keeps the id prefix it is given', () => {

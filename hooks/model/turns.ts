@@ -74,13 +74,14 @@ export function buildTurns(messages: readonly SessionMessage[], idPrefix = ''): 
   return assemble(messages, idPrefix, fresh)
 }
 
-// A string short enough is its own key; a longer one is keyed by its length
-// and a hash of a fixed sample (both ends and strided points), so the cost
-// does not grow with the text. Streamed text grows, which moves the length.
+// Where a text's memo entry is looked for: a short text is its own key, a
+// longer one is keyed by its length and a hash of a fixed sample (both ends
+// and strided points), so the key costs the same for any length. A key only
+// finds the entry; a hit also needs the entry's source to equal the text.
 const WHOLE = 256
 const SAMPLE = 64
 
-function print(text: string): string {
+export function textPrint(text: string): string {
   if (text.length <= WHOLE) return `=${text}`
   let hash = 0x811c9dc5
   const mix = (at: number) => {
@@ -94,71 +95,94 @@ function print(text: string): string {
   return `#${n}:${(hash >>> 0).toString(36)}`
 }
 
-let unique = 0
+// A tool use's fields its piece is built from; `input` as JSON, or undefined
+// when it does not serialize (a cycle, a bigint), which never matches.
+type ToolSource = {
+  tool: string
+  text: string | undefined
+  isError: boolean
+  isInterrupted: boolean
+  agentId: string | undefined
+  durationMs: number | undefined
+  input: string | undefined
+}
 
-function inputPrint(input: unknown): string {
+function toolSource(use: ToolUse): ToolSource {
+  let input: string | undefined
   try {
-    return print(JSON.stringify(input) ?? String(input))
+    input = JSON.stringify(use.input) ?? String(use.input)
   } catch {
-    // Not serializable (a cycle, a bigint): never shared, always rebuilt.
-    unique += 1
-    return `!${unique}`
+    input = undefined
+  }
+  return {
+    tool: use.tool,
+    text: use.text,
+    isError: use.isError === true,
+    isInterrupted: isInterruptedResult(use.result),
+    agentId: use.agentId,
+    durationMs: use.durationMs,
+    input,
   }
 }
 
-function toolPrint(use: ToolUse): string {
-  return [
-    use.tool_use_id,
-    print(use.tool),
-    use.text === undefined ? '-' : print(use.text),
-    use.isError === true,
-    isInterruptedResult(use.result),
-    use.agentId ?? '-',
-    use.durationMs ?? '-',
-    inputPrint(use.input),
-  ].join('\u0000')
-}
+const sameSource = (a: ToolSource, b: ToolSource): boolean =>
+  a.input !== undefined &&
+  a.input === b.input &&
+  a.tool === b.tool &&
+  a.text === b.text &&
+  a.isError === b.isError &&
+  a.isInterrupted === b.isInterrupted &&
+  a.agentId === b.agentId &&
+  a.durationMs === b.durationMs
 
 // Builds turns like buildTurns, keeping each row's sanitized pieces between
 // builds so a rebuild after the tail changed sanitizes only the new or
-// changed rows. Pieces are keyed by the row's content, not the row object,
-// as each read of the transcript may hand out new objects. Only the pieces
+// changed rows. Each read of the transcript may hand out new objects, so a
+// piece is found by content (a row by its text's key, a tool use by its id
+// and its input's and result's keys)
+// and reused only when its source equals the row's in full. Only the pieces
 // the last build used are kept, so the memo is bounded by the transcript.
 // `work` counts the pieces built, for tests.
 export function incrementalTurns(): {
   build: (messages: readonly SessionMessage[], idPrefix?: string) => Turn[]
   work: { messages: number; tools: number }
 } {
+  type Row = { source: string; value: string | undefined }
+  type Tool = { source: ToolSource; value: ToolPiece }
   const work = { messages: 0, tools: 0 }
-  let rows = new Map<string, string | undefined>()
-  let tools = new Map<string, ToolPiece>()
-  let nextRows = new Map<string, string | undefined>()
-  let nextTools = new Map<string, ToolPiece>()
+  let rows = new Map<string, Row>()
+  let tools = new Map<string, Tool>()
+  let nextRows = new Map<string, Row>()
+  let nextTools = new Map<string, Tool>()
 
-  const row = (key: string, make: () => string | undefined): string | undefined => {
-    if (nextRows.has(key)) return nextRows.get(key)
-    let value: string | undefined
-    if (rows.has(key)) value = rows.get(key)
-    else {
-      value = make()
+  const row = (kind: string, text: string, make: () => string | undefined): string | undefined => {
+    const key = kind + textPrint(text)
+    let entry = nextRows.get(key) ?? rows.get(key)
+    if (entry?.source !== text) {
+      entry = { source: text, value: make() }
       work.messages += 1
     }
-    nextRows.set(key, value)
-    return value
+    nextRows.set(key, entry)
+    return entry.value
   }
 
   const pieces: Pieces = {
-    prompt: (text, hasResults) => row(`u${hasResults ? 'r' : ''}${print(text)}`, () => fresh.prompt(text, hasResults)),
-    output: text => row(`a${print(text)}`, () => fresh.output(text)) ?? '',
+    prompt: (text, hasResults) => row(hasResults ? 'ur' : 'u', text, () => fresh.prompt(text, hasResults)),
+    output: text => row('a', text, () => fresh.output(text)) ?? '',
     tool: use => {
-      const key = toolPrint(use)
-      let value = nextTools.get(key) ?? tools.get(key)
-      if (value === undefined) {
-        value = fresh.tool(use)
+      const source = toolSource(use)
+      const key = [
+        use.tool_use_id,
+        textPrint(source.input ?? ''),
+        source.text === undefined ? '-' : textPrint(source.text),
+      ].join('\u0000')
+      let entry = nextTools.get(key) ?? tools.get(key)
+      if (entry === undefined || !sameSource(entry.source, source)) {
+        entry = { source, value: fresh.tool(use) }
         work.tools += 1
       }
-      nextTools.set(key, value)
-      return value
+      nextTools.set(key, entry)
+      return entry.value
     },
   }
 
