@@ -14,6 +14,7 @@ import {
   durationBar,
   expandTabs,
   fitPath,
+  graphemesOf,
   padEndDisplay,
   truncate,
   truncateDisplay,
@@ -167,8 +168,59 @@ describe('display width of emoji forms', () => {
     expect(displayWidth(truncateDisplay('a🇨🇿🇨🇿b', 4))).toBeLessThanOrEqual(4)
   })
 
-  test('without Intl.Segmenter widths fall back to code points', () => {
-    expect(displayWidth('plain ascii')).toBe(11)
+  test('without Intl.Segmenter graphemes fall back to code points, never halving a surrogate pair', () => {
+    expect(graphemesOf('é😀🇨🇿')).toEqual(['é', '😀', '🇨🇿'])
+    expect(graphemesOf('é😀🇨🇿', null)).toEqual(['e', '́', '😀', '🇨', '🇿'])
+    expect(graphemesOf('', null)).toEqual([])
+  })
+})
+
+describe('display width beyond ASCII', () => {
+  test('Latin-1 and Latin Extended letters take one cell each', () => {
+    expect(displayWidth('café')).toBe(4)
+    expect(displayWidth('naïve résumé')).toBe(12)
+    expect(displayWidth(' ©®±·')).toBe(5)
+    expect(displayWidth('Āžʼ˿')).toBe(4)
+  })
+
+  test('a soft hyphen draws nothing', () => {
+    expect(displayWidth('a­b')).toBe(2)
+    expect(displayWidth('­')).toBe(0)
+    expect(truncateDisplay('ab­cdef', 4)).toBe('ab­c…')
+  })
+
+  test('combining marks join the letter before them', () => {
+    expect(displayWidth('é̀')).toBe(1)
+    expect(displayWidth('café ok')).toBe(7)
+    expect(truncateDisplay('éééé', 3)).toBe('éé…')
+  })
+
+  test('punctuation, arrows, box drawing, blocks and Nerd icons take one cell', () => {
+    expect(displayWidth('…—•→')).toBe(4)
+    expect(displayWidth('├──│└')).toBe(5)
+    expect(displayWidth('█▌░')).toBe(3)
+    expect(displayWidth('')).toBe(3)
+    expect(truncateDisplay('├── tree │ box', 6)).toBe('├── t…')
+    expect(truncateMiddle('├── a/b/c/file.ts', 10)).toBe('├──…ile.ts')
+  })
+
+  test('a variation selector still makes a narrow symbol an emoji', () => {
+    expect(displayWidth('│️')).toBe(2)
+    expect(displayWidth('↔️')).toBe(2)
+    expect(displayWidth('é️')).toBe(2)
+  })
+
+  test('surrogate pairs and wide text mixed with narrow non-ASCII', () => {
+    expect(displayWidth('café 日本 😀')).toBe(12)
+    expect(truncateDisplay('日本語abc', 5)).toBe('日本…')
+    expect(truncateDisplay('é😀é😀é', 4)).toBe('é😀…')
+    expect(truncateMiddle('é😀é😀é😀é😀', 6)).toBe('é…é😀')
+  })
+
+  test('truncateMiddle keeps the end in order and flags whole', () => {
+    expect(truncateMiddle('abcdefgh🇨🇿🇨🇿', 7)).toBe('ab…🇨🇿🇨🇿')
+    expect(truncateMiddle('abcdefgh🇨🇿x', 6)).toBe('a…h🇨🇿x')
+    expect(truncateMiddle('abcdefgh🇨🇿🇨', 6)).toBe('a…🇨🇿🇨')
   })
 })
 
