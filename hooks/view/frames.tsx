@@ -4,7 +4,7 @@ import type { RenderElement } from 'claude-code'
 import { C, TONE, type ThemeKey } from '../theme'
 import { chunkText, clampText } from '../model/clamp'
 import { clampDiff, expandDiffTabs, splitDiff } from '../model/diff'
-import { cachedSections, firstErrorLine, pieceStarts, type Section } from '../model/sections'
+import { cachedSections, firstErrorLine, languageFor, pieceStarts, type Section } from '../model/sections'
 import type { ToolItem } from '../model/types'
 import { displayWidth, expandTabs, truncateMiddle } from '../model/width'
 import {
@@ -176,6 +176,13 @@ type Long = {
   format?: 'markdown' | 'diff'
 }
 
+// Code the engine draws as Markdown, without empty lines: a markdown
+// language or a .md path (a Write). Numbered code (a Read) keeps them.
+const isMarkdownCode = (spec: LongSpec): boolean =>
+  spec.kind === 'code' &&
+  spec.startLine === undefined &&
+  (spec.language ?? (spec.path === undefined ? undefined : languageFor(spec.path))) === 'markdown'
+
 // A block of any length: previewed by lines and characters until the person
 // asks for all of it, cut into pieces under the per-element limit, and drawn
 // from the pane's text budget so the tree never crosses the engine's total.
@@ -268,7 +275,8 @@ export function renderLong(el: El, id: string, raw: string, spec: LongSpec, data
       )}
     </Box>
   )
-  const format = spec.kind === 'markdown' || spec.kind === 'diff' ? spec.kind : undefined
+  const format =
+    spec.kind === 'markdown' || isMarkdownCode(spec) ? 'markdown' : spec.kind === 'diff' ? 'diff' : undefined
   return {
     node,
     pieces,
