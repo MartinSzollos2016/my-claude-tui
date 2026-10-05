@@ -1,5 +1,6 @@
 // Unified diffs of an edit: hunks with line numbers, split and capped for display.
 import { clampText, type Clamped } from './clamp'
+import { expandTabs } from './width'
 
 //
 // An Edit becomes a unified diff the engine's <Code format="diff"> draws with
@@ -137,6 +138,16 @@ function parseHunks(diff: string): Hunk[] | null {
     }
   }
   return hunks.length > 0 ? hunks : null
+}
+
+// A diff's tabs expanded as the engine draws its lines: the marker sits in
+// the gutter, so the tab stops count from the text after it.
+export function expandDiffTabs(diff: string): string {
+  if (!diff.includes('\t')) return diff
+  return diff
+    .split('\n')
+    .map(line => (line.includes('\t') ? line.slice(0, 1) + expandTabs(line.slice(1)) : line))
+    .join('\n')
 }
 
 // Cuts a unified diff into pieces of at most `maxLines` lines and `maxChars`

@@ -12,6 +12,7 @@ import type { ToolItem } from '../hooks/model/types'
 import {
   displayWidth,
   durationBar,
+  expandTabs,
   fitPath,
   padEndDisplay,
   truncate,
@@ -246,5 +247,33 @@ describe('durationBar', () => {
       expect(set.times).not.toBe('')
     }
     expect(ICON_SETS.ascii.times).toBe('x')
+  })
+})
+
+describe('expandTabs', () => {
+  test('a tab runs to the next stop of 8 cells, per line', () => {
+    expect(expandTabs('\tx')).toBe(`${' '.repeat(8)}x`)
+    expect(expandTabs('ab\tc')).toBe(`ab${' '.repeat(6)}c`)
+    expect(expandTabs('abcdefgh\ti')).toBe(`abcdefgh${' '.repeat(8)}i`)
+    expect(expandTabs('a\t\tb')).toBe(`a${' '.repeat(15)}b`)
+    expect(expandTabs('x\tb\nab\tc')).toBe(`x${' '.repeat(7)}b\nab${' '.repeat(6)}c`)
+  })
+
+  test('the text before a tab is measured in cells, a given size is kept', () => {
+    // 日本 is four cells wide.
+    expect(expandTabs('日本\tx')).toBe(`日本${' '.repeat(4)}x`)
+    expect(expandTabs('ab\tc', 4)).toBe('ab  c')
+  })
+
+  test('the expanded text is as wide as the terminal draws it, with no tab left', () => {
+    const out = expandTabs('id\tname\tstatus\n1\talpha\tok')
+    expect(out.includes('\t')).toBe(false)
+    expect(out.split('\n').map(displayWidth)).toEqual([16 + 6, 16 + 2])
+  })
+
+  test('a text without tabs is returned as it is', () => {
+    const plain = 'no tabs\nhere'
+    expect(expandTabs(plain)).toBe(plain)
+    expect(expandTabs('')).toBe('')
   })
 })

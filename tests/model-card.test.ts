@@ -23,6 +23,13 @@ describe('hoverCard', () => {
     expect(card.join('\n')).not.toContain('RESULT')
   })
 
+  test('tabs are expanded to stops of 8 before a line is cut to the width', () => {
+    const card = hoverCard(bash('for f in *; do\n\techo "$f"\ndone'), 40, ICON_SETS.nerd)!
+    expect(card[1]).toBe(`${' '.repeat(8)}echo "$f"`)
+    const cut = hoverCard(bash('\t\t\t\tx'), 20, ICON_SETS.nerd)!
+    expect(cut[0]).toBe(`${' '.repeat(19)}…`)
+  })
+
   test('lines are cut to the width, the whole card to 600 characters, untrusted text is cleaned', () => {
     const wide = hoverCard(bash('x'.repeat(200)), 30, ICON_SETS.nerd)!
     expect(wide[0]).toHaveLength(30)
