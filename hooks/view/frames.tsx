@@ -3,10 +3,10 @@
 import type { RenderElement } from 'claude-code'
 import { C, TONE, type ThemeKey } from '../theme'
 import { chunkText, clampText } from '../model/clamp'
-import { clampDiff, splitDiff } from '../model/diff'
+import { clampDiff, expandDiffTabs, splitDiff } from '../model/diff'
 import { cachedSections, firstErrorLine, pieceStarts, type Section } from '../model/sections'
 import type { ToolItem } from '../model/types'
-import { displayWidth, truncateMiddle } from '../model/width'
+import { displayWidth, expandTabs, truncateMiddle } from '../model/width'
 import {
   CODE_GUTTER,
   DIFF_HEADER_SLACK,
@@ -56,13 +56,14 @@ export function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActio
 function withFirstError(el: El, body: string, preview: Long, data: Ctx): Long {
   const trunc = cutter(data.icons)
   const { Box, Text } = el
-  const line = trunc(firstErrorLine(body), Math.max(8, data.columns - 12))
+  const first = firstErrorLine(body)
+  const line = trunc(expandTabs(first), Math.max(8, data.columns - 12))
   // An output that opens with the line already shows it, in red.
   const opening = body
     .split('\n')
     .find(l => l.trim() !== '')
     ?.trim()
-  if (line === '' || opening === firstErrorLine(body) || line.length > data.budget.left) return preview
+  if (line === '' || opening === first || line.length > data.budget.left) return preview
   data.budget.left -= line.length
   return {
     ...preview,
@@ -178,8 +179,11 @@ type Long = {
 // A block of any length: previewed by lines and characters until the person
 // asks for all of it, cut into pieces under the per-element limit, and drawn
 // from the pane's text budget so the tree never crosses the engine's total.
-export function renderLong(el: El, id: string, text: string, spec: LongSpec, data: Ctx, act: PaneActions): Long {
+// Its tabs are expanded first: the engine draws a tab narrow while the
+// terminal jumps to the next stop, which pushed lines over the frame's border.
+export function renderLong(el: El, id: string, raw: string, spec: LongSpec, data: Ctx, act: PaneActions): Long {
   const { Box, Button, Code, Text } = el
+  const text = spec.kind === 'diff' ? expandDiffTabs(raw) : expandTabs(raw)
   const isFull = data.full.has(id)
   const preview = PREVIEW[spec.kind]
   const limit = isFull ? { lines: Infinity, chars: Infinity } : preview
