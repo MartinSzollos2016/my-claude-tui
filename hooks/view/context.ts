@@ -55,6 +55,8 @@ export type PaneData = {
   stats: readonly (TurnStat | undefined)[]
   // The turn search: what is typed, and the turns that match it.
   query?: string
+  // The search field's key generation and the text it starts from (searchField).
+  searchField?: { gen: number; seed: string }
   matches?: readonly TurnMatch[]
   // The team board: teammates and the tasks of TaskCreate / TaskUpdate.
   members?: readonly TeamMember[]
@@ -149,6 +151,7 @@ export type PaneActions = {
   showTeam: () => void
   pickTurn: (index: number) => void
   search: (query: string) => void
+  clearSearch: () => void
   submitSearch: (query: string) => void
   focusSearch: () => void
   // The cursor keys get where the window stands and where each row starts,

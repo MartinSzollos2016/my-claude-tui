@@ -4,6 +4,7 @@ import { C } from '../hooks/theme'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
 import { renderPane } from '../hooks/view/pane'
+import { searchFieldKey } from '../hooks/view/turn-list'
 import { act, base, byKey, el, measured, nodes, text } from './fixtures/view'
 
 describe('turn table', () => {
@@ -64,6 +65,17 @@ describe('turn table', () => {
     const tree = table(100, { query: 'bug', matches: [{ index: 0, snippet: 'Fix the bug now' }] })
     expect(text(tree)).toContain('Fix the bug now')
     expect(nodes(tree).some(n => n.props['underline'] === true && text(n) === 'bug')).toBe(true)
+  })
+
+  test('the search field draws its seed, not the query, under its key generation', () => {
+    const typing = byKey(table(100, { query: 'bu', searchField: { gen: 0, seed: '' } }), 'turn-search')
+    expect(typing?.type).toBe('Input')
+    expect(typing?.props['value']).toBe('')
+    const reset = table(100, { query: '', searchField: { gen: 2, seed: '' } })
+    expect(byKey(reset, 'turn-search')).toBeUndefined()
+    expect(byKey(reset, 'turn-search-2')?.props['value']).toBe('')
+    expect(searchFieldKey(0)).toBe('turn-search')
+    expect(searchFieldKey(2)).toBe('turn-search-2')
   })
 
   test('the ascii set draws the table in ASCII', () => {

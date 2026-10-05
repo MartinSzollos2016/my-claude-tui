@@ -69,7 +69,7 @@ import { renderBar } from './view/bar'
 import type { Trace } from './view/context'
 import type { El } from './view/kit'
 import { renderPane } from './view/pane'
-import { turnRowId } from './view/turn-list'
+import { searchFieldKey, turnRowId } from './view/turn-list'
 
 const PANE = 'tail'
 const MAX_STATS = 200
@@ -84,6 +84,7 @@ const paneScroll = atom({ plugin: 'tail-view', key: 'scroll' } as const, TOP)
 const expanded = atom({ plugin: 'tail-view', key: 'expanded' } as const, [])
 const fullBlocks = atom({ plugin: 'tail-view', key: 'full' } as const, [])
 const searchQuery = atom({ plugin: 'tail-view', key: 'query' } as const, '')
+const searchField = atom({ plugin: 'tail-view', key: 'searchField' } as const, { gen: 0, seed: '' })
 const timings = atom({ plugin: 'tail-view', key: 'timings' } as const, {})
 const turnStats = atom({ plugin: 'tail-view', key: 'turnStats' } as const, [])
 const agentStats = atom({ plugin: 'tail-view', key: 'agentStats' } as const, {})
@@ -431,6 +432,7 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
     case 'open': {
       const surfaces = await $.session.surfaces()
       if (isTextOnly(surfaces)) return { text: await turnsReport($, false) }
+      await seedSearch($)
       await openPane($, true, e.presentation.columns)
       claimFocus($).catch(ignore)
       return { text: 'Detail view opened. /tail-help lists the commands and keys.' }
@@ -530,6 +532,7 @@ async function scrollToTop($: EngineInterface): Promise<void> {
 // Switches what the pane shows, from the top of its content.
 async function showView($: EngineInterface, view: 'detail' | 'turns' | 'team'): Promise<void> {
   await update($, turnCursor, () => null)
+  await seedSearch($)
   await update($, paneView, () => view)
   await scrollToTop($)
 }
@@ -544,7 +547,22 @@ async function pickTurn($: EngineInterface, index: number, latest: number) {
 // The search key: opens the turn list and puts the cursor in its field.
 async function focusSearch($: EngineInterface): Promise<void> {
   await showView($, 'turns')
-  await $.ui.focus({ requestId: PANE, key: 'turn-search' })
+  const { gen } = await read($, searchField)
+  await $.ui.focus({ requestId: PANE, key: searchFieldKey(gen) })
+}
+
+// A search field drawn anew (another view, the pane opened) starts from the
+// query; while it is drawn only typing changes it (searchField).
+async function seedSearch($: EngineInterface): Promise<void> {
+  const query = await read($, searchQuery)
+  await update($, searchField, field => (field.seed === query ? field : { ...field, seed: query }))
+}
+
+// The clear button: no query, and a new, empty field under a new key.
+async function clearSearch($: EngineInterface): Promise<void> {
+  await update($, turnCursor, () => null)
+  await update($, searchQuery, () => '')
+  await update($, searchField, field => ({ gen: field.gen + 1, seed: '' }))
 }
 
 // Enter in the search field: keeps the query and opens the newest match,
@@ -887,6 +905,7 @@ export const register: Register = on => {
         full: new Set(fullIds),
         view,
         query,
+        searchField: await read($, searchField),
         matches: isSearching ? searchCache?.value : undefined,
         stats: turns.map(t => statFor(allStats, t, turns)),
         members: teamMembers(agentList),
@@ -913,6 +932,7 @@ export const register: Register = on => {
           update($, turnCursor, () => null).catch(ignore)
           update($, searchQuery, () => value).catch(ignore)
         },
+        clearSearch: () => clearSearch($).catch(ignore),
         submitSearch: value => openMatch($, value, turns).catch(ignore),
         focusSearch: () => focusSearch($).catch(ignore),
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),

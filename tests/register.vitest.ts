@@ -538,6 +538,35 @@ describe('detail pane', () => {
     expect(text(await draw($))).toContain('turn 1/3')
   })
 
+  test('typing is never overwritten: the field keeps its seed until clear resets it under a new key', async () => {
+    const { $, world } = fakeEngine({ messages: three })
+    await say($, 'tail-turns')
+    const typeInto = async (value: string) => {
+      ;(byKey(await draw($), 'turn-search')?.props['onInput'] as (value: string) => void)(value)
+    }
+    // Drawings arrive late while the person types: none sends the query back.
+    await typeInto('t')
+    await typeInto('te')
+    await settle()
+    expect(byKey(await draw($), 'turn-search')?.props['value']).toBe('')
+    expect(text(await draw($))).toContain('Turns (1 of 3)')
+    // Clear resets the field: a new key, an empty value, every turn listed.
+    await press($, 'search-clear')
+    const field = byKey(await draw($), 'turn-search-1')
+    expect(field?.props['value']).toBe('')
+    expect(byKey(await draw($), 'turn-search')).toBeUndefined()
+    expect(text(await draw($))).toContain('Turns (3)')
+    // The search key focuses the field drawn now.
+    await press($, 'nav-search')
+    expect(world.focused).toEqual(['turn-search-1'])
+    // Back from another view, the field shows the query it left with.
+    ;(field?.props['onInput'] as (value: string) => void)('fix')
+    await settle()
+    await press($, 'nav-detail')
+    await press($, 'nav-turns')
+    expect(byKey(await draw($), 'turn-search-1')?.props['value']).toBe('fix')
+  })
+
   test('copies a block, or says why it could not', async () => {
     const bash: SessionMessage[] = [
       { role: 'user', text: 'test it', toolUses: [] },
