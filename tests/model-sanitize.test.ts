@@ -33,3 +33,20 @@ describe('untrusted input stays linear', () => {
     expect(sanitizePrompt('<command-name>a<b</command-name>')).toBe('a')
   })
 })
+
+describe('sanitizeText', () => {
+  test('clean text, tabs, newlines and non-ASCII come back as they are', () => {
+    for (const clean of ['', 'plain', 'a\tb\nc', 'café 日本 😀 ├─ ']) expect(sanitizeText(clean)).toBe(clean)
+  })
+
+  test('drops escapes, controls and bidi marks, alone or mixed, call after call', () => {
+    for (let round = 0; round < 2; round++) {
+      expect(sanitizeText('a\u001b[31mred\u001b[0m')).toBe('ared')
+      expect(sanitizeText('a\u001b]52;c;eA==\u0007b')).toBe('ab')
+      expect(sanitizeText('a\rb\u0000c\u007fd\u009be')).toBe('abcde')
+      expect(sanitizeText('if\u202e x \u2066y\u2069\u200f')).toBe('if x y')
+      expect(sanitizeText('\u001b[1m\u202ex\r')).toBe('x')
+      expect(sanitizeText('clean')).toBe('clean')
+    }
+  })
+})
