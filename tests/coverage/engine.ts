@@ -113,6 +113,8 @@ type World = {
   // What the plugin did, for the tests to read.
   store: Map<string, unknown>
   opened: (number | undefined)[]
+  // Everything each open asked for.
+  openArgs: Record<string, unknown>[]
   // How many opens asked for the keyboard.
   focusRequests: number
   commands: string[]
@@ -143,6 +145,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     isPanePlaced: true,
     store: new Map(),
     opened: [],
+    openArgs: [],
     focusRequests: 0,
     commands: [],
     copies: [],
@@ -193,6 +196,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       resolve: () => el,
       open: async (args: { columns?: number; focus?: true }) => {
         world.opened.push(args.columns)
+        world.openArgs.push(args)
         if (args.focus === true) world.focusRequests++
         return { isPlaced: true }
       },
