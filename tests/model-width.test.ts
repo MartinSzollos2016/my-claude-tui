@@ -169,8 +169,8 @@ describe('display width of emoji forms', () => {
   })
 
   test('without Intl.Segmenter graphemes fall back to code points, never halving a surrogate pair', () => {
-    expect(graphemesOf('é😀🇨🇿')).toEqual(['é', '😀', '🇨🇿'])
-    expect(graphemesOf('é😀🇨🇿', null)).toEqual(['e', '́', '😀', '🇨', '🇿'])
+    expect(graphemesOf('e\u0301😀🇨🇿')).toEqual(['e\u0301', '😀', '🇨🇿'])
+    expect(graphemesOf('e\u0301😀🇨🇿', null)).toEqual(['e', '\u0301', '😀', '🇨', '🇿'])
     expect(graphemesOf('', null)).toEqual([])
   })
 })
@@ -179,35 +179,35 @@ describe('display width beyond ASCII', () => {
   test('Latin-1 and Latin Extended letters take one cell each', () => {
     expect(displayWidth('café')).toBe(4)
     expect(displayWidth('naïve résumé')).toBe(12)
-    expect(displayWidth(' ©®±·')).toBe(5)
+    expect(displayWidth('\u00a0©®±·')).toBe(5)
     expect(displayWidth('Āžʼ˿')).toBe(4)
   })
 
   test('a soft hyphen draws nothing', () => {
-    expect(displayWidth('a­b')).toBe(2)
-    expect(displayWidth('­')).toBe(0)
-    expect(truncateDisplay('ab­cdef', 4)).toBe('ab­c…')
+    expect(displayWidth('a\u00adb')).toBe(2)
+    expect(displayWidth('\u00ad')).toBe(0)
+    expect(truncateDisplay('ab\u00adcdef', 4)).toBe('ab\u00adc…')
   })
 
   test('combining marks join the letter before them', () => {
-    expect(displayWidth('é̀')).toBe(1)
-    expect(displayWidth('café ok')).toBe(7)
-    expect(truncateDisplay('éééé', 3)).toBe('éé…')
+    expect(displayWidth('é\u0300')).toBe(1)
+    expect(displayWidth('cafe\u0301 ok')).toBe(7)
+    expect(truncateDisplay('e\u0301e\u0301e\u0301e\u0301', 3)).toBe('e\u0301e\u0301…')
   })
 
   test('punctuation, arrows, box drawing, blocks and Nerd icons take one cell', () => {
     expect(displayWidth('…—•→')).toBe(4)
     expect(displayWidth('├──│└')).toBe(5)
     expect(displayWidth('█▌░')).toBe(3)
-    expect(displayWidth('')).toBe(3)
+    expect(displayWidth('\ue0b0\uf8ff\ue000')).toBe(3)
     expect(truncateDisplay('├── tree │ box', 6)).toBe('├── t…')
     expect(truncateMiddle('├── a/b/c/file.ts', 10)).toBe('├──…ile.ts')
   })
 
   test('a variation selector still makes a narrow symbol an emoji', () => {
-    expect(displayWidth('│️')).toBe(2)
-    expect(displayWidth('↔️')).toBe(2)
-    expect(displayWidth('é️')).toBe(2)
+    expect(displayWidth('│\ufe0f')).toBe(2)
+    expect(displayWidth('↔\ufe0f')).toBe(2)
+    expect(displayWidth('é\ufe0f')).toBe(2)
   })
 
   test('surrogate pairs and wide text mixed with narrow non-ASCII', () => {
