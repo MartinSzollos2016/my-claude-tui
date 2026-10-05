@@ -1124,6 +1124,18 @@ describe('own scroll', () => {
     expect(byKey(pane({ rows: 9 }), 'more-below')).toBeDefined()
   })
 
+  test('the turn search field stays in a compact or short pane, so s and clear keep working', () => {
+    // A field that leaves and comes back would lose the query the person typed.
+    for (const extra of [
+      { placement: 'inline' as const, rows: 9 },
+      { placement: 'inline' as const, rows: 6 },
+      { rows: 5 },
+    ]) {
+      const tree = pane({ view: 'turns', query: 'abc', ...extra })
+      expect(byKey(tree, 'turn-search'), JSON.stringify(extra)).toBeDefined()
+    }
+  })
+
   test('a short inline pane keeps the header line, a window of rows and a one-row footer', () => {
     const footerRows = (tree: Node) =>
       kids(byKey(tree, 'footer')).filter(n => n.props['key'] !== 'footer-hidden').length
