@@ -6,22 +6,48 @@ export type TurnMatch = { index: number; snippet: string }
 
 const SNIPPET = 80
 
+// The texts a turn is searched in, as written and lowercased. A turn is not
+// changed once built (a new transcript builds new turns), so each is
+// lowercased once rather than on every keystroke.
+type Haystacks = { texts: readonly string[]; lowered: readonly string[] }
+const haystacks = new WeakMap<Turn, Haystacks>()
+
+function haystacksOf(turn: Turn): Haystacks {
+  let found = haystacks.get(turn)
+  if (found === undefined) {
+    const texts = searchable(turn)
+    found = { texts, lowered: texts.map(text => text.toLowerCase()) }
+    haystacks.set(turn, found)
+  }
+  return found
+}
+
+// The last search. A text holding a query holds every part of it, so a query
+// that extends the last one over the same turns looks only in the turns that
+// matched.
+let last: { turns: readonly Turn[]; needle: string; hits: readonly Turn[] } | undefined
+
 // Turns whose prompt, output, tool summaries or tool results contain `query`
 // as plain text (case-insensitive, no pattern syntax), each with a one-line
 // snippet around its first hit. indexOf keeps it linear in the text.
 export function searchTurns(turns: readonly Turn[], query: string, ellipsis = '…'): TurnMatch[] {
   const needle = query.trim().toLowerCase()
   if (needle === '') return []
+  const pool = last !== undefined && last.turns === turns && needle.includes(last.needle) ? last.hits : turns
   const matches: TurnMatch[] = []
-  for (const turn of turns) {
-    for (const hay of searchable(turn)) {
-      const at = hay.toLowerCase().indexOf(needle)
+  const hits: Turn[] = []
+  for (const turn of pool) {
+    const { texts, lowered } = haystacksOf(turn)
+    for (let i = 0; i < lowered.length; i++) {
+      const at = lowered[i]!.indexOf(needle)
       if (at >= 0) {
-        matches.push({ index: turn.index, snippet: snippetAt(hay, at, ellipsis) })
+        hits.push(turn)
+        matches.push({ index: turn.index, snippet: snippetAt(texts[i]!, at, ellipsis) })
         break
       }
     }
   }
+  last = { turns, needle, hits }
   return matches
 }
 
