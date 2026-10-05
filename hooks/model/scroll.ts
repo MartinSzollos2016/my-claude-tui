@@ -33,15 +33,14 @@ export type ContentRows = { total: number; starts: Readonly<Record<string, numbe
 
 // The two borders of a frame.
 const FRAME_BORDERS = 2
-// What a tab is drawn as.
-const TAB = '    '
 
 // Measured texts by width: a pane draws the same pieces on every tick.
 const wrapCache = new Map<string, number>()
 const MAX_WRAP_CACHE = 2000
 
 // The rows `text` takes wrapped at `width` cells: each of its lines at least
-// one, a long one a row per `width`; a trailing newline adds none.
+// one, a long one a row per `width`; a trailing newline adds none. The view
+// expands tabs before it draws (expandTabs), so the text measured has none.
 function wrappedRows(text: string, width: number): number {
   const key = `${width}\u0000${text}`
   const cached = wrapCache.get(key)
@@ -49,10 +48,7 @@ function wrappedRows(text: string, width: number): number {
   const lines = text.split('\n')
   if (lines.length > 1 && lines.at(-1) === '') lines.pop()
   const cells = Math.max(1, width)
-  const rows = lines.reduce(
-    (sum, line) => sum + Math.max(1, Math.ceil(displayWidth(line.replaceAll('\t', TAB)) / cells)),
-    0,
-  )
+  const rows = lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(displayWidth(line) / cells)), 0)
   if (wrapCache.size >= MAX_WRAP_CACHE) wrapCache.clear()
   wrapCache.set(key, rows)
   return rows
