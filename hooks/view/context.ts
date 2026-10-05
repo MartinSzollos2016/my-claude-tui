@@ -228,7 +228,9 @@ export type PaneParts = { header: readonly HeaderPart[]; content: RenderElement 
 
 // One part of the header and the rows it is given: each part is drawn in a
 // box of exactly that height, so the header is as tall as their sum.
-export type HeaderPart = { node: RenderElement; rows: number }
+// `isKept`: a part a compact or short pane keeps (the turn search field: one
+// that left and came back would lose what the person typed).
+export type HeaderPart = { node: RenderElement; rows: number; isKept?: true }
 
 // The search field: "every surface's one-line text field" (InputProps), with
 // its submit label beside it while focused.

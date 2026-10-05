@@ -127,9 +127,10 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   // the footer's status line only.
   const isCompact = data.placement === 'inline' && data.rows - sumRows(parts.header) - full.rows < MIN_INLINE_WINDOW
   const layout = isCompact ? compactFooter(full) : full
-  const wanted = isCompact ? parts.header.slice(0, 1) : parts.header
-  // A pane too short for the header and a row of content drops the header.
-  const header = data.rows - sumRows(wanted) - layout.rows >= 1 ? wanted : []
+  const wanted = isCompact ? parts.header.filter((part, i) => i === 0 || part.isKept === true) : parts.header
+  // A pane too short for the header and a row of content drops the header,
+  // all but the parts it keeps.
+  const header = data.rows - sumRows(wanted) - layout.rows >= 1 ? wanted : wanted.filter(part => part.isKept === true)
   const headerRows = sumRows(header)
   const windowRows = Math.max(1, data.rows - headerRows - layout.rows)
   const rows = contentRows(data.layout)

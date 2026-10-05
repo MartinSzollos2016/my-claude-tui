@@ -82,6 +82,7 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
   if (Input)
     header.push({
       rows: INPUT_ROWS,
+      isKept: true,
       node: (
         <Box key="turns-search" flexDirection="row" gap={2}>
           <Input
