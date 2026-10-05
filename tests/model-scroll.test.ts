@@ -9,6 +9,7 @@ import {
   scrollToRow,
   stepCursor,
 } from '../hooks/model/scroll'
+import { expandTabs } from '../hooks/model/width'
 
 describe('contentRows of the turn list', () => {
   test('a turn row with an id has its start, as an item row does', () => {
@@ -83,7 +84,14 @@ describe('contentRows', () => {
     expect(
       contentRows([{ kind: 'frame', body: ['a\n'], notes: ['n'.repeat(100)], width: 50, headRows: 2 }]).total,
     ).toBe(2 + 2 + 1 + 2)
-    expect(contentRows([{ kind: 'frame', body: ['tab\there'], notes: [], width: 8 }]).total).toBe(3 + 2)
+  })
+
+  // The view expands tabs before it draws a text; the estimate measures that
+  // same text and gives a tab no width of its own.
+  test('an expanded tab counts the cells to its stop, a raw one no more than a character', () => {
+    expect(contentRows([{ kind: 'frame', body: [expandTabs('tab\there')], notes: [], width: 8 }]).total).toBe(3 + 2)
+    expect(contentRows([{ kind: 'frame', body: [expandTabs('x\ty')], notes: [], width: 9 }]).total).toBe(3 + 1)
+    expect(contentRows([{ kind: 'frame', body: ['tab\there'], notes: [], width: 8 }]).total).toBe(3 + 1)
   })
 
   // Calibrated against the real engine (a pyte-rendered session): Code with
