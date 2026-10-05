@@ -61,7 +61,7 @@ import { engineScroll, scrollToRow, stepCursor, type EngineScroll, type ScrollFr
 import { searchTurns, type TurnMatch } from './model/search'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
 import { alignFromEnd, thinkingCounts, type TurnThinking } from './model/thinking'
-import { durationSuffix, paneColumns, resultLine } from './model/transcript'
+import { durationSuffix, inlineRows, paneColumns, paneRows, resultLine, terminalWidth } from './model/transcript'
 import { buildTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
 import type { Item, Turn } from './model/types'
 import { shortPath, truncate } from './model/width'
@@ -604,18 +604,33 @@ async function isCompact($: EngineInterface): Promise<boolean> {
   return (await $.store.get(COMPACT_KEY)) !== false
 }
 
+// The terminal's height as the last drawing reported it: a command knows
+// only the width.
+let terminalRows: number | undefined
+
+function noteViewport(viewport: { rows: number } | undefined) {
+  if (viewport !== undefined && viewport.rows > 0) terminalRows = viewport.rows
+}
+
+// Whether the pane has been asked for its share of a known terminal width.
+let isAutoSized = false
+
 // Opens (or re-opens) the pane, asking for its share of `terminalColumns`
-// when known; a width the person dragged the dock to still wins.
+// when known (docked), and for rows by the terminal's height (inline, below
+// 110 columns or on the main screen: left out, the engine gives a third);
+// a size the person dragged the pane to still wins.
 // No `closeOnEscape`: Esc (in the search field too) only hands the keys back
 // to the prompt and the pane stays open.
 async function openPane($: EngineInterface, focus: boolean, terminalColumns?: number) {
   const share = await widthShare($)
   const columns = terminalColumns === undefined ? undefined : paneColumns(terminalColumns, share)
+  if (columns !== undefined) isAutoSized = true
   return $.ui.open({
     id: PANE,
     title: 'tail',
     ...(focus ? { focus: true as const } : {}),
     ...(columns === undefined ? {} : { columns }),
+    ...(terminalRows === undefined ? {} : { rows: paneRows(terminalRows) }),
   })
 }
 
@@ -636,15 +651,12 @@ async function claimFocus($: EngineInterface): Promise<void> {
 }
 
 // The pane opened at session start before any width was known: size it
-// once, from the first drawing that reports the terminal width, if it is
-// still docked.
-let isAutoSized = false
-
-async function autoSize($: EngineInterface, terminalColumns: number | undefined) {
-  if (isAutoSized || terminalColumns === undefined) return
+// once to the saved share from its first drawing, which comes once the
+// surface places it (unasked, it may wait for a wider terminal).
+async function autoSize($: EngineInterface, terminalColumns: number) {
+  if (isAutoSized) return
   isAutoSized = true
-  const pane = (await $.ui.panes()).find(p => p.id === PANE)
-  if (pane?.isPlaced) await openPane($, false, terminalColumns)
+  await openPane($, false, terminalColumns)
 }
 
 async function setWidth($: EngineInterface, arg: string, terminalColumns: number): Promise<string> {
@@ -823,6 +835,10 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    noteViewport(e.viewport)
+    const viewport = e.viewport
+    if (viewport !== undefined)
+      autoSize($, terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)).catch(ignore)
     const el = $.ui.resolve(e) as unknown as El
     await read($, tick)
 
@@ -904,7 +920,11 @@ export const register: Register = on => {
         isBarShown: !(await read($, isBarHidden)),
         turnCursor: view === 'turns' ? await read($, turnCursor) : null,
         columns: e.props.bodyColumns,
-        rows: e.props.scroll.bodyRows,
+        rows:
+          e.props.placement === 'inline'
+            ? inlineRows(e.props.scroll.bodyRows, paneRows(terminalRows ?? 0))
+            : e.props.scroll.bodyRows,
+        placement: e.props.placement,
         scrollTop: view === 'detail' ? detailTop : scrolled[view],
         full: new Set(fullIds),
         view,
@@ -1031,7 +1051,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    autoSize($, e.viewport?.columns).catch(ignore)
+    noteViewport(e.viewport)
     if (e.props.hasSurvey || (await read($, isBarHidden))) return next(e)
     await read($, tick)
 

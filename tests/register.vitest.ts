@@ -112,6 +112,79 @@ describe('session start', () => {
   })
 })
 
+describe('pane size', () => {
+  const at = (columns: number, rows: number) => ({ columns, rows, isFullscreen: true })
+  const bar = (viewport: ReturnType<typeof at>) => run('ui.render', $of, { ...BAR_EVENT, viewport })
+  let $of: Parameters<typeof run>[1]
+
+  // A drawing's viewport beside a docked pane is the transcript's column: the
+  // terminal is that, the dock's body and its one-cell border.
+  const docked = (viewport: ReturnType<typeof at>, bodyColumns: number) => ({
+    ...PANE_EVENT,
+    props: { ...PANE_EVENT.props, placement: 'dock', bodyColumns },
+    viewport,
+  })
+  const inlineAt = (viewport: ReturnType<typeof at>) => ({
+    ...PANE_EVENT,
+    props: { ...PANE_EVENT.props, placement: 'inline', bodyColumns: viewport.columns - 4 },
+    viewport,
+  })
+
+  test('the saved share is applied at session start once the pane is drawn, from the terminal width', async () => {
+    const { $, world } = fakeEngine({ store: new Map([['paneWidth', 60]]) })
+    $of = $
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    expect(world.opened).toEqual([undefined])
+    // The info bar drawn before the pane is placed sizes nothing.
+    await bar(at(200, 50))
+    await settle()
+    expect(world.opened).toEqual([undefined])
+    // Docked at the engine's share: 120 transcript columns, 79 of body.
+    await run('ui.render', $, docked(at(120, 50), 79))
+    await settle()
+    expect(world.opened.at(-1)).toBe(120)
+    // Once only.
+    await run('ui.render', $, docked(at(80, 50), 119))
+    await settle()
+    expect(world.opened).toHaveLength(2)
+  })
+
+  test('a terminal too narrow for a share is sized once all the same', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    for (let i = 0; i < 3; i++) {
+      await run('ui.render', $, inlineAt(at(70, 40)))
+      await settle()
+    }
+    expect(world.openArgs.slice(1)).toEqual([{ id: 'tail', title: 'tail', rows: 20 }])
+  })
+
+  test('/tail asks for inline rows from the terminal height the drawings reported', async () => {
+    const { $, world } = fakeEngine()
+    $of = $
+    await bar(at(90, 50))
+    await settle()
+    await run('command.run', $, { ...command('tail'), presentation: { isFullscreen: true, columns: 90 } })
+    expect(world.openArgs.at(-1)).toMatchObject({ columns: 50, rows: 25 })
+  })
+
+  test('an inline pane draws the rows it asked for until the engine reports its window', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    const inline = (bodyRows: number) =>
+      run('ui.render', $, {
+        ...PANE_EVENT,
+        props: { ...PANE_EVENT.props, placement: 'inline', bodyColumns: 86, scroll: { offset: 0, bodyRows } },
+        viewport: at(90, 50),
+      }) as Promise<{ props: Record<string, unknown> }>
+    expect((await inline(0)).props['height']).toBe(25)
+    expect((await inline(14)).props['height']).toBe(14)
+    const short = await inline(6)
+    expect(short.props['height']).toBe(6)
+    expect(byKey(short, 'pane-header')?.props['height']).toBe(1)
+  })
+})
+
 describe('commands', () => {
   test('every command answers and the width sticks', async () => {
     const { $, world } = fakeEngine()

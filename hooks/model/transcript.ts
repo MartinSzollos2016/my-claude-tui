@@ -17,6 +17,33 @@ export function paneColumns(total: number, percent: number): number | undefined 
   return Math.min(total - MIN_TRANSCRIPT, Math.max(MIN_PANE, wanted))
 }
 
+// The cells a dock takes beside its body: the border toward the transcript.
+const DOCK_FRAME = 1
+
+// The terminal's width from a drawing of the pane: beside a docked pane the
+// viewport is the transcript's column, so the dock (body and border) is added;
+// inline the viewport is the terminal.
+export function terminalWidth(viewportColumns: number, placement: 'dock' | 'inline', bodyColumns: number): number {
+  return placement === 'dock' ? viewportColumns + bodyColumns + DOCK_FRAME : viewportColumns
+}
+
+const MIN_PANE_ROWS = 12
+
+// The body rows to ask for while the pane sits inline above the prompt (the
+// dock ignores them): half the terminal, never under MIN_PANE_ROWS; the
+// engine still caps it at what the layout spares.
+export function paneRows(total: number): number {
+  return Math.max(MIN_PANE_ROWS, Math.floor(total / 2))
+}
+
+// The rows to draw inline. The inline block is only as tall as the tree, so
+// drawing the `bodyRows` it reports would keep a first empty drawing empty:
+// until the engine reports a window, draw the rows asked for (`wanted`),
+// then the window it granted.
+export function inlineRows(bodyRows: number, wanted: number): number {
+  return bodyRows > 0 ? bodyRows : wanted
+}
+
 const lineWord = (n: number) => `${n} line${n === 1 ? '' : 's'}`
 
 // The text a tool's structured result carries, by the fields the built-in
