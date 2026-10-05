@@ -129,6 +129,15 @@ describe('commands', () => {
     expect(await say($, 'tail-help')).toContain('/tail-turns')
   })
 
+  test('/tail with an unknown subcommand names it, lists the valid ones and does not open the pane', async () => {
+    const { $, world } = fakeEngine()
+    const answer = await say($, 'tail', 'foo')
+    expect(answer).toContain('"foo"')
+    expect(answer).toContain('turns')
+    expect(answer).not.toContain('Detail view opened')
+    expect(world.opened).toEqual([])
+  })
+
   test('/tail and /tail-turns ask for the keyboard again once the command is done, until the pane has it', async () => {
     // The engine grants the focus only over an empty composer, which still
     // holds the command while it runs.
