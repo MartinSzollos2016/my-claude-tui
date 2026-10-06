@@ -1048,6 +1048,31 @@ describe('detail pane', () => {
       expect(all).toContain('listing')
     })
 
+    test('an opened subagent past the cap still loads', async () => {
+      const ids = Array.from({ length: 230 }, (_, i) => `ag-${i}`)
+      const { $, world } = fakeEngine({
+        messages: [
+          { role: 'user', text: 'Run', toolUses: [] },
+          {
+            role: 'assistant',
+            text: '',
+            toolUses: ids.map(id => ({
+              tool_use_id: `t-${id}`,
+              tool: 'Agent',
+              input: { description: id },
+              agentId: id,
+              text: 'ok',
+            })),
+          },
+        ],
+        agentMessages: Object.fromEntries(ids.map(id => [id, reply(`answer ${id}`)])),
+        agents: ids.map(id => ({ id, description: 'Job', type: 'Explore', status: 'completed' as const })),
+      })
+      await press($, 't-ag-225')
+      expect(world.calls).toContain('messages:ag-225')
+      expect(text(await draw($))).toContain('answer ag-225')
+    })
+
     test('reuses a running agent trace until it changes', async () => {
       let reads = 0
       const steady: SessionMessage = {
