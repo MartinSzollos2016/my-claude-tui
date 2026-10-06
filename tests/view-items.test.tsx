@@ -1006,3 +1006,10 @@ describe('cyclic traces drawn', () => {
     expect(text(tree).split('Execution Trace').length - 1).toBe(3)
   })
 })
+
+describe('cards with a scroll past the end', () => {
+  test('a stored scroll past the end still gives the rows drawn their cards', () => {
+    expect(byKey(renderPane(el, { ...base, rows: 40, scrollTop: 0 }, act), 'card-b1')).toBeDefined()
+    expect(byKey(renderPane(el, { ...base, rows: 40, scrollTop: 500 }, act), 'card-b1')).toBeDefined()
+  })
+})
