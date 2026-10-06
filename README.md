@@ -39,7 +39,7 @@ The commands run at once, even while Claude is answering.
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | `/tail`                  | open the detail pane                                                                                                         |
 | `/tail-turns`            | list the session's turns and open one in the pane                                                                            |
-| `/tail-width <30-80>`    | pane width as % of the terminal (default 80, kept)                                                                           |
+| `/tail-width [30-80]`    | pane width as % of the terminal (default 80, kept); alone it shows the width                                                 |
 | `/tail-compact`          | toggle the compact transcript (on by default, kept)                                                                          |
 | `/tail-icons [set]`      | icon set: `nerd` (default), `unicode` or `ascii`                                                                             |
 | `/tail-bar`              | show or hide the info bar (this session)                                                                                     |
@@ -67,7 +67,7 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 | `e` / `c`              | expand all / collapse all (detail view; `e` while some rows are collapsed) |
 | `f` / `b`              | page the pane's content down / up                                          |
 | `h`                    | show every key in the footer, or only those that act now                   |
-| Esc                    | back to the prompt                                                         |
+| Esc                    | leaves the search field, then gives the keys back to the prompt            |
 
 The keys are pinned to the bottom of the pane in a footer. It shows one row of the keys that act now, the most wanted first and `h: keys` last, with the position of the turn (`41/64`, `64/64 live`) and whether the pane has the keyboard on the right; when both do not fit, the status takes a second row. `h` expands the footer to every key in groups (moving, cursor, views and expand) and `h: less` collapses it again, for the rest of the session. Every key keeps its hotkey, shown or not: one that cannot act right now (`p` on the first turn, `o`/`y` without a cursor, `f` at the end, `d` in the detail view, `t` in the turn list) does nothing, so the pane keeps the keyboard. Expanded, under 64 columns each group takes its own row; under 40 columns only the keys and arrows stay.
 
@@ -93,7 +93,8 @@ Claude Code paints the pane's frame grey and a plugin cannot change it.
 - **Sends nothing out**: no network requests, no telemetry. Everything it reads is drawn in the
   pane, the info bar and the transcript of the same session.
 - **Hooks**: its own slash commands (`command.run`, registered per command, so it never sees
-  others); `tool.call`, `turn.start` and `turn.complete` to time calls and turns and match each
+  others); `session.start` to set up the session and open the pane; `ui.focus` and `ui.scroll`
+  for the pane's own keys, cursor and scrolling; `tool.call`, `turn.start` and `turn.complete` to time calls and turns and match each
   turn to its prompt, passing each on unchanged; `prompt.submit` and the `UserPromptSubmit`
   prompt hook to note the prompt and the permission mode, passing both on unchanged; `ui.render`
   to draw the pane, the info bar and the compact tool rows in the transcript, to name the running

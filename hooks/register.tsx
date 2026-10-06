@@ -787,8 +787,10 @@ async function autoSize($: EngineInterface, terminalColumns: number) {
   await openPane($, false, terminalColumns)
 }
 
-// The pane's width as the engine drew it last (the Pane render's bodyColumns).
+// The pane's width as the engine drew it last (the Pane render's bodyColumns),
+// and where it drew it.
 let drawnColumns: number | undefined
+let drawnPlacement: string | undefined
 
 async function setWidth($: EngineInterface, arg: string, terminalColumns: number): Promise<string> {
   // Alone: what is stored, what that asks for, and what was drawn.
@@ -802,7 +804,8 @@ async function setWidth($: EngineInterface, arg: string, terminalColumns: number
       drawnColumns !== undefined && Math.abs(drawnColumns - asked) > 2
         ? ' A width you dragged the dock to wins over it; /tail width N asks again.'
         : ''
-    return `Pane width ${stored}% of the terminal: ${asked} columns${drawn}.${override}`
+    const inline = drawnPlacement === 'inline' ? ' (inline: the pane takes the whole width)' : ''
+    return `Pane width ${stored}% of the terminal: ${asked} columns${drawn}${inline}.${override}`
   }
   const share = Number(arg)
   if (!Number.isInteger(share) || share < MIN_WIDTH || share > MAX_WIDTH) {
@@ -994,6 +997,7 @@ export const register: Register = on => {
     keepKeysAfterSearchEsc($, e.props.isFocused, terminal)
     // Only a docked pane's width answers to /tail-width; inline it is the screen's.
     drawnColumns = e.props.placement === 'dock' ? e.props.bodyColumns : undefined
+    drawnPlacement = e.props.placement
     noteViewport(e.viewport)
     if (terminal !== undefined) autoSize($, terminal).catch(ignore)
     const el = $.ui.resolve(e) as unknown as El
