@@ -981,7 +981,8 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     keepKeysAfterSearchEsc($, e.props.isFocused)
-    drawnColumns = e.props.bodyColumns
+    // Only a docked pane's width answers to /tail-width; inline it is the screen's.
+    drawnColumns = e.props.placement === 'dock' ? e.props.bodyColumns : undefined
     noteViewport(e.viewport)
     const viewport = e.viewport
     if (viewport !== undefined)

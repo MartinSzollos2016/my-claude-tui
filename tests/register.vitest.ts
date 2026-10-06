@@ -220,6 +220,14 @@ describe('commands', () => {
     expect(world.store.get('paneWidth')).toBe(50)
   })
 
+  test('an inline pane makes no claim about a dragged dock', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    await run('ui.render', $, { ...PANE_EVENT, props: { ...PANE_EVENT.props, placement: 'inline', bodyColumns: 88 } })
+    const answer = await say($, 'tail-width')
+    expect(answer).not.toMatch(/dragged/)
+    expect(answer).not.toMatch(/drawn 88/)
+  })
+
   test('before a drawing the width answer names no drawn width', async () => {
     const { $ } = fakeEngine()
     const answer = await say($, 'tail-width')
