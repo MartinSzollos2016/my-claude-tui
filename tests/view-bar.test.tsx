@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
 import { buildTurns } from '../hooks/model/turns'
+import { displayWidth } from '../hooks/model/width'
 import { renderBar } from '../hooks/view/bar'
 import { renderPane } from '../hooks/view/pane'
 import { act, base, el, foldedOpen, foldedTimings, foldedTurn, nodes, text } from './fixtures/view'
@@ -100,5 +101,50 @@ describe('group and bar regressions', () => {
     ])
     const tree = renderPane(el, { ...base, turns: many, expanded: new Set(['group:m0']) }, act)
     expect(text(tree).length).toBeLessThan(100_000)
+  })
+})
+
+describe('one line', () => {
+  const data = (columns: number) => ({
+    project: 'my-claude-tui',
+    git: { branch: 'feat/footer-collapsed' } as never,
+    mode: 'plan',
+    runningAgents: 2,
+    contextTokens: 46_900,
+    contextPercent: 34,
+    costUsd: 1.5,
+    columns,
+  })
+
+  for (const columns of [34, 60, 120]) {
+    test(`at ${columns} cells the bar fits one line`, () => {
+      expect(displayWidth(text(renderBar(el, data(columns))))).toBeLessThanOrEqual(columns)
+    })
+  }
+
+  test('parts drop from the lowest priority: cost, tokens, meter, agents, mode, branch', () => {
+    const at34 = text(renderBar(el, data(34)))
+    expect(at34).toContain('34%')
+    expect(at34).toContain('my-claude-tui')
+    expect(at34).not.toContain('$1.50')
+    const at60 = text(renderBar(el, data(60)))
+    expect(at60).toContain('feat/footer-collapsed')
+  })
+
+  test('a bar of 8 cells keeps the percent only', () => {
+    expect(text(renderBar(el, data(8))).trim()).toBe('34%')
+  })
+
+  test('a project too long for its room is cut, never wrapped', () => {
+    const long = {
+      ...data(30),
+      project: 'a-very-long-project-name-that-goes-on',
+      git: null,
+      mode: null,
+      runningAgents: 0,
+    }
+    const all = text(renderBar(el, long))
+    expect(displayWidth(all)).toBeLessThanOrEqual(30)
+    expect(all).toContain('34%')
   })
 })
