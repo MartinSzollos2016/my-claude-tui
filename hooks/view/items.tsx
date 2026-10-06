@@ -218,7 +218,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place: Tree
 }
 
 function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place: TreePlace | undefined, shown: string) {
-  const { Box } = el
+  const { Box, Text } = el
 
   if (item.kind === 'output') {
     const frame = renderFrame(
@@ -243,6 +243,15 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place: 
   }
 
   if (isSubagent(item)) {
+    if (data.tracing?.includes(item.agentId)) {
+      const note = 'Trace shown above.'
+      data.layout.push(textLine(data, note, rowInset(place) + EXPANDED_INDENT))
+      return (
+        <Box marginLeft={4}>
+          <Text color={C.muted}>{note}</Text>
+        </Box>
+      )
+    }
     return renderTrace(el, item, data, act, place)
   }
 
@@ -290,6 +299,10 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
       inset,
     ),
   )
+  // Its rows, drawn with this agent on the path, so a trace naming it again stops.
+  data.tracing?.push(item.agentId)
+  const rows = renderRows(el, trace.items, data, act, place === undefined ? [] : [...place.path, !place.isLast])
+  data.tracing?.pop()
   const traced = (
     <Box flexDirection="column" marginBottom={1}>
       <Box flexDirection="row" marginLeft={4}>
@@ -301,7 +314,7 @@ function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, ac
         {model !== undefined && <Text color={C.muted}>{` ${icons.dot} `}</Text>}
         {model !== undefined && <Text color={modelColor(model) ?? C.text}>{shortModel(model)}</Text>}
       </Box>
-      {renderRows(el, trace.items, data, act, place === undefined ? [] : [...place.path, !place.isLast])}
+      {rows}
     </Box>
   )
   // The blank row under the trace.

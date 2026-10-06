@@ -120,6 +120,9 @@ export type Ctx = PaneData & {
   layout: RowBlock[]
   // The hover cards of the rows drawn, laid over the window by the pane.
   cards?: CardSpot[]
+  // The agents whose traces are being drawn, outermost first: a trace that
+  // names one of them again is not drawn a second time.
+  tracing?: string[]
 }
 
 // A row's hover card: its lines, the content row it belongs to and how far

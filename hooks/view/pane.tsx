@@ -42,6 +42,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     maxMs: longestCall(input, turn),
     layout: [],
     cards: [],
+    tracing: [],
   }
   const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces, input.expanded)]
   reserveSections(lists.reduce((sum, items) => sum + items.length, 0))

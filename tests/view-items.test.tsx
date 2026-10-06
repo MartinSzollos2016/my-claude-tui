@@ -961,3 +961,48 @@ describe('open run name width', () => {
     expect(String(byKey(tree, 'fr1')?.props['label'])).toMatch(/^Read {2}\S/)
   })
 })
+
+describe('cyclic traces drawn', () => {
+  const callTo = (id: string, agentId: string) => ({
+    tool_use_id: id,
+    tool: 'Agent',
+    input: { description: `run ${agentId}` },
+    agentId,
+    text: 'ok',
+  })
+  const traceOf = (prefix: string, toolUses: ReturnType<typeof callTo>[]) => ({
+    items: buildTurns([{ role: 'assistant', text: '', toolUses }], `${prefix}/`)[0]!.items,
+  })
+
+  test('a trace that names its own agent is drawn once', () => {
+    const turns = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [callTo('t-A', 'A')] },
+    ])
+    const traces = new Map([['A', traceOf('A', [callTo('self', 'A')])]])
+    const tree = renderPane(
+      el,
+      { ...base, turns, stats: [undefined], traces, rows: 200, expanded: new Set(['t-A', 'A/self']) },
+      act,
+    )
+    expect(text(tree).split('Execution Trace').length - 1).toBe(1)
+  })
+
+  test('a cycle of three is drawn once per agent', () => {
+    const turns = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: '', toolUses: [callTo('t-A', 'A')] },
+    ])
+    const traces = new Map([
+      ['A', traceOf('A', [callTo('ab', 'B')])],
+      ['B', traceOf('B', [callTo('bc', 'C')])],
+      ['C', traceOf('C', [callTo('ca', 'A')])],
+    ])
+    const tree = renderPane(
+      el,
+      { ...base, turns, stats: [undefined], traces, rows: 200, expanded: new Set(['t-A', 'A/ab', 'B/bc', 'C/ca']) },
+      act,
+    )
+    expect(text(tree).split('Execution Trace').length - 1).toBe(3)
+  })
+})
