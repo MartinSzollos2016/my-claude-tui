@@ -126,6 +126,8 @@ function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, plac
   const { Box } = el
   const isOpen = data.expanded.has(group.id)
   const status = groupStatus(group, data)
+  // One name column for the run's calls, measured once.
+  const nameWidth = nameWidthOf(group.items)
   const children = () =>
     isOpen && (
       <Box flexDirection="column">
@@ -139,7 +141,7 @@ function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, plac
               path: place === undefined ? [] : [...place.path, !place.isLast],
               isLast: i === group.items.length - 1,
             },
-            nameWidthOf(group.items),
+            nameWidth,
           ),
         )}
       </Box>
