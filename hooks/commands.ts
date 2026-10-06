@@ -86,6 +86,8 @@ export function helpText(icons: Icons = ICON_SETS.nerd): string {
     't turn list, d detail view, s search turns, m team board, j/k move the row cursor, o opens it, y copies it, e/c expand/collapse all,',
     'f/b page the pane down/up (the wheel and PgUp/PgDn scroll it too), "show all" opens a long block,',
     '"copy" copies it whole, h shows or hides all keys in the footer, Esc returns to the prompt.',
-    `The header counts: ${icons.wrench} tool calls, ${icons.output} outputs, ${icons.thinking} thinking blocks, ${icons.token} tokens, ${icons.clock} duration.`,
+    'ctrl+x tab or a click gives the pane the keys (twice while the info bar shows).',
+    `The header shows ${icons.wrench} tool calls, ${icons.output} outputs, ${icons.thinking} thinking blocks and ${icons.robot} a subagent each;`,
+    `at the right ${icons.token} tokens, context use (meter and percent), ${icons.clock} duration and the end time.`,
   ].join('\n')
 }
