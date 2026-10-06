@@ -1,7 +1,7 @@
 // The pinned footer: the keys each view draws in groups (hidden ones keep their
 // hotkeys), where the page keys go, and the status row with the focus note.
 import type { RenderSurface } from 'claude-code'
-import { C } from '../theme'
+import { C, type ThemeKey } from '../theme'
 import { footerLayout, footerPads, type FooterLayout } from '../model/footer'
 import { clampScroll, pageScroll, type ScrollFrame } from '../model/scroll'
 import { displayWidth } from '../model/width'
@@ -204,21 +204,50 @@ export const focusChord = (data: Ctx) => (data.isBarShown === true ? `ctrl+x tab
 // set's ellipsis when it does not fit `room` cells.
 export const STATUS_INSET = 2
 
-function footerStatus(data: Ctx, room: number, frame: ScrollFrame) {
+type StatusSegment = { key: string; text: string; color: ThemeKey }
+
+// The status variants from the fullest to the shortest: the focus note
+// shortens first, then the place goes, then `live`; the position stays.
+function statusVariants(data: Ctx, place: string): StatusSegment[][] {
+  const total = data.turns.length
+  const pos = total > 0 ? `${data.selected + 1}/${total}` : ''
+  const live = total > 0 && data.isLatest ? `${pos} live` : pos
+  const focused = data.isFocused === true
+  const noteColor = focused ? C.accent : C.muted
+  const long = data.isFocused === undefined ? '' : focused ? 'keys on' : `click or ${focusChord(data)}`
+  const short = data.isFocused === undefined ? '' : focused ? 'keys on' : 'click for keys'
+  const seg = (key: string, text: string, color: ThemeKey = C.muted): StatusSegment => ({ key, text, color })
+  const variant = (position: string, where: string, note: string) =>
+    [seg('turn-position', position), seg('scroll-place', where), seg('focus-note', note, noteColor)].filter(
+      s => s.text !== '',
+    )
+  return [
+    variant(live, place, long),
+    variant(live, place, short),
+    variant(live, '', short),
+    variant(pos, '', short),
+    variant(pos, '', ''),
+  ]
+}
+
+const joinWidth = (segments: readonly StatusSegment[], dot: string) => displayWidth(segments.map(s => s.text).join(dot))
+
+// The width of the fullest status, with `end` shown: the collapsed footer
+// decides from it whether the status fits beside the keys, before the
+// window (and so the place) is known.
+export function statusWidthOf(data: Ctx): number {
+  return joinWidth(statusVariants(data, 'end')[0]!, ` ${data.icons.dot} `)
+}
+
+export function footerStatus(data: Ctx, room: number, frame: ScrollFrame) {
   const { icons } = data
   const width = Math.max(1, room)
-  const position =
-    data.turns.length > 0 ? `turn ${data.selected + 1}/${data.turns.length}${data.isLatest ? ' (live)' : ''}` : ''
   // Where the window stands while the content overflows: at its top or end.
   const lastTop = clampScroll(Infinity, frame.total, frame.windowRows)
   const place = lastTop === 0 ? '' : frame.scrollTop === 0 ? 'top' : frame.scrollTop >= lastTop ? 'end' : ''
-  const note = data.isFocused === undefined ? '' : data.isFocused ? 'keys on' : `click or ${focusChord(data)}`
   const dot = ` ${icons.dot} `
-  const segments = [
-    { key: 'turn-position', text: position, color: C.muted },
-    { key: 'scroll-place', text: place, color: C.muted },
-    { key: 'focus-note', text: note, color: data.isFocused ? C.accent : C.muted },
-  ].filter(segment => segment.text !== '')
+  const variants = statusVariants(data, place)
+  const segments = variants.find(v => joinWidth(v, dot) <= width) ?? variants.at(-1)!
   // The segments with a dot between each two, cut as one text.
   const pieces = segments.flatMap((segment, i) => [
     ...(i === 0 ? [] : [{ key: `footer-dot-${i}`, text: dot, color: C.muted }]),

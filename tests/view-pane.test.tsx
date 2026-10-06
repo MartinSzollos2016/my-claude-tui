@@ -71,7 +71,7 @@ describe('renderPane', () => {
     expect(all).toContain('1.5k')
     expect(all).toContain('1m 5s')
     expect(all).toContain('❯ Fix the bug')
-    expect(all).toContain('turn 1/2')
+    expect(all).toContain('1/2')
     expect(byKey(tree, 'b1')?.props['label']).toContain('Run tests')
     expect(all).toContain('2.5s')
     expect(all).toContain('haiku4.5')
@@ -1173,12 +1173,12 @@ describe('own scroll', () => {
 
   test('the status row says top or end while the content overflows', () => {
     const status = (extra: Record<string, unknown>) => text(byKey(pane({ isFocused: true, ...extra }), 'footer-status'))
-    expect(status({ rows: 10 })).toBe('turn 1/2 · top · keys on')
-    expect(status({ rows: 10, scrollTop: 2 })).toBe('turn 1/2 · keys on')
-    expect(status({ rows: 10, scrollTop: 4 })).toBe('turn 1/2 · end · keys on')
-    expect(status({})).toBe('turn 1/2 · keys on')
+    expect(status({ rows: 10 })).toBe('1/2 · top · keys on')
+    expect(status({ rows: 10, scrollTop: 2 })).toBe('1/2 · keys on')
+    expect(status({ rows: 10, scrollTop: 4 })).toBe('1/2 · end · keys on')
+    expect(status({})).toBe('1/2 · keys on')
     expect(text(byKey(pane({ rows: 10, isFocused: true, icons: ICON_SETS.ascii }), 'footer-status'))).toBe(
-      'turn 1/2 . top . keys on',
+      '1/2 . top . keys on',
     )
     const place = byKey(pane({ rows: 10 }), 'scroll-place')
     expect(place?.props['color']).toBe(C.muted)
@@ -1192,7 +1192,7 @@ describe('own scroll', () => {
     expect(byKey(last, 'nav-pagedown')).toBeDefined()
     const status = byKey(last, 'footer-status')!
     expect(status.props['width']).toBe(70 - 2 - 20 - 2)
-    expect(text(status)).toBe('turn 1/2 · top · keys on')
+    expect(text(status)).toBe('1/2 · top · keys on')
     expect(byKey(pane({ columns: 44 }), 'footer-last')).toBeDefined()
     expect(byKey(pane({ columns: 100 }), 'footer-last')).toBeUndefined()
   })
