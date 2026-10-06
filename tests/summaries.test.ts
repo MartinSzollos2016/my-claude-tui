@@ -104,7 +104,11 @@ describe('row naming', () => {
     expect(itemName(tool('Agent', { subagent_type: 'Plan' }))).toBe('Plan')
     expect(itemName(tool('Agent'))).toBe('Subagent')
     expect(itemName(tool('mcp__srv__lookup'))).toBe('lookup')
-    expect(itemSummary({ kind: 'output', id: 'o', text: 'x'.repeat(50) })).toHaveLength(40)
+    // Long enough for a wide pane's row; the row cuts it to its room.
+    expect(itemSummary({ kind: 'output', id: 'o', text: 'x'.repeat(50) })).toHaveLength(50)
+    expect(itemSummary({ kind: 'output', id: 'o', text: 'x'.repeat(300) })).toHaveLength(200)
+    const bash = toolSummary('Bash', { description: 'd'.repeat(80), command: 'c'.repeat(80) })
+    expect([...bash]).toHaveLength(80 + 2 + 80)
     expect(itemSummary(tool('Agent', { description: 'Look around' }))).toBe('Look around')
     expect(itemSummary(tool('Task'))).toBe('Task')
     expect(itemSummary(tool('Read'))).toBe('')
