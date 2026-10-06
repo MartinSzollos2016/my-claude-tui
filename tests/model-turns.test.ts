@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
 import {
+  apiTurnStarts,
   buildTurns,
   incrementalTurns,
   isAgentFinished,
   isAgentRunning,
   itemStatus,
+  rowKey,
   textPrint,
   traceItems,
   turnsKey,
@@ -252,5 +254,139 @@ describe('incrementalTurns', () => {
     rows.push({ role: 'assistant', text: 'One more.', toolUses: [{ ...read, tool_use_id: 'n1' }] })
     turns.build(copy(rows))
     expect(turns.work).toEqual({ messages: before.messages + 1, tools: before.tools + 1 })
+  })
+})
+
+describe('turn starts from the API form', () => {
+  const late = '<task-notification><task-id>t9</task-id><summary>Agent done</summary></task-notification>'
+  const rows: SessionMessage[] = [
+    { role: 'user', text: 'go', toolUses: [] },
+    { role: 'assistant', text: 'spawned', toolUses: [] },
+    { role: 'assistant', text: 'Both commands failed', toolUses: [] },
+    { role: 'user', text: late, toolUses: [] },
+  ]
+  const api = [
+    {
+      role: 'user' as const,
+      content: [
+        { type: 'text', text: '<system-reminder>env</system-reminder>' },
+        { type: 'text', text: 'go' },
+      ],
+    },
+    { role: 'assistant' as const, content: [{ type: 'text', text: 'spawned' }] },
+    {
+      role: 'user' as const,
+      content: [
+        { type: 'text', text: 'Another Claude session sent a message: <agent-message from="a1">done</agent-message>' },
+      ],
+    },
+    {
+      role: 'assistant' as const,
+      content: [
+        { type: 'thinking', thinking: 'hm' },
+        { type: 'text', text: 'Both commands failed' },
+      ],
+    },
+    { role: 'user' as const, content: [{ type: 'text', text: `<system-reminder>${late}</system-reminder>` }] },
+  ]
+
+  test('a reply to a hidden hand-back opens its own turn, the late notification none', () => {
+    const turns = buildTurns(rows, '', apiTurnStarts(api))
+    expect(turns.map(t => t.prompt)).toEqual(['go', 'Message from agent'])
+    expect(turns[1]!.items.map(i => (i.kind === 'output' ? i.text : ''))).toEqual(['Both commands failed'])
+    expect(turns[0]!.items).toHaveLength(1)
+    expect(turns[1]!.startKey).toBe('tx:Both commands failed')
+  })
+
+  test('a notification the API form holds as a prompt still opens its turn', () => {
+    const early: SessionMessage[] = [...rows.slice(0, 2), { role: 'user', text: late, toolUses: [] }, rows[2]!]
+    const starts = apiTurnStarts([
+      ...api.slice(0, 2),
+      { role: 'user', content: [{ type: 'text', text: late }] },
+      api[3]!,
+    ])
+    expect(buildTurns(early, '', starts).map(t => t.prompt)).toEqual(['go', 'Task notification: Agent done'])
+  })
+
+  test('a notification older than the API window keeps its turn', () => {
+    const old: SessionMessage[] = [
+      { role: 'user', text: 'old', toolUses: [] },
+      { role: 'assistant', text: 'old answer', toolUses: [] },
+      {
+        role: 'user',
+        text: '<task-notification><task-id>t1</task-id><summary>Old agent</summary></task-notification>',
+        toolUses: [],
+      },
+      { role: 'assistant', text: 'noted', toolUses: [] },
+      ...rows,
+    ]
+    expect(buildTurns(old, '', apiTurnStarts(api)).map(t => t.prompt)).toEqual([
+      'old',
+      'Task notification: Old agent',
+      'go',
+      'Message from agent',
+    ])
+  })
+
+  test('a hand-back reply that uses tools still swallows its late notification', () => {
+    const tooled: SessionMessage[] = [
+      ...rows.slice(0, 2),
+      {
+        role: 'assistant',
+        text: 'Both commands failed',
+        toolUses: [{ tool_use_id: 'b7', tool: 'Bash', input: { command: 'ls' }, text: 'ok' }],
+      },
+      { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'b7', text: 'ok' }] as never },
+      { role: 'assistant', text: 'checked', toolUses: [] },
+      rows[3]!,
+    ]
+    expect(buildTurns(tooled, '', apiTurnStarts(api)).map(t => t.prompt)).toEqual(['go', 'Message from agent'])
+  })
+
+  test('a normal prompt opens exactly one turn', () => {
+    const turns = buildTurns(rows.slice(0, 2), '', apiTurnStarts(api.slice(0, 2)))
+    expect(turns).toHaveLength(1)
+    expect(turns[0]!.startKey).toBe('tx:spawned')
+  })
+
+  test('without the API form turns group as before', () => {
+    expect(buildTurns(rows, '', undefined)).toEqual(buildTurns(rows))
+    expect(buildTurns(rows).map(t => t.prompt)).toEqual(['go', 'Task notification: Agent done'])
+  })
+
+  test('turn starts outside the API window change nothing', () => {
+    const early: SessionMessage[] = [
+      { role: 'user', text: 'old', toolUses: [] },
+      { role: 'assistant', text: 'old answer', toolUses: [] },
+      ...rows,
+    ]
+    expect(buildTurns(early, '', apiTurnStarts(api)).map(t => t.prompt)).toEqual(['old', 'go', 'Message from agent'])
+  })
+
+  test('a start key is a tool use id when the first block is a tool use', () => {
+    const starts = apiTurnStarts([
+      { role: 'user', content: [{ type: 'text', text: 'run' }] },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'b1', name: 'Bash', input: {} }] },
+    ])
+    expect([...starts.keys()]).toEqual(['tu:b1'])
+    expect(rowKey({ role: 'assistant', text: '', toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: {} }] })).toBe(
+      'tu:b1',
+    )
+  })
+
+  test('reminder-only and tool-result user messages start no turn', () => {
+    const starts = apiTurnStarts([
+      { role: 'user', content: [{ type: 'text', text: '<system-reminder>x</system-reminder>' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'a' }] },
+      {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'b1', content: 'ok' },
+          { type: 'text', text: 'note' },
+        ],
+      },
+      { role: 'assistant', content: [{ type: 'text', text: 'b' }] },
+    ])
+    expect(starts.size).toBe(0)
   })
 })

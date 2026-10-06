@@ -1,8 +1,9 @@
 // Engine session rows -> turns: the items a reply produced, their status,
 // a subagent's trace, and whether agents still run.
 import type { AgentStatus, SessionMessage } from 'claude-code'
-import { sanitizePrompt, sanitizeText, sanitizeValue } from './sanitize'
+import { sanitizePrompt, sanitizeText, sanitizeValue, stripBlocks } from './sanitize'
 import { toolSummary } from './summaries'
+import type { ApiLike } from './thinking'
 import { SUBAGENT_TOOLS, type Item, type ToolItem, type Turn } from './types'
 
 export const isSubagent = (item: Item): item is ToolItem & { agentId: string } =>
@@ -70,8 +71,78 @@ const fresh: Pieces = {
 // Groups the transcript into turns: a turn opens on a user prompt and holds
 // every assistant message up to the next one. Tool-result rows carry nothing
 // new (each toolUses entry already has its result), so they are skipped.
-export function buildTurns(messages: readonly SessionMessage[], idPrefix = ''): Turn[] {
-  return assemble(messages, idPrefix, fresh)
+export function buildTurns(messages: readonly SessionMessage[], idPrefix = '', starts?: TurnStarts): Turn[] {
+  return assemble(messages, idPrefix, fresh, starts)
+}
+
+// The key a transcript row and an API message share: their first text (its
+// first KEY_CHARS characters, sanitized), else their first tool use's id.
+const KEY_CHARS = 80
+
+const textKey = (text: string): string | undefined => {
+  const clean = sanitizeText(text).trim()
+  return clean === '' ? undefined : `tx:${clean.slice(0, KEY_CHARS)}`
+}
+
+export function rowKey(m: SessionMessage, text = m.text): string | undefined {
+  const first = m.toolUses[0]
+  return textKey(text) ?? (first === undefined ? undefined : `tu:${first.tool_use_id}`)
+}
+
+type Block = { type: string; [field: string]: unknown }
+
+const blocksOf = (m: ApiLike): Block[] =>
+  typeof m.content === 'string'
+    ? [{ type: 'text', text: m.content }]
+    : Array.isArray(m.content)
+      ? m.content.filter(block => block !== null && typeof block === 'object')
+      : []
+
+function apiKeyOf(blocks: readonly Block[]): string | undefined {
+  for (const block of blocks) {
+    if (block.type !== 'text' || typeof block['text'] !== 'string') continue
+    const key = textKey(block['text'])
+    if (key !== undefined) return key
+  }
+  const use = blocks.find(block => block.type === 'tool_use' && typeof block['id'] === 'string')
+  return use === undefined ? undefined : `tu:${String(use['id'])}`
+}
+
+const taskIdOf = (text: string): string | undefined => /<task-id>([^<]*)<\/task-id>/.exec(text)?.[1]?.trim()
+
+// Where the API form says a turn begins, by the row key of the first
+// assistant message after each user message with a prompt (a prompt, an
+// agent's hand-back, a notification): the rows lack some of these prompts.
+// `task:<id>` entries name the notifications the API form holds as a prompt;
+// one it holds only as a reminder (written after its turn's reply) opens no
+// turn.
+export type TurnStarts = ReadonlyMap<string, string>
+
+export function apiTurnStarts(api: readonly ApiLike[]): TurnStarts {
+  const starts = new Map<string, string>()
+  let pending: string | undefined
+  for (const m of api) {
+    if (m === null || typeof m !== 'object') continue
+    const blocks = blocksOf(m)
+    if (m.role === 'user') {
+      if (blocks.some(block => block.type === 'tool_result')) continue
+      const text = blocks
+        .filter(block => block.type === 'text' && typeof block['text'] === 'string')
+        .map(block => String(block['text']))
+        .join('\n')
+      const own = stripBlocks(text, '<system-reminder>', '</system-reminder>')
+      const task = taskIdOf(own)
+      if (task !== undefined) starts.set(`task:${task}`, own)
+      if (sanitizePrompt(sanitizeText(own)).trim() !== '') pending = own
+      continue
+    }
+    if (pending === undefined) continue
+    const key = apiKeyOf(blocks)
+    if (key === undefined) continue
+    starts.set(key, pending)
+    pending = undefined
+  }
+  return starts
 }
 
 // Where a text's memo entry is looked for: a short text is its own key, a
@@ -144,7 +215,7 @@ const sameSource = (a: ToolSource, b: ToolSource): boolean =>
 // the last build used are kept, so the memo is bounded by the transcript.
 // `work` counts the pieces built, for tests.
 export function incrementalTurns(): {
-  build: (messages: readonly SessionMessage[], idPrefix?: string) => Turn[]
+  build: (messages: readonly SessionMessage[], idPrefix?: string, starts?: TurnStarts) => Turn[]
   work: { messages: number; tools: number }
 } {
   type Row = { source: string; value: string | undefined }
@@ -186,8 +257,8 @@ export function incrementalTurns(): {
     },
   }
 
-  const build = (messages: readonly SessionMessage[], idPrefix = ''): Turn[] => {
-    const turns = assemble(messages, idPrefix, pieces)
+  const build = (messages: readonly SessionMessage[], idPrefix = '', starts?: TurnStarts): Turn[] => {
+    const turns = assemble(messages, idPrefix, pieces, starts)
     rows = nextRows
     tools = nextTools
     nextRows = new Map()
@@ -198,7 +269,7 @@ export function incrementalTurns(): {
   return { build, work }
 }
 
-function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces: Pieces): Turn[] {
+function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces: Pieces, starts?: TurnStarts): Turn[] {
   const turns: Turn[] = []
   let current: Turn | undefined
 
@@ -215,15 +286,38 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
     return turn
   }
 
+  // Whether the current turn was opened by a reply whose prompt the rows lack.
+  let isOpenedByReply = false
   for (const m of messages) {
     if (m.role === 'user') {
+      // A notification written after the reply of the turn its agent's
+      // hand-back opened (the API form holds it only as a reminder) opens no
+      // turn of its own; an older one, outside the API window, still does.
+      const task = isOpenedByReply ? taskIdOf(m.text) : undefined
+      if (task !== undefined && !starts?.has(`task:${task}`)) continue
       const prompt = pieces.prompt(m.text, (m.toolResults?.length ?? 0) > 0)
-      if (prompt !== undefined) current = open(prompt)
+      if (prompt !== undefined) {
+        current = open(prompt)
+        isOpenedByReply = false
+      }
       continue
     }
 
     current ??= open('')
-    const text = pieces.output(m.text)
+    // Read once: a row's text may be a getter over the engine's copy.
+    const raw = m.text
+    const key = starts === undefined ? undefined : rowKey(m, raw)
+    const started = key === undefined ? undefined : starts?.get(key)
+    if (key !== undefined && started !== undefined) {
+      // The rows lack this turn's prompt (an agent's hand-back): its reply
+      // opens it. A turn the rows opened themselves only takes the key.
+      if (current.items.length > 0) {
+        current = open(pieces.prompt(started, false) ?? '')
+        isOpenedByReply = true
+      }
+      current.startKey ??= key
+    }
+    const text = pieces.output(raw)
     if (text !== '') {
       current.items.push({
         kind: 'output',

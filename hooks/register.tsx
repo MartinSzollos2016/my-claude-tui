@@ -60,9 +60,17 @@ import { sanitizePrompt, sanitizeText } from './model/sanitize'
 import { engineScroll, scrollToRow, stepCursor, type EngineScroll, type ScrollFrame } from './model/scroll'
 import { searchTurns, type TurnMatch } from './model/search'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
-import { alignFromEnd, thinkingCounts, type TurnThinking } from './model/thinking'
+import { alignFromEnd, thinkingCounts, type ApiLike, type TurnThinking } from './model/thinking'
 import { durationSuffix, inlineRows, paneColumns, paneRows, resultLine, terminalWidth } from './model/transcript'
-import { incrementalTurns, isAgentFinished, isAgentRunning, isSubagent, traceItems, turnsKey } from './model/turns'
+import {
+  apiTurnStarts,
+  incrementalTurns,
+  isAgentFinished,
+  isAgentRunning,
+  isSubagent,
+  traceItems,
+  turnsKey,
+} from './model/turns'
 import type { Item, Turn } from './model/types'
 import { shortPath, truncate } from './model/width'
 import { renderBar } from './view/bar'
@@ -121,12 +129,24 @@ let searchCache: Memo<TurnMatch[]> | undefined
 let thinkingCache: Memo<TurnThinking[]> | undefined
 let tasksCache: Memo<TaskEntry[]> | undefined
 
+// The Messages API form, read once per transcript fingerprint: it holds the
+// turn starts the rows lack and the thinking. An auxiliary read: a failure
+// or a denial is not cached, and turns and thinking go without it.
+let apiCache: Memo<readonly ApiLike[]> | undefined
+
+async function apiForm($: EngineInterface, key: string): Promise<readonly ApiLike[] | undefined> {
+  if (apiCache?.key === key) return apiCache.value
+  const api: unknown = await $.session.messages({ as: 'api' }).catch(() => undefined)
+  if (!Array.isArray(api)) return undefined
+  apiCache = { key, value: api as ApiLike[] }
+  return apiCache.value
+}
+
 // Thinking per turn from the Messages API form, read again only when the
 // transcript's fingerprint moved.
 async function turnThinking($: EngineInterface, key: string): Promise<TurnThinking[]> {
   if (thinkingCache === undefined || thinkingCache.key !== key) {
-    // An auxiliary read: a failure shows no counts and is not cached.
-    const api = await $.session.messages({ as: 'api' }).catch(() => undefined)
+    const api = await apiForm($, key)
     if (api === undefined) return []
     thinkingCache = { key, value: thinkingCounts(api) }
   }
@@ -145,7 +165,11 @@ const sessionTurns = incrementalTurns()
 
 async function currentTurns($: EngineInterface, isDrawing = false): Promise<Memo<Turn[]>> {
   const messages = await $.session.messages()
-  turnsCache = memo(turnsCache, turnsKey(messages), () => sessionTurns.build(messages))
+  const key = turnsKey(messages)
+  if (turnsCache?.key !== key) {
+    const api = await apiForm($, key)
+    turnsCache = { key, value: sessionTurns.build(messages, '', api === undefined ? undefined : apiTurnStarts(api)) }
+  }
   if (isDrawing) drawnReads += 1
   return turnsCache
 }
