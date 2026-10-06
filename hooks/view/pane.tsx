@@ -42,7 +42,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     maxMs: longestCall(input, turn),
     layout: [],
   }
-  const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces)]
+  const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces, input.expanded)]
   reserveSections(lists.reduce((sum, items) => sum + items.length, 0))
   const trunc = cutter(data.icons)
   if (data.view === 'team') return paneBody(el, data, act, renderTeam(el, data))

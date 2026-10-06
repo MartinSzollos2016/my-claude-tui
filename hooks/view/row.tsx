@@ -118,9 +118,14 @@ const DURATION_CELLS = 7
 
 // `below` draws what an open row shows under it, after the row itself is
 // recorded, so the rows of the content are recorded top to bottom.
-export function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined, below?: () => RenderChildren) {
+export function renderLine(
+  el: El,
+  line: Line,
+  data: Ctx,
+  place: TreePlace | undefined,
+  below?: (shown: string) => RenderChildren,
+) {
   data.layout.push({ kind: 'line', id: line.id })
-  const under = below?.()
   const { icons } = data
   const { Box, Button, Text } = el
   const { id, isOpen, canOpen, icon, mark, duration, model } = line
@@ -148,6 +153,8 @@ export function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | und
   // A row that opens takes a click anywhere from the chevron to the model
   // column: the chevron is a button too, and the label fills its room.
   const label = canOpen ? padEndDisplay(line.label(room), room) : line.label(room)
+  // What the row reads, so the content below it need not repeat it.
+  const under = below?.(label)
   const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
 
   return (

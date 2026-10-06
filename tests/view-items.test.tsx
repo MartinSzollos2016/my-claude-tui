@@ -784,6 +784,44 @@ describe('failed children', () => {
     expect(byKey(draw('completed', { traces: clean }), 'badge-ag1')).toBeUndefined()
   })
 
+  test('a trace that names its own agent is counted once, not without end', () => {
+    const loop = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            call('c1', true),
+            { tool_use_id: 'self', tool: 'Agent', input: { description: 'Me' }, agentId: 'A', text: 'ok' },
+          ],
+        },
+      ],
+      'A/',
+    )[0]!.items
+    expect(text(byKey(draw('completed', { traces: new Map([['A', { items: loop }]]) }), 'badge-ag1'))).toBe(
+      ` ${ICON_SETS.nerd.error}1`,
+    )
+  })
+
+  test('the bars of the turn ignore the calls of a collapsed subagent', () => {
+    const timed = { c2: { start: 0, end: 600_000 } }
+    const tree = draw('completed', {
+      turns: buildTurns([
+        { role: 'user', text: 'go', toolUses: [] },
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            { tool_use_id: 'ag1', tool: 'Agent', input: { description: 'Job' }, agentId: 'A', text: 'ok' },
+            { tool_use_id: 'b9', tool: 'Bash', input: { command: 'ls' }, text: 'ok' },
+          ],
+        },
+      ]),
+      timings: { ...timed, b9: { start: 0, end: 2_000 } },
+    })
+    expect(text(byKey(tree, 'bar-b9'))).toBe('████████')
+  })
+
   test('the mark takes its room from the label, the row keeps its width', () => {
     const tree = draw('completed')
     const plain = draw('completed', { traces: new Map() })

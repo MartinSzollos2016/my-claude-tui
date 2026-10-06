@@ -162,7 +162,7 @@ async function tickTurns($: EngineInterface): Promise<Memo<Turn[]>> {
 
 // Traces by agentId. A finished agent's trace is final and never read again;
 // a running one is read on each drawing but rebuilt only when it changed.
-type CachedTrace = { key: string; trace: { items: Item[] }; isFinal: boolean }
+type CachedTrace = { key: string; trace: Trace; isFinal: boolean }
 const traceCache = new Map<string, CachedTrace>()
 const MAX_TRACES = 200
 
@@ -170,9 +170,15 @@ async function loadTrace($: EngineInterface, agentId: string, status: AgentStatu
   const cached = traceCache.get(agentId)
   if (cached?.isFinal && isAgentFinished(status)) return cached.trace
   const found = await $.session.messages({ agentId })
-  if ('deny' in found) return { denied: sanitizeText(String(found.deny)) }
+  if ('deny' in found) {
+    const denied = { denied: sanitizeText(String(found.deny)) }
+    // A finished agent's denial is final too: it is not asked again.
+    remember(traceCache, agentId, { key: '', trace: denied, isFinal: isAgentFinished(status) }, MAX_TRACES)
+    return denied
+  }
   const key = turnsKey(found)
-  const trace = cached?.key === key ? cached.trace : { items: traceItems(found, `${agentId}/`) }
+  const trace =
+    cached?.key === key && 'items' in cached.trace ? cached.trace : { items: traceItems(found, `${agentId}/`) }
   remember(traceCache, agentId, { key, trace, isFinal: isAgentFinished(status) }, MAX_TRACES)
   return trace
 }
@@ -209,17 +215,30 @@ async function loadTraces(
 }
 
 function visibleIds(items: readonly Item[], traces: ReadonlyMap<string, Trace>): string[] {
-  const ids: string[] = []
-  // A folded run counts as its own row, so expand all opens it too.
-  for (const row of groupRuns(items)) {
-    ids.push(row.id)
-    if (row.kind === 'group') ids.push(...row.items.map(item => item.id))
-    else if (isSubagent(row)) {
-      const trace = traces.get(row.agentId)
-      if (trace && 'items' in trace) ids.push(...visibleIds(trace.items, traces))
-    }
+  // Level by level, the deepest first: expand all keeps the last
+  // MAX_EXPANDED ids, so the top rows and the subagents stay open first.
+  const levels: string[][] = []
+  // A trace that names an agent already walked is not walked again.
+  const seen = new Set<string>()
+  let lists: (readonly Item[])[] = [items]
+  while (lists.length > 0) {
+    const ids: string[] = []
+    const next: (readonly Item[])[] = []
+    for (const list of lists)
+      // A folded run counts as its own row, so expand all opens it too.
+      for (const row of groupRuns(list)) {
+        ids.push(row.id)
+        if (row.kind === 'group') ids.push(...row.items.map(item => item.id))
+        else if (isSubagent(row) && !seen.has(row.agentId)) {
+          seen.add(row.agentId)
+          const trace = traces.get(row.agentId)
+          if (trace && 'items' in trace) next.push(trace.items)
+        }
+      }
+    levels.push(ids)
+    lists = next
   }
-  return ids
+  return levels.reverse().flat()
 }
 
 // Background work started from a hook ends in `.catch(ignore)`: its failure
@@ -959,8 +978,8 @@ export const register: Register = on => {
 
     const thinkingIds = turn && thinking && thinking.text !== '' ? [`t${turn.index}:thinking`] : []
     // Whether e has nothing left to open: every row it would expand already is.
-    const openable = [...thinkingIds, ...visibleIds(turn?.items ?? [], traces)]
-    const isAllExpanded = openable.length > 0 && openable.every(id => open.has(id))
+    const openable = [...visibleIds(turn?.items ?? [], traces), ...thinkingIds]
+    const isAllExpanded = openable.length > 0 && openable.slice(-MAX_EXPANDED).every(id => open.has(id))
 
     return renderPane(
       el,

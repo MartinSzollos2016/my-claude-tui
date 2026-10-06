@@ -5,7 +5,6 @@ import { C, TONE, type ThemeKey } from '../theme'
 import { chunkText, clampText } from '../model/clamp'
 import { clampDiff, expandDiffTabs, splitDiff } from '../model/diff'
 import { cachedSections, firstErrorLine, languageFor, pieceStarts, type Section } from '../model/sections'
-import { itemSummary } from '../model/summaries'
 import type { ToolItem } from '../model/types'
 import { displayWidth, expandTabs, truncateMiddle } from '../model/width'
 import {
@@ -24,13 +23,11 @@ import { buttonHover, cutter, endWrap, isUnicodeCut, middleWrap, scopeOf, type E
 
 // What went in and what came out, each in a frame colored by its kind.
 // `inset`: the cells left of the sections' box (a trace's indent).
-export function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions, inset: number) {
+export function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions, inset: number, shown?: string) {
   const { Box } = el
-  // The row above already reads the description; a frame title repeating it,
-  // whole or cut, is noise.
-  const summary = itemSummary(item)
-  const repeats = (meta: string) =>
-    summary !== '' && (summary.startsWith(meta) || meta.startsWith(summary.replace(/…$/, '')))
+  // A frame title repeating what the row above reads in whole is noise; one
+  // the row cut stays, so the text is whole somewhere.
+  const repeats = (meta: string) => shown !== undefined && shown.includes(meta)
   const frames = cachedSections(item, data.icons).map(section => {
     const id = `${item.id}:${section.kind}`
     const preview = renderLong(el, id, section.body, longSpec(section), data, act)
