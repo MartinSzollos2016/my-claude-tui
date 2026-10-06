@@ -562,10 +562,15 @@ let drawnRowIds: ReadonlySet<string> = new Set()
 let isRingOnSearch = false
 let wasFocused = false
 
-function keepKeysAfterSearchEsc($: EngineInterface, isFocused: boolean | undefined): void {
+function keepKeysAfterSearchEsc(
+  $: EngineInterface,
+  isFocused: boolean | undefined,
+  terminalColumns: number | undefined,
+): void {
   if (wasFocused && isFocused === false && isRingOnSearch) {
     isRingOnSearch = false
-    openPane($, true).catch(ignore)
+    // At the width it has: opened without one, the engine falls back to its default.
+    openPane($, true, terminalColumns).catch(ignore)
   }
   wasFocused = isFocused === true
 }
@@ -980,13 +985,14 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    keepKeysAfterSearchEsc($, e.props.isFocused)
+    const viewport = e.viewport
+    const terminal =
+      viewport === undefined ? undefined : terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)
+    keepKeysAfterSearchEsc($, e.props.isFocused, terminal)
     // Only a docked pane's width answers to /tail-width; inline it is the screen's.
     drawnColumns = e.props.placement === 'dock' ? e.props.bodyColumns : undefined
     noteViewport(e.viewport)
-    const viewport = e.viewport
-    if (viewport !== undefined)
-      autoSize($, terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)).catch(ignore)
+    if (terminal !== undefined) autoSize($, terminal).catch(ignore)
     const el = $.ui.resolve(e) as unknown as El
 
     // Each read is a round trip to the engine: the independent ones go

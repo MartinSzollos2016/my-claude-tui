@@ -1235,6 +1235,19 @@ describe('keyboard cursor', () => {
     expect(world.focused).toContain('t0:o0')
   })
 
+  test('taking the keys back after Esc keeps the pane at its width', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    const focused = (isFocused: boolean) => ({ ...PANE_EVENT, props: { ...PANE_EVENT.props, isFocused } })
+    await run('ui.render', $, focused(true))
+    await press($, 'nav-search')
+    await run('ui.render', $, focused(true))
+    await run('ui.render', $, focused(false))
+    await settle()
+    const last = world.openArgs.at(-1) as { columns?: number; focus?: true }
+    expect(last.focus).toBe(true)
+    expect(typeof last.columns).toBe('number')
+  })
+
   test("after leaving the search for another view, a later focus loss is the person's", async () => {
     const { $, world } = fakeEngine({ messages: main })
     const focused = (isFocused: boolean) => ({ ...PANE_EVENT, props: { ...PANE_EVENT.props, isFocused } })
