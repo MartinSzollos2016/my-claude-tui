@@ -91,14 +91,14 @@ export function rowKey(m: SessionMessage, text = m.text): string | undefined {
 
 type Block = { type: string; [field: string]: unknown }
 
-const blocksOf = (m: ApiLike): Block[] =>
+export const blocksOf = (m: ApiLike): Block[] =>
   typeof m.content === 'string'
     ? [{ type: 'text', text: m.content }]
     : Array.isArray(m.content)
       ? m.content.filter(block => block !== null && typeof block === 'object')
       : []
 
-function apiKeyOf(blocks: readonly Block[]): string | undefined {
+export function apiKeyOf(blocks: readonly Block[]): string | undefined {
   for (const block of blocks) {
     if (block.type !== 'text' || typeof block['text'] !== 'string') continue
     const key = textKey(block['text'])
@@ -118,6 +118,18 @@ const taskIdOf = (text: string): string | undefined => /<task-id>([^<]*)<\/task-
 // turn.
 export type TurnStarts = ReadonlyMap<string, string>
 
+// The prompt an API user message carries, reminders left out; undefined for
+// a tool result or a message with nothing to read (reminders only).
+export function apiPromptOf(blocks: readonly Block[]): string | undefined {
+  if (blocks.some(block => block.type === 'tool_result')) return undefined
+  const text = blocks
+    .filter(block => block.type === 'text' && typeof block['text'] === 'string')
+    .map(block => String(block['text']))
+    .join('\n')
+  const own = stripBlocks(text, '<system-reminder>', '</system-reminder>')
+  return sanitizePrompt(sanitizeText(own)).trim() === '' ? undefined : own
+}
+
 export function apiTurnStarts(api: readonly ApiLike[]): TurnStarts {
   const starts = new Map<string, string>()
   let pending: string | undefined
@@ -125,15 +137,11 @@ export function apiTurnStarts(api: readonly ApiLike[]): TurnStarts {
     if (m === null || typeof m !== 'object') continue
     const blocks = blocksOf(m)
     if (m.role === 'user') {
-      if (blocks.some(block => block.type === 'tool_result')) continue
-      const text = blocks
-        .filter(block => block.type === 'text' && typeof block['text'] === 'string')
-        .map(block => String(block['text']))
-        .join('\n')
-      const own = stripBlocks(text, '<system-reminder>', '</system-reminder>')
+      const own = apiPromptOf(blocks)
+      if (own === undefined) continue
       const task = taskIdOf(own)
       if (task !== undefined) starts.set(`task:${task}`, own)
-      if (sanitizePrompt(sanitizeText(own)).trim() !== '') pending = own
+      pending = own
       continue
     }
     if (pending === undefined) continue
