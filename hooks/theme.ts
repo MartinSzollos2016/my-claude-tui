@@ -76,11 +76,12 @@ export const TONE = {
   error: 'error',
 } as const satisfies Record<SectionKind, ThemeKey>
 
-// Model families keep tail-claude's hues (opus red, sonnet blue, haiku
-// green, fable violet) through the theme's agent palette.
+// Model families keep tail-claude's hues (sonnet blue, haiku green, fable
+// violet) through the theme's agent palette; opus is orange, as its red
+// reads as an error here.
 export function modelColor(model: string): ThemeKey | undefined {
   if (model.includes('fable') || model.includes('mythos')) return 'purple_FOR_SUBAGENTS_ONLY'
-  if (model.includes('opus')) return 'red_FOR_SUBAGENTS_ONLY'
+  if (model.includes('opus')) return 'orange_FOR_SUBAGENTS_ONLY'
   if (model.includes('sonnet')) return 'blue_FOR_SUBAGENTS_ONLY'
   if (model.includes('haiku')) return 'green_FOR_SUBAGENTS_ONLY'
   return undefined

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { helpText, parseCommand, unknownText } from '../hooks/commands'
+import { ICON_SETS } from '../hooks/icons'
 
 describe('parseCommand', () => {
   test('routes subcommands and their /tail shorthand alike', () => {
@@ -40,5 +41,18 @@ describe('unknownText', () => {
     expect(answer).toContain('"foo"')
     for (const sub of ['turns', 'bar', 'compact', 'icons', 'width', 'status', 'notify', 'help'])
       expect(answer).toContain(sub)
+  })
+})
+
+describe('helpText legend', () => {
+  test('explains the header glyphs in the set it is given', () => {
+    for (const icons of [ICON_SETS.nerd, ICON_SETS.unicode, ICON_SETS.ascii]) {
+      const help = helpText(icons)
+      expect(help).toContain(`${icons.wrench} tool calls`)
+      expect(help).toContain(`${icons.output} outputs`)
+      expect(help).toContain(`${icons.thinking} thinking blocks`)
+      expect(help).toContain(`${icons.token} tokens`)
+      expect(help).toContain(`${icons.clock} duration`)
+    }
   })
 })
