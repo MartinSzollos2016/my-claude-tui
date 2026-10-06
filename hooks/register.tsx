@@ -954,6 +954,9 @@ export const register: Register = on => {
     const cursorText = cursorId === null ? undefined : rowText(turn?.items ?? [], cursorId, childrenOf, icons)
 
     const thinkingIds = turn && thinking && thinking.text !== '' ? [`t${turn.index}:thinking`] : []
+    // Whether e has nothing left to open: every row it would expand already is.
+    const openable = [...thinkingIds, ...visibleIds(turn?.items ?? [], traces)]
+    const isAllExpanded = openable.length > 0 && openable.every(id => open.has(id))
 
     return renderPane(
       el,
@@ -978,6 +981,7 @@ export const register: Register = on => {
         isFocused: e.props.isFocused,
         isBarShown: !isBarOff,
         isFooterOpen,
+        isAllExpanded,
         turnCursor: turnCursorAt,
         columns: e.props.bodyColumns,
         rows:
@@ -1002,9 +1006,7 @@ export const register: Register = on => {
         next: () => step(1).catch(ignore),
         latest: () => step(null).catch(ignore),
         expandAll: () =>
-          update($, expanded, ids =>
-            [...new Set([...ids, ...thinkingIds, ...visibleIds(turn?.items ?? [], traces)])].slice(-MAX_EXPANDED),
-          ).catch(ignore),
+          update($, expanded, ids => [...new Set([...ids, ...openable])].slice(-MAX_EXPANDED)).catch(ignore),
         collapseAll: () => {
           update($, expanded, () => []).catch(ignore)
           update($, fullBlocks, () => []).catch(ignore)
