@@ -520,7 +520,8 @@ describe('hover preview card', () => {
     expect(card.props['position']).toBe('absolute')
     expect(card.props['display']).toBe('none')
     expect(card.props['hover']).toEqual({ scope: 'row:b1', display: 'flex' })
-    expect(card.props['bottom']).toBe(1)
+    // Near the window's top there is no room above: the card opens below its row.
+    expect(typeof card.props['top']).toBe('number')
     expect(card.props['backgroundColor']).toBe(C.paneBackground)
     expect(card.props['left']).toBe(4)
     expect(card.props['borderStyle']).toBe('round')
@@ -530,10 +531,11 @@ describe('hover preview card', () => {
     for (const t of nodes(card).filter(n => n.type === 'Text')) expect(t.props['color']).toBe('inactive')
   })
 
-  test('the card sits in the row box, whose Texts share the scope', () => {
+  test('the card lies over the window, revealed by the hover scope its row shares', () => {
     const tree = renderPane(el, base, act)
     const row = byKey(tree, 'item-b1')!
-    expect(nodes(row)).toContain(cardOf(tree, 'b1'))
+    expect(nodes(byKey(tree, 'pane-window'))).toContain(cardOf(tree, 'b1'))
+    expect(nodes(row)).not.toContain(cardOf(tree, 'b1'))
     const scoped = nodes(row).filter(n => n.type === 'Text' && (n.props['hover'] as { scope?: string })?.scope)
     expect(scoped.length).toBeGreaterThan(0)
     for (const t of scoped) expect((t.props['hover'] as { scope: string }).scope).toBe('row:b1')
@@ -826,6 +828,11 @@ describe('failed children', () => {
     expect(text(byKey(tree, 'bar-b9'))).toBe('████████')
   })
 
+  test('the mark keeps a space before the model', () => {
+    const tree = draw('completed', { agentStats: { A: { model: 'claude-opus-5-5' } } })
+    expect(text(byKey(tree, 'item-ag1'))).toMatch(/✗2 +opus/)
+  })
+
   test('interrupted calls are not counted as failed', () => {
     const interrupted = buildTurns(
       [
@@ -854,5 +861,28 @@ describe('failed children', () => {
     const plain = draw('completed', { traces: new Map() })
     const width = (t: unknown) => displayWidth(String(byKey(t, 'ag1')?.props['label']))
     expect(width(plain) - width(tree)).toBe(1 + displayWidth(`${ICON_SETS.nerd.error}2`))
+  })
+})
+
+describe('row edges', () => {
+  test('an untimed row that opens fills the row to its last cell in the unicode and ascii sets', () => {
+    for (const icons of [ICON_SETS.unicode, ICON_SETS.ascii]) {
+      const tree = renderPane(el, { ...base, icons, timings: {} }, act)
+      expect(displayWidth(String(byKey(tree, 'e1')?.props['label'])) + 6, icons.cursor).toBe(base.columns)
+    }
+  })
+
+  test('the nerd set keeps one cell of slack for its icons', () => {
+    const tree = renderPane(el, { ...base, timings: {} }, act)
+    expect(displayWidth(String(byKey(tree, 'e1')?.props['label'])) + 7).toBe(base.columns)
+  })
+
+  test('a card never covers the window edges: below a row near the top, never over the more-above row', () => {
+    const at = (scrollTop: number) => byKey(renderPane(el, { ...base, rows: 12, scrollTop }, act), 'card-b1')
+    const top = at(0)
+    expect(top).toBeDefined()
+    expect(Number(top?.props['top'])).toBeGreaterThan(0)
+    const scrolled = at(1)
+    if (scrolled !== undefined) expect(Number(scrolled.props['top'])).toBeGreaterThanOrEqual(1)
   })
 })

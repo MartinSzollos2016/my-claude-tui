@@ -118,7 +118,13 @@ export type Ctx = PaneData & {
   maxMs: number
   // The content's blocks as drawn, top to bottom: what its rows are estimated from.
   layout: RowBlock[]
+  // The hover cards of the rows drawn, laid over the window by the pane.
+  cards?: CardSpot[]
 }
+
+// A row's hover card: its lines, the content row it belongs to and how far
+// in from the window's left edge it starts.
+export type CardSpot = { id: string; lines: readonly string[]; row: number; left: number }
 
 // One row of the content (an item row with its id), recorded as it is drawn.
 export const LINE: RowBlock = { kind: 'line' }

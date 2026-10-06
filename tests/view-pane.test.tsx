@@ -1296,7 +1296,7 @@ describe('pane budget with everything on', () => {
       ...['label', 'text', 'source'].flatMap(key => (typeof n.props[key] === 'string' ? [n.props[key] as string] : [])),
     ])
 
-  const everything = (outputs: number) => {
+  const everything = (outputs: number, rows = 30) => {
     const output = Array.from({ length: 300 }, (_, n) => `line ${n} ${'x'.repeat(30)}`).join('\n')
     const table = ['| a | b |', '|---|---|', ...Array.from({ length: 200 }, (_, n) => `| ${n} | ${'t'.repeat(40)} |`)]
     const turn = buildTurns([
@@ -1333,6 +1333,7 @@ describe('pane budget with everything on', () => {
         full: new Set(open.flatMap(id => [`${id}:output`, `${id}:command`, id])),
         cursor: 'k3',
         columns: 100,
+        rows,
       },
       act,
     )
@@ -1347,7 +1348,11 @@ describe('pane budget with everything on', () => {
       expect(nodes(tree).length).toBeLessThan(20_000)
       expect(text(tree)).toMatch(/\d+ more rows/)
     }
-    expect(byKey(everything(3), 'card-k0')).toBeDefined()
+    // Cards are laid over the window for the rows it shows: a window tall
+    // enough for the collapsed rows draws theirs, still under the limits.
+    const tall = everything(3, 4000)
+    expect(nodes(tall).some(n => String(n.props['key']).startsWith('card-'))).toBe(true)
+    expect(pieces(tall).join('').length).toBeLessThan(100_000)
   })
 
   test('the frames of 300 open rows are charged too: titles, paths and notes', () => {
