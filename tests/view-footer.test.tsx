@@ -519,6 +519,38 @@ describe('collapsed footer', () => {
     expect(text(byKey(f, 'footer-row-keys'))).toContain('click for keys')
   })
 
+  const scrolled = (scrollTop: number) =>
+    renderPane(
+      el,
+      {
+        ...base,
+        isFooterOpen: false,
+        isFocused: true,
+        columns: 80,
+        rows: 12,
+        scrollTop,
+        cursor: 'b1',
+        expanded: new Set(['b1', 'e1', 'a1']),
+      },
+      act,
+    )
+
+  test('scrolled at 80 columns: b and f stay in the row, the status says where', () => {
+    const tree = scrolled(3)
+    expect(Number(byKey(tree, 'pane-window')?.props['height'])).toBeLessThan(20)
+    const f = byKey(tree, 'footer')!
+    const row = byKey(f, 'footer-row-keys')!
+    expect(byKey(row, 'nav-pageup')).toBeDefined()
+    expect(byKey(row, 'nav-pagedown')).toBeDefined()
+    expect(text(byKey(f, 'footer-status'))).toMatch(/top|end|\d+\/\d+ · /)
+  })
+
+  test('scrolling keeps the footer height', () => {
+    const rows = (t: unknown) =>
+      (byKey(t, 'footer')!.children as Node[]).filter(n => n && n.props['key'] !== 'footer-hidden').length
+    expect(rows(scrolled(0))).toBe(rows(scrolled(3)))
+  })
+
   test('collapsed footer keeps h at 20 columns', () => {
     expect(shownKeys(footer({ columns: 20 })).at(-1)).toBe('h')
   })
