@@ -129,7 +129,16 @@ export type Ctx = PaneData & {
 
 // A row's hover card: its lines, the content row it belongs to and how far
 // in from the window's left edge it starts.
-export type CardSpot = { id: string; lines: readonly string[]; row: number; left: number }
+// `lines`: built in the flow for a row inside the stored window, sharing the
+// text budget with the rows; `build`: for the others, called by the pane only
+// if the window it draws (its scroll clamped) shows the row after all.
+export type CardSpot = {
+  id: string
+  lines?: readonly string[]
+  build: () => readonly string[] | undefined
+  row: number
+  left: number
+}
 
 // One row of the content (an item row with its id), recorded as it is drawn.
 export const LINE: RowBlock = { kind: 'line' }

@@ -204,10 +204,12 @@ function renderCard(
 ) {
   const { Box, Text } = el
   const at = spot.row - scrollTop
-  const height = spot.lines.length + 2
   const top = more.above > 0 ? 1 : 0
   const bottom = windowRows - (more.below > 0 ? 1 : 0)
   if (at < top || at >= bottom) return undefined
+  const lines = spot.lines ?? spot.build()
+  if (lines === undefined) return undefined
+  const height = lines.length + 2
   const y = at - height >= top ? at - height : at + 1 + height <= bottom ? at + 1 : undefined
   if (y === undefined) return undefined
   return (
@@ -224,7 +226,7 @@ function renderCard(
       paddingX={1}
       hover={{ scope: scopeOf('row:', spot.id), display: 'flex' }}
     >
-      {spot.lines.map(text => (
+      {lines.map(text => (
         <Text color={C.muted}>{text}</Text>
       ))}
     </Box>
