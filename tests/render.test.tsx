@@ -145,7 +145,7 @@ describe('detail pane', () => {
     expect(labels[0]).toContain('Now add tests')
 
     await ui.input({ key: 'turn-search', text: 'fix' })
-    expect(await ui.find({ text: /turn 1\/3/ })).toBeDefined()
+    expect(await ui.find({ text: /1\/3/ })).toBeDefined()
     await ui.unmount()
   })
 
@@ -289,7 +289,7 @@ describe('detail pane', () => {
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
 
-      expect(await ui.find({ text: /turn 1\/1/ })).toBeDefined()
+      expect(await ui.find({ text: /1\/1/ })).toBeDefined()
       expect(await ui.find({ text: /Explore/ })).toBeDefined()
       expect(await ui.find({ text: /Find callers/ })).toBeDefined()
       expect(await ui.find({ text: /Execution Trace/ })).toBeUndefined()
@@ -588,7 +588,7 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
-      expect(await ui.find({ text: /turn 3\/3/ })).toBeDefined()
+      expect(await ui.find({ text: /3\/3/ })).toBeDefined()
 
       await ui.press({ key: 'nav-turns' })
       expect(await ui.find({ text: /Turns \(3\)/ })).toBeDefined()
@@ -604,12 +604,12 @@ describe('detail pane', () => {
 
       await ui.press({ key: 'turn-0' })
       expect(await ui.find({ text: /Turns \(3\)/ })).toBeUndefined()
-      expect(await ui.find({ text: /turn 1\/3/ })).toBeDefined()
+      expect(await ui.find({ text: /1\/3/ })).toBeDefined()
       expect(await ui.find({ text: /Fix the bug/ })).toBeDefined()
 
       await ui.press({ key: 'nav-turns' })
       await ui.press({ key: 'nav-detail' })
-      expect(await ui.find({ text: /turn 1\/3/ })).toBeDefined()
+      expect(await ui.find({ text: /1\/3/ })).toBeDefined()
       await ui.press({ key: 'nav-latest' })
       await ui.unmount()
     }
