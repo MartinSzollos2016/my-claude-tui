@@ -365,6 +365,43 @@ describe('live data', () => {
     expect(text(byKey(list, 'turn-1'))).toContain('7.0s')
   })
 
+  test('two hand-backs in a row keep their own durations', async () => {
+    const handBack = (from: string) =>
+      `Another Claude session sent a message: <agent-message from="${from}">x</agent-message>`
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'go' }, async e => e)
+    world.messages = [
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: 'spawned', toolUses: [] },
+    ]
+    world.api = [
+      { role: 'user', content: [{ type: 'text', text: 'go' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'spawned' }] },
+    ]
+    await run('turn.start', $, { text: 'go', turnId: 'g' }, async e => e)
+    await settle()
+    await finish('g', 2_000, $)
+    for (const [from, reply, ms, id] of [
+      ['a', 'First result', 3_000, 'h1'],
+      ['b', 'Second result', 5_000, 'h2'],
+    ] as const) {
+      await run('turn.start', $, { text: handBack(from), turnId: id }, async e => e)
+      await settle()
+      world.messages = [...world.messages, { role: 'assistant', text: reply, toolUses: [] }]
+      world.api = [
+        ...world.api,
+        { role: 'user', content: [{ type: 'text', text: handBack(from) }] },
+        { role: 'assistant', content: [{ type: 'text', text: reply }] },
+      ]
+      await finish(id, ms, $)
+    }
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(text(byKey(list, 'turn-0'))).toContain('2.0s')
+    expect(text(byKey(list, 'turn-1'))).toContain('3.0s')
+    expect(text(byKey(list, 'turn-2'))).toContain('5.0s')
+  })
+
   test('a prompt with a carriage return or an escape still finds its stat', async () => {
     const { $, world } = fakeEngine()
     await run('prompt.submit', $, { text: 'fix\r\n\u001b[31mbug' }, async e => e)

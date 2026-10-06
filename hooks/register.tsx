@@ -446,7 +446,10 @@ async function noteTurnStart($: EngineInterface, turnId: string, text: string): 
     const turns = (await currentTurns($)).value
     const prompt = sanitizePrompt(sanitizeText(text).trim())
     const queue = discardStale(pendingTurns, lastDoneIndex)
-    const taken = takeTurnIndex(queue, turnIndexAtStart(turns, prompt))
+    // An agent's hand-back never shows in the rows, so its turn is always the
+    // next one, even after another hand-back with the same prompt.
+    const at = text.includes('<agent-message') ? turns.length : turnIndexAtStart(turns, prompt)
+    const taken = takeTurnIndex(queue, at)
     pendingTurns = taken.queue
     remember(turnIndexes, turnId, { index: taken.index, prompt }, MAX_OPEN_TURNS)
   } catch {
