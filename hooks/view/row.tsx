@@ -3,6 +3,7 @@
 import type { RenderChildren } from 'claude-code'
 import { hoverCard } from '../model/card'
 import { formatDuration, shortModel, treePrefix } from '../model/format'
+import { contentRows } from '../model/scroll'
 import type { Item, Turn } from '../model/types'
 import { displayWidth, durationBar, expandTabs, padEndDisplay } from '../model/width'
 import { C, modelColor, type ThemeKey } from '../theme'
@@ -125,6 +126,15 @@ export function renderLine(
   place: TreePlace | undefined,
   below?: (shown: string) => RenderChildren,
 ) {
+  // The row's hover card goes to the pane's layer over the window, which
+  // places it above the row or below it, where it fits.
+  if (line.card !== undefined)
+    data.cards?.push({
+      id: line.id,
+      lines: line.card,
+      row: contentRows(data.layout).total,
+      left: CARD_INDENT + (place === undefined || place.path.length > 0 ? 0 : TRACE_INDENT),
+    })
   data.layout.push({ kind: 'line', id: line.id })
   const { icons } = data
   const { Box, Button, Text } = el
@@ -147,9 +157,21 @@ export function renderLine(
   const timeRoom = hasDuration ? 1 + DURATION_CELLS + (hasBar ? 1 + BAR_CELLS : 0) : 0
   // Once a cursor exists every row keeps one cell for its marker.
   const hasCursorColumn = data.cursor !== undefined && data.cursor !== null
-  const badgeRoom = line.badge === undefined ? 0 : 1 + displayWidth(line.badge)
+  // The mark, with a space before it and one before a model after it.
+  const badgeText = line.badge === undefined ? '' : ` ${line.badge}${modelText !== '' ? ' ' : ''}`
+  // The fixed columns as drawn: chevron, status and icon, each with its
+  // space; a Nerd Font icon (private use) may draw two cells, so it keeps one
+  // cell of slack.
+  const isWideIcon = /[\ue000-\uf8ff\u{f0000}-\u{ffffd}]/u.test(icon.glyph)
+  const fixed = displayWidth(`${line.chevron} `) + 2 + displayWidth(`${icon.glyph} `) + (isWideIcon ? 1 : 0)
   const room =
-    width - displayWidth(guide) - 2 - 3 - 2 - badgeRoom - displayWidth(modelText) - timeRoom - (hasCursorColumn ? 1 : 0)
+    width -
+    displayWidth(guide) -
+    fixed -
+    displayWidth(badgeText) -
+    displayWidth(modelText) -
+    timeRoom -
+    (hasCursorColumn ? 1 : 0)
   // A row that opens takes a click anywhere from the chevron to the model
   // column: the chevron is a button too, and the label fills its room.
   const label = canOpen ? padEndDisplay(line.label(room), room) : line.label(room)
@@ -197,9 +219,9 @@ export function renderLine(
             </Text>
           )}
         </Box>
-        {line.badge !== undefined && (
+        {badgeText !== '' && (
           <Text key={`badge-${id}`} color={C.error} hover={hover}>
-            {` ${line.badge}`}
+            {badgeText}
           </Text>
         )}
         {(modelText !== '' || hasDuration) && (
@@ -222,27 +244,6 @@ export function renderLine(
           </Box>
         )}
       </Box>
-      {line.card !== undefined && (
-        <Box
-          key={`card-${id}`}
-          position="absolute"
-          display="none"
-          // Above its row: an absolute Box is painted over what comes before
-          // it, and the rows after it would draw over a card placed below.
-          bottom={1}
-          left={CARD_INDENT}
-          backgroundColor={C.paneBackground}
-          flexDirection="column"
-          borderStyle={icons.border}
-          borderColor={C.muted}
-          paddingX={1}
-          hover={{ scope: scopeOf('row:', id), display: 'flex' }}
-        >
-          {line.card.map(text => (
-            <Text color={C.muted}>{text}</Text>
-          ))}
-        </Box>
-      )}
       {under}
     </Box>
   )
