@@ -6,8 +6,10 @@ import {
   followCursor,
   overflowRows,
   pageScroll,
+  resetWrapCache,
   scrollToRow,
   stepCursor,
+  wrapCacheKeyChars,
 } from '../hooks/model/scroll'
 import { expandTabs } from '../hooks/model/width'
 
@@ -255,5 +257,14 @@ describe('engineScroll', () => {
   test('Home and End beyond the body go to the top and the end', () => {
     expect(engineScroll(50, move(-500), frame)).toBe(0)
     expect(engineScroll(50, move(500), frame)).toBe(168)
+  })
+})
+
+describe('wrap cache keys', () => {
+  test('the wrap cache keeps short keys, whatever the text', () => {
+    resetWrapCache()
+    const long = 'x'.repeat(8_000)
+    expect(contentRows([{ kind: 'line', text: long, width: 50 }]).total).toBe(160)
+    expect(wrapCacheKeyChars()).toBeLessThan(64)
   })
 })
