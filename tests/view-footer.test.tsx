@@ -302,20 +302,8 @@ describe('pinned footer', () => {
     const footer = footerOf({ view: 'team', members })
     const rows = rowsOf(footer)
     expect(rows.map(r => r.props['key'])).toEqual(['footer-row-2'])
-    expect(line(rows[0])).toBe('d: detail  s: search  │  b: ▲ page  f: ▼ page  h: less')
-    expect(hiddenKeys(footer).map(k => k.props['hotkey'])).toEqual([
-      'p',
-      'n',
-      'l',
-      'j',
-      'k',
-      'o',
-      'y',
-      't',
-      'm',
-      'e',
-      'c',
-    ])
+    expect(line(rows[0])).toBe('t: turns  d: detail  s: search  │  b: ▲ page  f: ▼ page  h: less')
+    expect(hiddenKeys(footer).map(k => k.props['hotkey'])).toEqual(['p', 'n', 'l', 'j', 'k', 'o', 'y', 'm', 'e', 'c'])
   })
 
   test('stacked, the turn list and the team board keep only their rows', () => {
@@ -401,9 +389,10 @@ describe('pinned footer', () => {
       for (const name of idle) expect(acts(footer, `nav-${name}`), name).toBe(false)
       expect(byKey(footer, 'nav-detail')?.props['hotkey']).toBe('d')
       expect(acts(footer, 'nav-search')).toBe(true)
-      // t, the turn list's own key, is bound and does nothing: it never reaches the prompt.
+      // t is bound in both: the turn list's own key does nothing there (it never
+      // reaches the prompt), on the team board it opens the turn list.
       expect(byKey(footer, 'nav-turns')?.props['hotkey']).toBe('t')
-      expect(acts(footer, 'nav-turns')).toBe(false)
+      expect(acts(footer, 'nav-turns')).toBe(view === 'team')
     }
     expect(acts(footerOf({ view: 'turns', members }), 'nav-team')).toBe(true)
     expect(acts(footerOf({ view: 'team', members }), 'nav-team')).toBe(false)
@@ -561,6 +550,11 @@ describe('collapsed footer', () => {
       const header = Number(byKey(tree, 'pane-header')?.props['height'] ?? 0)
       expect(byKey(tree, 'pane-window')?.props['height'], `${columns}`).toBe(30 - header - drawnRows(f))
     }
+  })
+
+  test('e expands only while something is left collapsed', () => {
+    expect(acts(renderPane(el, { ...base, isAllExpanded: false }, act), 'nav-expand')).toBe(true)
+    expect(acts(renderPane(el, { ...base, isAllExpanded: true }, act), 'nav-expand')).toBe(false)
   })
 
   test('h is bound in the compact layout', () => {

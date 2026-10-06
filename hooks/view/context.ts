@@ -24,6 +24,8 @@ export type PaneData = {
   isBarShown?: boolean
   // Whether the footer shows its full key map (`h`); left out: collapsed.
   isFooterOpen?: boolean
+  // Whether every row of the shown turn that e opens is open already.
+  isAllExpanded?: boolean
   // The turn the turn list's cursor stands on; null or left out for none.
   turnCursor?: number | null
   // Thinking of the shown turn: how many blocks, and their readable text.

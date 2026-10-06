@@ -902,6 +902,29 @@ describe('detail pane', () => {
   })
 })
 
+describe('footer keys', () => {
+  test('h expands and collapses the footer for the session', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    expect(byKey(await draw($), 'footer-rule')).toBeDefined()
+    expect(byKey(await draw($), 'footer-row-keys')).toBeDefined()
+    await press($, 'nav-keys')
+    expect(byKey(await draw($), 'footer-row-keys')).toBeUndefined()
+    await press($, 'nav-keys')
+    expect(byKey(await draw($), 'footer-row-keys')).toBeDefined()
+  })
+
+  test('t on the team board opens the turn list', async () => {
+    const { $ } = fakeEngine({
+      messages: main,
+      agents: [{ id: 'tm1', teammateId: 'alice@crew', description: 'help', type: 'teammate', status: 'running' }],
+    })
+    await press($, 'nav-team')
+    expect(text(await draw($))).toContain('Team (1)')
+    await press($, 'nav-turns')
+    expect(text(await draw($))).toContain('Turns (')
+  })
+})
+
 describe('keyboard cursor', () => {
   const markOf = (tree: unknown) => {
     const found: string[] = []
