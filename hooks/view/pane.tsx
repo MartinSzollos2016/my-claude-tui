@@ -25,7 +25,7 @@ import {
   type PaneParts,
 } from './context'
 import { focusChord, footerRowsOf, renderFooter, STATUS_INSET } from './footer'
-import { renderRows } from './items'
+import { nameWidthOf, renderRows } from './items'
 import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, type El } from './kit'
 import { renderThinking } from './row'
 import { renderTeam } from './team'
@@ -81,6 +81,8 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   const emptyText = data.isWorking && data.isLatest ? `Working${data.icons.ellipsis}` : EMPTY_TURN_TEXT
   // The blank row above the items.
   data.layout.push(LINE)
+  // Thinking shares the name column of the turn's rows.
+  const nameWidth = nameWidthOf(turn.items, (data.thinking?.text ?? '') === '' ? [] : ['Thinking'])
   return paneBody(el, data, act, {
     // The metrics row is clipped to its one row where its parts would wrap.
     header: [
@@ -101,9 +103,9 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     ],
     content: (
       <Box flexDirection="column" marginTop={1}>
-        {renderThinking(el, turn, data, act)}
+        {renderThinking(el, turn, data, act, nameWidth)}
         {isEmpty && drawn(data, <Text color={C.muted}>{emptyText}</Text>, textLine(data, emptyText, 0))}
-        {renderRows(el, turn.items, data, act)}
+        {renderRows(el, turn.items, data, act, undefined, nameWidth)}
       </Box>
     ),
   })
