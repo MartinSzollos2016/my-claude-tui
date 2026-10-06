@@ -10,6 +10,7 @@ import {
   pieceStarts,
   resetSectionCache,
   sectionCacheSize,
+  sectionWork,
   toolSections,
 } from '../hooks/model/sections'
 import { tool } from './fixtures/model'
@@ -348,5 +349,15 @@ describe('fix round 1: model', () => {
     const first = cachedSections(tool({ id: 'cap-0', input: { command: 'ls' } }), ICON_SETS.nerd)
     for (let i = 1; i <= 200; i++) cachedSections(tool({ id: `cap-${i}`, input: { command: 'ls' } }), ICON_SETS.nerd)
     expect(cachedSections(tool({ id: 'cap-0', input: { command: 'ls' } }), ICON_SETS.nerd)).not.toBe(first)
+  })
+})
+
+describe('section fingerprints', () => {
+  test('an item is fingerprinted once while it lives', () => {
+    const item = tool({ tool: 'Bash', input: { command: 'ls -la' }, resultText: 'ok' })
+    cachedSections(item, ICON_SETS.nerd)
+    const before = sectionWork.fingerprints
+    cachedSections(item, ICON_SETS.nerd)
+    expect(sectionWork.fingerprints).toBe(before)
   })
 })

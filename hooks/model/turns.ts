@@ -237,6 +237,24 @@ function toolSource(use: ToolUse): ToolSource {
   }
 }
 
+// Whether two JSON-like values are equal, walked without serializing them;
+// a cycle or a depth past MAX_DEPTH counts as different.
+const MAX_DEPTH = 32
+
+function sameValue(a: unknown, b: unknown, depth = 0): boolean {
+  if (a === b) return true
+  if (depth > MAX_DEPTH || typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  const keysA = Object.keys(a)
+  const keysB = Object.keys(b)
+  if (keysA.length !== keysB.length) return false
+  for (const key of keysA) {
+    if (!Object.hasOwn(b, key)) return false
+    if (!sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], depth + 1)) return false
+  }
+  return true
+}
+
 const sameSource = (a: ToolSource, b: ToolSource): boolean =>
   a.input !== undefined &&
   a.input === b.input &&
@@ -257,15 +275,19 @@ const sameSource = (a: ToolSource, b: ToolSource): boolean =>
 // `work` counts the pieces built, for tests.
 export function incrementalTurns(): {
   build: (messages: readonly SessionMessage[], idPrefix?: string, starts?: TurnStarts) => Turn[]
-  work: { messages: number; tools: number }
+  work: { messages: number; tools: number; serialized: number }
 } {
   type Row = { source: string; value: string | undefined }
-  type Tool = { source: ToolSource; value: ToolPiece }
-  const work = { messages: 0, tools: 0 }
+  type Tool = { source: ToolSource; value: ToolPiece; raw: unknown }
+  const work = { messages: 0, tools: 0, serialized: 0 }
   let rows = new Map<string, Row>()
   let tools = new Map<string, Tool>()
   let nextRows = new Map<string, Row>()
   let nextTools = new Map<string, Tool>()
+  // The last piece of each call by its id: a finished call's input never
+  // changes, so the same result and flags reuse it without serializing it.
+  let byId = new Map<string, Tool>()
+  let nextById = new Map<string, Tool>()
 
   const row = (kind: string, text: string, make: () => string | undefined): string | undefined => {
     const key = kind + textPrint(text)
@@ -282,7 +304,23 @@ export function incrementalTurns(): {
     prompt: (text, hasResults) => row(hasResults ? 'ur' : 'u', text, () => fresh.prompt(text, hasResults)),
     output: text => row('a', text, () => fresh.output(text)) ?? '',
     tool: use => {
+      const known = nextById.get(use.tool_use_id) ?? byId.get(use.tool_use_id)
+      if (
+        known !== undefined &&
+        known.source.text !== undefined &&
+        known.source.text === use.text &&
+        known.source.tool === use.tool &&
+        known.source.isError === (use.isError === true) &&
+        known.source.isInterrupted === isInterruptedResult(use.result) &&
+        known.source.agentId === use.agentId &&
+        known.source.durationMs === use.durationMs &&
+        sameValue(known.raw, use.input)
+      ) {
+        nextById.set(use.tool_use_id, known)
+        return known.value
+      }
       const source = toolSource(use)
+      work.serialized += 1
       const key = [
         use.tool_use_id,
         textPrint(source.input ?? ''),
@@ -290,10 +328,11 @@ export function incrementalTurns(): {
       ].join('\u0000')
       let entry = nextTools.get(key) ?? tools.get(key)
       if (entry === undefined || !sameSource(entry.source, source)) {
-        entry = { source, value: fresh.tool(use) }
+        entry = { source, value: fresh.tool(use), raw: use.input }
         work.tools += 1
       }
       nextTools.set(key, entry)
+      nextById.set(use.tool_use_id, entry)
       return entry.value
     },
   }
@@ -302,8 +341,10 @@ export function incrementalTurns(): {
     const turns = assemble(messages, idPrefix, pieces, starts)
     rows = nextRows
     tools = nextTools
+    byId = nextById
     nextRows = new Map()
     nextTools = new Map()
+    nextById = new Map()
     return turns
   }
 

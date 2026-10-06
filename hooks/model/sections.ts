@@ -301,13 +301,29 @@ const MAX_CACHED_SECTIONS = 2000
 let sectionRoom = MIN_CACHED_SECTIONS
 const sectionCache = new Map<string, { key: string; sections: Section[] }>()
 
-// A cheap fingerprint of what the sections are built from.
-function fingerprint(item: ToolItem, glyphs: Glyphs): string {
+// How many inputs were fingerprinted, for tests.
+export const sectionWork = { fingerprints: 0 }
+
+// The input's part of the fingerprint, once per item: a turn's items live
+// until the transcript changes, and the pane draws them again and again.
+const inputPrints = new WeakMap<ToolItem, string>()
+
+function inputPrint(item: ToolItem): string {
+  const cached = inputPrints.get(item)
+  if (cached !== undefined) return cached
+  sectionWork.fingerprints += 1
   const json = JSON.stringify(item.input)
   let hash = 5381
   for (let i = 0; i < json.length; i++) hash = ((hash << 5) + hash + json.charCodeAt(i)) | 0
+  const print = `${item.tool}|${json.length}|${hash}`
+  inputPrints.set(item, print)
+  return print
+}
+
+// A cheap fingerprint of what the sections are built from.
+function fingerprint(item: ToolItem, glyphs: Glyphs): string {
   const result = item.resultText
-  return `${item.tool}|${json.length}|${hash}|${result === undefined ? -1 : result.length}|${item.isError ? 1 : 0}|${glyphs.dot}${glyphs.ellipsis}${glyphs.taskDone}`
+  return `${inputPrint(item)}|${result === undefined ? -1 : result.length}|${item.isError ? 1 : 0}|${glyphs.dot}${glyphs.ellipsis}${glyphs.taskDone}`
 }
 
 // Sizes the cache to a turn of `calls` tool calls (its traces included).
