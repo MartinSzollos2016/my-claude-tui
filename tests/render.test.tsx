@@ -843,9 +843,11 @@ describe('commands', () => {
     mock.store(on)
     mock.clock(on, { now: 1_700_000_000_000 })
     expect((await $.command.run(run('tail-status'))).text).toContain('on')
-    expect((await $.command.run(run('tail-status', 'off'))).text).toBe('Status line: off.')
+    expect((await $.command.run(run('tail-status', 'off'))).text).toBe(
+      'Status line, spinner text and turn counts: off.',
+    )
     expect((await $.command.run(run('tail', 'status'))).text).toContain('off')
-    expect((await $.command.run(run('tail-status', 'on'))).text).toBe('Status line: on.')
+    expect((await $.command.run(run('tail-status', 'on'))).text).toBe('Status line, spinner text and turn counts: on.')
   })
 
   test('/tail-notify is stored and answers in the engine', async ($, on) => {
