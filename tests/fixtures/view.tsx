@@ -115,6 +115,7 @@ export const base = {
   full: new Set<string>(),
   view: 'detail' as const,
   stats: [undefined, undefined],
+  isFooterOpen: true,
 }
 
 export const act = {
@@ -141,6 +142,7 @@ export const act = {
   measure: (at: { scrollTop: number; windowRows: number; total: number }) => measured.push(at),
   cursorOpen: () => calls.push('open'),
   copyCursor: (surface?: string) => calls.push(`copyCursor:${surface}`),
+  toggleKeys: () => calls.push('toggleKeys'),
 }
 
 // Four reads and three searches in a row (two groups), then an edit; the

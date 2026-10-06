@@ -58,6 +58,8 @@ declare module 'claude-code' {
       mode: string | null
       isWorking: boolean
       isBarHidden: boolean
+      // Whether the pane's footer shows its full key map (h); session only.
+      footerOpen: boolean
       // The row the keyboard cursor stands on (an item or folded run id); null for none.
       cursor: string | null
       // The turn the turn list's cursor stands on (its index); null for none.

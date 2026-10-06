@@ -542,7 +542,8 @@ describe('detail pane', () => {
         props: Record<string, unknown>
       }
       expect(tree.props['height']).toBe(scroll.bodyRows)
-      expect(byKey(tree, 'pane-window')?.props['height']).toBe(scroll.bodyRows - 2 - 4)
+      // The header's two rows and the collapsed footer's two (rule, keys and status).
+      expect(byKey(tree, 'pane-window')?.props['height']).toBe(scroll.bodyRows - 2 - 2)
       expect(byKey(tree, 'footer')?.props['top']).toBeUndefined()
     }
   })
@@ -993,7 +994,8 @@ describe('own scroll', () => {
       })),
     },
   ]
-  const SMALL = { ...PANE_EVENT, props: { ...PANE_EVENT.props, scroll: { offset: 0, bodyRows: 12 } } }
+  // A window of six rows: the body less the header's two and the collapsed footer's two.
+  const SMALL = { ...PANE_EVENT, props: { ...PANE_EVENT.props, scroll: { offset: 0, bodyRows: 10 } } }
   const drawSmall = ($: Parameters<typeof run>[1]) => run('ui.render', $, SMALL)
   const topOf = async ($: Parameters<typeof run>[1]) => byKey(await drawSmall($), 'pane-content')?.props['marginTop']
   async function pressSmall($: Parameters<typeof run>[1], key: string) {
@@ -1059,8 +1061,8 @@ describe('own scroll', () => {
           requestId: 'tail',
           offset: 0,
           by,
-          bodyRows: 12,
-          contentRows: 12,
+          bodyRows: 10,
+          contentRows: 10,
           origin: { kind: 'person' },
         },
         async e => (nexts.push(e), {}),
@@ -1070,11 +1072,11 @@ describe('own scroll', () => {
     expect(await wheel(-1)).toEqual({})
     expect(await topOf($)).toBe(-2)
     // A page key arrives as the whole pane body: one page of the own window (6 - 2).
-    await wheel(12)
+    await wheel(10)
     expect(await topOf($)).toBe(-6)
-    await wheel(-12)
+    await wheel(-10)
     expect(await topOf($)).toBe(-2)
-    await wheel(12)
+    await wheel(10)
     expect(await topOf($)).toBe(-6)
     // Home and End, beyond the body: the top and the end.
     await wheel(100)

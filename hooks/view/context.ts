@@ -22,6 +22,8 @@ export type PaneData = {
   // Whether the info bar shows above the prompt: it takes the first
   // ctrl+x tab, the pane the second.
   isBarShown?: boolean
+  // Whether the footer shows its full key map (`h`); left out: collapsed.
+  isFooterOpen?: boolean
   // The turn the turn list's cursor stands on; null or left out for none.
   turnCursor?: number | null
   // Thinking of the shown turn: how many blocks, and their readable text.
@@ -170,6 +172,8 @@ export type PaneActions = {
   cursorOpen: () => void
   // Copies the whole text of the row under the cursor.
   copyCursor: (surface?: RenderSurface) => void
+  // Expands or collapses the footer's key map (h).
+  toggleKeys: () => void
 }
 
 export function itemDuration(item: Item, data: Pick<PaneData, 'agentStats' | 'timings' | 'now'>): number | undefined {

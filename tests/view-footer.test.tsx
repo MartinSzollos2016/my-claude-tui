@@ -6,7 +6,7 @@ import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
 import { footerGroups, footerPlan, footerStatus } from '../hooks/view/footer'
 import { renderPane } from '../hooks/view/pane'
-import { act, acts, base, byKey, el, nodes, text, type Node } from './fixtures/view'
+import { act, acts, base, byKey, calls, el, nodes, text, type Node } from './fixtures/view'
 
 describe('footerPlan', () => {
   const frame = { scrollTop: 0, windowRows: 20, total: 0, starts: {} }
@@ -175,7 +175,7 @@ describe('pinned footer', () => {
     expect(kids(footer)[0]?.props['color']).toBe(C.muted)
     expect(line(rowsOf(footer)[0])).toBe('p: ‹ prev  n: next ›  l: latest  │  j: ↓  k: ↑  o: open  y: copy')
     expect(line(rowsOf(footer)[1])).toBe(
-      't: turns  s: search  m: team     │  e: expand  c: collapse  b: ▲ page  f: ▼ page',
+      't: turns  s: search  m: team     │  e: expand  c: collapse  b: ▲ page  f: ▼ page  h: less',
     )
     expect(
       footerOf({ view: 'turns' }) &&
@@ -282,7 +282,7 @@ describe('pinned footer', () => {
     const rows = rowsOf(footer)
     expect(rows.map(r => r.props['key'])).toEqual(['footer-row-1', 'footer-row-2'])
     expect(line(rows[0])).toBe('j: ↓  k: ↑  o: open')
-    expect(line(rows[1])).toBe('d: detail  s: search  m: team  │  b: ▲ page  f: ▼ page')
+    expect(line(rows[1])).toBe('d: detail  s: search  m: team  │  b: ▲ page  f: ▼ page  h: less')
     const hidden = byKey(footer, 'footer-hidden')!
     expect(hidden.props['display']).toBe('none')
     expect(hiddenKeys(footer).map(k => [k.props['key'], k.props['hotkey']])).toEqual([
@@ -302,7 +302,7 @@ describe('pinned footer', () => {
     const footer = footerOf({ view: 'team', members })
     const rows = rowsOf(footer)
     expect(rows.map(r => r.props['key'])).toEqual(['footer-row-2'])
-    expect(line(rows[0])).toBe('d: detail  s: search  │  b: ▲ page  f: ▼ page')
+    expect(line(rows[0])).toBe('d: detail  s: search  │  b: ▲ page  f: ▼ page  h: less')
     expect(hiddenKeys(footer).map(k => k.props['hotkey'])).toEqual([
       'p',
       'n',
@@ -325,7 +325,9 @@ describe('pinned footer', () => {
       'footer-row-views',
       'footer-row-expand',
     ])
-    expect(line(byKey(footerOf({ columns: 60, view: 'turns' }), 'footer-row-expand'))).toBe('b: ▲ page  f: ▼ page')
+    expect(line(byKey(footerOf({ columns: 60, view: 'turns' }), 'footer-row-expand'))).toBe(
+      'b: ▲ page  f: ▼ page  h: less',
+    )
     expect(rowsOf(footerOf({ columns: 60, view: 'team', members })).map(r => r.props['key'])).toEqual([
       'footer-row-views',
       'footer-row-expand',
@@ -362,7 +364,7 @@ describe('pinned footer', () => {
     expect(line(rowsOf(footer)[0])).toBe('p: ‹  n: ›  l: »')
     expect(line(rowsOf(footer)[1])).toBe('j: ↓  k: ↑  o: +  y: ⧉')
     expect(line(rowsOf(footer)[2])).toBe('t: ≡  s: ⌕  m: ☺')
-    expect(line(rowsOf(footer)[3])).toBe('e: ⊞  c: ⊟  b: ▲  f: ▼')
+    expect(line(rowsOf(footer)[3])).toBe('e: ⊞  c: ⊟  b: ▲  f: ▼  h: ×')
     expect(String(byKey(footer, 'nav-prev')?.props['label']).trimEnd()).toBe('‹')
   })
 
@@ -372,7 +374,7 @@ describe('pinned footer', () => {
       for (const icons of [ICON_SETS.nerd, ICON_SETS.unicode, ICON_SETS.ascii]) {
         const footer = footerOf({ columns: 36, isLatest: false, icons, ...extra })
         const keys = nodes(footer).filter(n => n.type === 'Button')
-        expect(keys.length).toBe(15)
+        expect(keys.length).toBe(16)
         for (const k of keys) {
           const shown = String(k.props['label'])
           expect(shown, String(k.props['key'])).not.toBe('')
@@ -494,5 +496,75 @@ describe('status row texts', () => {
     expect(at(21)).toBe('2/2 · click for keys')
     expect(at(10)).toBe('2/2')
     expect(at(2)).not.toContain('click')
+  })
+})
+
+describe('collapsed footer', () => {
+  const kids = (n: Node | undefined) => (n?.children as Node[]).filter(Boolean)
+  const footer = (extra: Record<string, unknown> = {}) =>
+    byKey(renderPane(el, { ...base, isFooterOpen: false, isFocused: true, ...extra }, act), 'footer')!
+  const shownKeys = (f: Node) =>
+    nodes(f)
+      .filter(n => n.type === 'Button' && !nodes(byKey(f, 'footer-hidden')).includes(n))
+      .map(n => String(n.props['hotkey']))
+  const drawnRows = (f: Node) => kids(f).filter(n => n.props['key'] !== 'footer-hidden').length
+
+  test('detail: the active keys by priority, h last, status in the row at 100 columns', () => {
+    const f = footer({ selected: 0, isLatest: false, cursor: 'b1' })
+    expect(shownKeys(f)[0]).toBe('n') // p is inactive on the first turn
+    expect(shownKeys(f).at(-1)).toBe('h')
+    expect(shownKeys(f)).not.toContain('p')
+    expect(drawnRows(f)).toBe(2) // rule + one row
+    expect(text(byKey(f, 'footer-row-keys'))).toContain('keys on')
+  })
+
+  test('the status goes below the keys when it does not fit', () => {
+    const f = footer({ columns: 44, isFocused: false, isBarShown: true })
+    expect(drawnRows(f)).toBe(3)
+    expect(text(byKey(f, 'footer-row-keys'))).not.toContain('click')
+  })
+
+  test('collapsed footer keeps h at 20 columns', () => {
+    expect(shownKeys(footer({ columns: 20 })).at(-1)).toBe('h')
+  })
+
+  test('a key cut from the collapsed row still acts', () => {
+    calls.length = 0
+    const tree = renderPane(el, { ...base, isFooterOpen: false, selected: 0, isLatest: false, columns: 44 }, act)
+    const latest = byKey(byKey(tree, 'footer-hidden'), 'nav-latest')!
+    expect(latest.props['hotkey']).toBe('l')
+    ;(latest.props['onPress'] as () => void)()
+    expect(calls).toContain('latest')
+  })
+
+  test('every view key stays bound collapsed: t, d, s and h exist in each view', () => {
+    for (const view of ['detail', 'turns', 'team'] as const) {
+      const f = footer({ view })
+      for (const key of ['nav-turns', 'nav-detail', 'nav-search', 'nav-keys'])
+        expect(byKey(f, key), `${view} ${key}`).toBeDefined()
+    }
+  })
+
+  test('h toggles: label keys collapsed, less expanded', () => {
+    expect(byKey(footer(), 'nav-keys')?.props['label']).toMatch(/^keys/)
+    const open = byKey(renderPane(el, { ...base, isFooterOpen: true }, act), 'nav-keys')!
+    expect(String(open.props['label'])).toMatch(/^less/)
+    calls.length = 0
+    ;(open.props['onPress'] as () => void)()
+    expect(calls).toEqual(['toggleKeys'])
+  })
+
+  test('collapsed footer height matches footerRowsOf', () => {
+    for (const columns of [100, 60, 36]) {
+      const tree = renderPane(el, { ...base, isFooterOpen: false, columns, rows: 30 }, act)
+      const f = byKey(tree, 'footer')!
+      const header = Number(byKey(tree, 'pane-header')?.props['height'] ?? 0)
+      expect(byKey(tree, 'pane-window')?.props['height'], `${columns}`).toBe(30 - header - drawnRows(f))
+    }
+  })
+
+  test('h is bound in the compact layout', () => {
+    const tree = renderPane(el, { ...base, isFooterOpen: false, placement: 'inline', rows: 6, isFocused: true }, act)
+    expect(byKey(tree, 'nav-keys')?.props['hotkey']).toBe('h')
   })
 })
