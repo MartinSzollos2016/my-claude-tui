@@ -308,6 +308,46 @@ describe('live data', () => {
   const finish = (turnId: string, durationMs: number, $: Parameters<typeof run>[1]) =>
     run('turn.complete', $, { ...done, turnId, durationMs }, async () => ({ text: '' }))
 
+  test('a hand-back turn keeps its own duration', async () => {
+    const handBack = 'Another Claude session sent a message: <agent-message from="a">x</agent-message>'
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'go' }, async e => e)
+    world.messages = [
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: 'spawned', toolUses: [] },
+    ]
+    world.api = [
+      { role: 'user', content: [{ type: 'text', text: 'go' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'spawned' }] },
+    ]
+    await run('turn.start', $, { text: 'go', turnId: 'g' }, async e => e)
+    await settle()
+    await finish('g', 2_000, $)
+    await run('turn.start', $, { text: handBack, turnId: 'h' }, async e => e)
+    await settle()
+    world.messages = [...world.messages, { role: 'assistant', text: 'Both failed', toolUses: [] }]
+    world.api = [
+      ...world.api,
+      { role: 'user', content: [{ type: 'text', text: handBack }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Both failed' }] },
+    ]
+    await finish('h', 7_000, $)
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(text(byKey(list, 'turn-0'))).toContain('2.0s')
+    expect(text(byKey(list, 'turn-1'))).toContain('Message from agent')
+    expect(text(byKey(list, 'turn-1'))).toContain('7.0s')
+  })
+
+  test('a prompt with a carriage return or an escape still finds its stat', async () => {
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'fix\r\n\u001b[31mbug' }, async e => e)
+    world.messages = [{ role: 'user', text: 'fix\r\n\u001b[31mbug', toolUses: [] }]
+    await finish('x', 4_000, $)
+    await press($, 'nav-turns')
+    expect(text(byKey(await draw($), 'turn-0'))).toContain('4.0s')
+  })
+
   test('two identical prompts keep their own time', async () => {
     const { $, world } = fakeEngine()
     const turn = async (turnId: string, durationMs: number, rows: SessionMessage[]) => {
