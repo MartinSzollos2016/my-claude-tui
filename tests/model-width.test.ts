@@ -345,3 +345,21 @@ describe('fitPath and a quoted pattern', () => {
     expect(fitPath(item, item.summary, 80, '…')).toBe('"hooks" in *.ts')
   })
 })
+
+describe('wide characters the table missed', () => {
+  test('the clock, hourglass, medium squares, angle brackets and vertical forms are two cells', () => {
+    for (const ch of [
+      '\u23f0',
+      '\u23f3',
+      '\u25fd',
+      '\u25fe',
+      '\u2329',
+      '\u232a',
+      '\ufe10',
+      '\ufe19',
+      '\ufe50',
+      '\ufe6b',
+    ])
+      expect(displayWidth(ch), ch.codePointAt(0)!.toString(16)).toBe(2)
+  })
+})
