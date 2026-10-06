@@ -513,6 +513,12 @@ describe('collapsed footer', () => {
     expect(text(byKey(f, 'footer-row-keys'))).not.toContain('click')
   })
 
+  test('unfocused at 60 columns the short status stays in the row: two rows', () => {
+    const f = footer({ columns: 60, isFocused: false, isBarShown: true, selected: 1, isLatest: true })
+    expect(drawnRows(f)).toBe(2)
+    expect(text(byKey(f, 'footer-row-keys'))).toContain('click for keys')
+  })
+
   test('collapsed footer keeps h at 20 columns', () => {
     expect(shownKeys(footer({ columns: 20 })).at(-1)).toBe('h')
   })
