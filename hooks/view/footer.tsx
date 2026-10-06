@@ -90,7 +90,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
   // Bare: one row, no rule, the collapsed keys with h and the status at its
   // shortest; a pane too short for more keeps every key by its hotkey.
   if (layout.mode === 'bare') {
-    const bare = collapsedPlan(groups, data, layout, data.columns, { isRowForced: true })
+    const bare = collapsedPlan(groups, data, layout, data.columns, { isRowForced: true, frame })
     const keysWidth = displayWidth(bare.keys.map(textOf).join('  '))
     return (
       <Box key="footer" flexDirection="column" width={data.columns} backgroundColor={C.paneBackground}>
@@ -109,7 +109,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
   // Collapsed: one row of the keys that act now with the status at its end,
   // or below it when both do not fit; the rest keep their hotkeys hidden.
   if (data.isFooterOpen !== true || layout.mode === 'collapsed') {
-    const collapsed = collapsedPlan(groups, data, layout, data.columns)
+    const collapsed = collapsedPlan(groups, data, layout, data.columns, { frame })
     const keysWidth = displayWidth(collapsed.keys.map(textOf).join('  '))
     const keysRow = keys(collapsed.keys)
     return (
@@ -227,10 +227,10 @@ const PRIORITY: Record<'detail' | 'turns' | 'team', readonly string[]> = {
     'next',
     'down',
     'up',
-    'open',
-    'turns',
     'pagedown',
     'pageup',
+    'open',
+    'turns',
     'latest',
     'expand',
     'search',
@@ -249,7 +249,7 @@ function collapsedPlan(
   data: Ctx,
   layout: FooterLayout,
   columns: number,
-  options: { isRowForced?: boolean } = {},
+  options: { isRowForced?: boolean; frame?: ScrollFrame } = {},
 ): CollapsedPlan {
   const all = allKeys(groups)
   const byName = new Map(all.map(k => [k.key.slice('nav-'.length), k] as const))
@@ -259,10 +259,17 @@ function collapsedPlan(
   // The status keeps its place at the end of the row while it takes at most
   // half of it; a longer one goes below and the keys get the whole row.
   const isStatusInRow = options.isRowForced === true || (statusWidthOf(data) + KEY_GAP) * 2 <= inner
+  // The keys leave the status its room; while the content overflows, room
+  // for the place (top or end) too. Whether the status shares the row is
+  // decided without the place, so the footer's height never changes with it.
+  const frame = options.frame
+  const isOverflowing = frame !== undefined && frame.total > frame.windowRows
   const statusCells =
     (options.isRowForced === true
       ? joinWidth(statusVariants(data, '').at(-1)!, ` ${data.icons.dot} `)
-      : statusWidthOf(data)) + KEY_GAP
+      : isOverflowing
+        ? joinWidth(statusVariants(data, 'end')[1]!, ` ${data.icons.dot} `)
+        : statusWidthOf(data)) + KEY_GAP
   const room = inner - width(help) - (isStatusInRow ? statusCells : 0)
   const keys: FooterKey[] = []
   let used = 0
