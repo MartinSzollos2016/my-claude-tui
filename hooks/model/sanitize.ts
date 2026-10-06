@@ -49,7 +49,7 @@ function between(text: string, open: string, close: string, from = 0): string | 
   return end < 0 ? undefined : text.slice(start + open.length, end).trim()
 }
 
-function stripBlocks(text: string, open: string, close: string): string {
+export function stripBlocks(text: string, open: string, close: string): string {
   let out = ''
   let at = 0
   for (;;) {
@@ -64,6 +64,8 @@ function stripBlocks(text: string, open: string, close: string): string {
 
 // Turns XML-ish wrappers the engine injects into a readable one-liner.
 export function sanitizePrompt(text: string): string {
+  // An agent's hand-back: the engine's frame around its report.
+  if (text.includes('<agent-message')) return 'Message from agent'
   const command = between(text, '<command-name>', '</command-name>')
   if (command && !command.includes('<')) {
     const args = between(text, '<command-args>', '</command-args>') ?? ''

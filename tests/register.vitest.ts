@@ -595,6 +595,18 @@ describe('detail pane', () => {
     expect(world.calls.filter(call => call === 'messages:api').length).toBe(2)
   })
 
+  test('the API form is read once per transcript change, for the turns as well', async () => {
+    const { $, world } = fakeEngine({ messages: [...main] })
+    await draw($)
+    await draw($)
+    await press($, 'nav-turns')
+    await draw($)
+    expect(world.calls.filter(call => call === 'messages:api').length).toBe(1)
+    world.messages.push({ role: 'user', text: 'more', toolUses: [] })
+    await draw($)
+    expect(world.calls.filter(call => call === 'messages:api').length).toBe(2)
+  })
+
   test('counts the shown turn thinking from the API form, read once per transcript', async () => {
     // The thinking cache is keyed by the transcript's fingerprint, so a
     // second draw of the same transcript reads the API form only once.

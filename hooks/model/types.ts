@@ -26,6 +26,9 @@ export type Turn = {
   toolCount: number
   outputCount: number
   subagentCount: number
+  // The row key of the turn's first reply when the API form names it as a
+  // turn's start (apiTurnStarts); thinking is found by it.
+  startKey?: string
 }
 
 export const SUBAGENT_TOOLS = new Set(['Agent', 'Task'])
