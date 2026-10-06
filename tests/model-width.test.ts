@@ -363,3 +363,55 @@ describe('wide characters the table missed', () => {
       expect(displayWidth(ch), ch.codePointAt(0)!.toString(16)).toBe(2)
   })
 })
+
+describe('graphemes without the segmenter', () => {
+  const throwing = {
+    segment: () => {
+      throw new Error('segmenter used')
+    },
+  } as unknown as Intl.Segmenter
+
+  test('CJK, wide emoji and symbols split per code point, the segmenter untouched', () => {
+    expect(graphemesOf('日本語 \u{1f600} ⏰ ｱ', throwing)).toEqual([
+      '日',
+      '本',
+      '語',
+      ' ',
+      '\u{1f600}',
+      ' ',
+      '⏰',
+      ' ',
+      'ｱ',
+    ])
+  })
+
+  test('graphemes match the segmenter on a mixed corpus', () => {
+    const segmenter = new Intl.Segmenter()
+    const corpus = [
+      '日本語のコマンド \u{1f600} echo',
+      'é café',
+      '\u{1f468}‍\u{1f469}‍\u{1f467} family',
+      '\u{1f1e8}\u{1f1ff} flag',
+      '1️⃣ keycap',
+      '\u{1f44d}\u{1f3fd} tone',
+      '각 jamo',
+      'a\r\nb',
+      '❤️ heart',
+      '\u{1f3f4}\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f} tag',
+      'x​y zero width',
+    ]
+    for (const text of corpus) {
+      const reference = Array.from(segmenter.segment(text), part => part.segment)
+      expect(graphemesOf(text), JSON.stringify(text)).toEqual(reference)
+    }
+  })
+
+  test('widths of the corpus stay as they were', () => {
+    expect(displayWidth('日本語')).toBe(6)
+    expect(displayWidth('\u{1f468}‍\u{1f469}‍\u{1f467}')).toBe(2)
+    expect(displayWidth('\u{1f1e8}\u{1f1ff}')).toBe(2)
+    expect(displayWidth('é')).toBe(1)
+    expect(displayWidth('1️⃣')).toBe(2)
+    expect(truncateDisplay('日本語のコマンド', 7, '…')).toBe('日本語…')
+  })
+})

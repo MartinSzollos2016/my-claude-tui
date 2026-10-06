@@ -74,8 +74,25 @@ const EMOJI_PRESENTATION = '\ufe0f'
 // Every wide range starts at or above it.
 const FIRST_WIDE = 0x1100
 
+// The width of one code point standing alone (no joining character after
+// it), kept per code point: text draws the same few characters again.
+const pointWidths = new Map<number, number>()
+
+function pointWidth(point: number): number {
+  if (point < FIRST_WIDE) return 1
+  let width = pointWidths.get(point)
+  if (width === undefined) {
+    width = WIDE_RANGES.some(([from, to]) => point >= from && point <= to) ? 2 : 1
+    pointWidths.set(point, width)
+  }
+  return width
+}
+
 function graphemeWidth(grapheme: string): number {
   const first = grapheme.codePointAt(0)!
+  // One code point (one or two UTF-16 units) that joins nothing: a lookup.
+  if (grapheme.length <= 2 && (grapheme.length === 1 || first > 0xffff) && !JOINING.test(grapheme))
+    return pointWidth(first)
   if (ZERO_WIDTH.test(grapheme)) return 0
   if (first < FIRST_WIDE) return grapheme.includes(EMOJI_PRESENTATION) ? 2 : 1
   if (WIDE_RANGES.some(([from, to]) => first >= from && first <= to)) return 2
@@ -85,9 +102,19 @@ function graphemeWidth(grapheme: string): number {
   return 1
 }
 
+// A character that can join its neighbour into one grapheme: combining and
+// enclosing marks, format characters (ZWJ, ZWNJ), variation selectors,
+// regional indicators, skin-tone modifiers, the keycap, tag characters,
+// Hangul conjoining jamo and CR (of CR LF). Text with none of these splits
+// into graphemes per code point, without Intl.Segmenter.
+const JOINING =
+  /[\p{M}\p{Cf}\u200c\u200d\ufe00-\ufe0f\u{e0100}-\u{e01ef}\u{1f1e6}-\u{1f1ff}\u{1f3fb}-\u{1f3ff}\u20e3\u{e0020}-\u{e007f}\u1100-\u11ff\ua960-\ua97f\ud7b0-\ud7ff\r]/u
+
 // The graphemes of a text; `null` for a runtime without Intl.Segmenter.
 export const graphemesOf = (text: string, segmenter: Intl.Segmenter | null = SEGMENTER ?? null): string[] =>
-  segmenter === null ? Array.from(text) : Array.from(segmenter.segment(text), part => part.segment)
+  segmenter === null || !JOINING.test(text)
+    ? Array.from(text)
+    : Array.from(segmenter.segment(text), part => part.segment)
 
 // Text whose every UTF-16 unit is one grapheme of one cell: printable ASCII,
 // Latin-1 and Latin Extended up to the combining marks (U+0300) without the
@@ -104,7 +131,18 @@ const sumWidths = (graphemes: readonly string[]): number => {
 }
 
 export function displayWidth(text: string): number {
-  return NARROW.test(text) ? text.length : sumWidths(graphemesOf(text))
+  if (NARROW.test(text)) return text.length
+  // No joining character: every code point is a grapheme of its own width.
+  if (!JOINING.test(text)) {
+    let width = 0
+    for (let i = 0; i < text.length; i++) {
+      const point = text.codePointAt(i)!
+      if (point > 0xffff) i++
+      width += pointWidth(point)
+    }
+    return width
+  }
+  return sumWidths(graphemesOf(text))
 }
 
 // Terminals set a tab stop every 8 cells, and what tools print in columns
@@ -167,6 +205,22 @@ export function truncateDisplay(s: string, max: number, ellipsis = '…'): strin
   if (NARROW.test(one)) {
     if (one.length <= max) return one
     return room < 0 ? one.slice(0, Math.max(0, max)) : one.slice(0, room) + ellipsis
+  }
+  // No joining character: walk the code points, no arrays.
+  if (!JOINING.test(one)) {
+    let width = 0
+    let roomEnd = 0
+    let maxEnd = 0
+    for (let i = 0; i < one.length;) {
+      const point = one.codePointAt(i)!
+      const next = i + (point > 0xffff ? 2 : 1)
+      width += pointWidth(point)
+      if (width > max) return room < 0 ? one.slice(0, maxEnd) : one.slice(0, roomEnd) + ellipsis
+      if (width <= room) roomEnd = next
+      maxEnd = next
+      i = next
+    }
+    return one
   }
   const graphemes = graphemesOf(one)
   if (sumWidths(graphemes) <= max) return one
