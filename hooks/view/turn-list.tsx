@@ -134,20 +134,16 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
                     {data.icons.cursor}
                   </Text>
                 )}
-                {row.index === data.selected ? (
-                  <Text key={`turn-${row.index}`} bold color={C.text}>
-                    {label}
-                  </Text>
-                ) : (
-                  <Button
-                    key={`turn-${row.index}`}
-                    plain
-                    dimColor
-                    label={label}
-                    hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
-                    onPress={() => act.pickTurn(row.index)}
-                  />
-                )}
+                {/* Every turn is a button, the selected one too: the focus
+                    ring follows the cursor onto it, and Enter opens it. */}
+                <Button
+                  key={`turn-${row.index}`}
+                  plain
+                  dimColor={row.index !== data.selected}
+                  label={label}
+                  hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
+                  onPress={() => act.pickTurn(row.index)}
+                />
               </Box>
               {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
             </Box>

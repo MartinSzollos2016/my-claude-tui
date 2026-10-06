@@ -96,6 +96,8 @@ type World = {
   messages: SessionMessage[]
   agentMessages: Record<string, SessionMessage[]>
   api: unknown[]
+  // Ring keys $.ui.focus refuses, as for an element drawn as Text.
+  focusDenied: string[]
   agents: AgentInfo[]
   surfaces: RenderSurface[]
   config: ConfigRow[]
@@ -144,6 +146,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     config: [],
     files: {},
     isGitDir: true,
+    focusDenied: [],
     hasRepo: true,
     now: 1_700_000_000_000,
     copyResult: { isCopied: true },
@@ -234,6 +237,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
         world.statuses.push(message)
       },
       focus: async (args: { key: string }) => {
+        if (world.focusDenied.includes(args.key)) return { deny: 'not drawn' }
         world.focused.push(args.key)
         return {}
       },

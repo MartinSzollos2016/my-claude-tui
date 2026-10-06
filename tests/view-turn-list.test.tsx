@@ -37,11 +37,12 @@ describe('turn table', () => {
     expect(text(byKey(tree, 'turn-0'))).toContain('████████')
   })
 
-  test('the selected row is bold text, the others buttons', () => {
+  test('every row is a button, the selected one in full contrast', () => {
     const tree = table(100, { selected: 1 })
-    expect(byKey(tree, 'turn-1')?.type).toBe('Text')
-    expect(byKey(tree, 'turn-1')?.props['bold']).toBe(true)
+    expect(byKey(tree, 'turn-1')?.type).toBe('Button')
+    expect(byKey(tree, 'turn-1')?.props['dimColor']).toBe(false)
     expect(byKey(tree, 'turn-0')?.type).toBe('Button')
+    expect(byKey(tree, 'turn-0')?.props['dimColor']).toBe(true)
     expect(text(byKey(tree, 'turn-1'))).toContain(ICON_SETS.nerd.marker)
   })
 
