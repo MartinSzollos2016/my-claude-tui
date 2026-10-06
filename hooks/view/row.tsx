@@ -133,7 +133,8 @@ export function renderLine(
       id: line.id,
       lines: line.card,
       row: contentRows(data.layout).total,
-      left: CARD_INDENT + (place === undefined || place.path.length > 0 ? 0 : TRACE_INDENT),
+      // Rows of a trace sit inside its first level's indent, however deep.
+      left: CARD_INDENT + (place === undefined ? 0 : TRACE_INDENT),
     })
   data.layout.push({ kind: 'line', id: line.id })
   const { icons } = data
