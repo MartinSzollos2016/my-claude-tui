@@ -496,7 +496,11 @@ export function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): F
       key('turns', 't', 'turns', icons.keyTurns, data.view !== 'turns', act.showTurns),
       key('detail', 'd', 'detail', icons.keyDetail, !isDetail, act.showDetail),
       key('search', 's', 'search', icons.keySearch, true, act.focusSearch),
-      key('team', 'm', 'team', icons.keyTeam, hasTeam && data.view !== 'team', act.showTeam),
+      // Drawn only in a team session; bound everywhere, so m never reaches the prompt.
+      {
+        ...key('team', 'm', 'team', icons.keyTeam, hasTeam && data.view !== 'team', act.showTeam),
+        isShown: hasTeam && !HIDDEN_KEYS[data.view].has('team'),
+      },
     ],
     expand: [
       key('expand', 'e', 'expand', icons.keyExpand, isDetail && hasRows && data.isAllExpanded !== true, act.expandAll),

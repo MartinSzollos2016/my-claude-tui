@@ -50,7 +50,9 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
 
   if (!turn) {
     const sep = data.icons.groupSep
-    const hint = `Keys: t turns ${sep} s search ${sep} e expand ${sep} click or ${focusChord(data)} for keys`
+    // The keys that act with no turn yet; the focus note as the footer has it.
+    const focusNote = data.isFocused === true ? '' : ` ${sep} click or ${focusChord(data)} to use them`
+    const hint = `Keys: t turns ${sep} s search ${sep} h keys${focusNote}`
     data.layout.push(
       textLine(data, 'No turns yet.', 0),
       textLine(data, 'Send a prompt; tool calls and subagents appear here.', 0),

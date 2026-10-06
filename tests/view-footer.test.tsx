@@ -15,10 +15,10 @@ describe('footerPlan', () => {
     return footerPlan(footerGroups(data, act, frame), footerLayout(100), 100)
   }
 
-  test('the turn list keeps two rows of keys and hides seven', () => {
+  test('the turn list keeps two rows of keys and hides eight (m without a team)', () => {
     const turns = plan({ view: 'turns' })
     expect(turns.rows.map(row => row.id)).toEqual(['1', '2'])
-    expect(turns.hidden).toHaveLength(7)
+    expect(turns.hidden).toHaveLength(8)
   })
 
   test('the team board keeps one row', () => {
@@ -175,7 +175,7 @@ describe('pinned footer', () => {
     expect(kids(footer)[0]?.props['color']).toBe(C.muted)
     expect(line(rowsOf(footer)[0])).toBe('p: ‹ prev  n: next ›  l: latest  │  j: ↓  k: ↑  o: open  y: copy')
     expect(line(rowsOf(footer)[1])).toBe(
-      't: turns  s: search  m: team     │  e: expand  c: collapse  b: ▲ page  f: ▼ page  h: less',
+      't: turns  s: search              │  e: expand  c: collapse  b: ▲ page  f: ▼ page  h: less',
     )
     expect(
       footerOf({ view: 'turns' }) &&
@@ -271,9 +271,12 @@ describe('pinned footer', () => {
     return hidden === undefined ? [] : nodes(hidden).filter(n => n.type === 'Button')
   }
 
-  test('the detail view draws every key but its own d, which keeps the keyboard and does nothing', () => {
+  test('the detail view draws every key but its own d (and m without a team), which keep the keyboard and do nothing', () => {
     const footer = footerOf()
-    expect(hiddenKeys(footer).map(k => [k.props['key'], k.props['hotkey']])).toEqual([['nav-detail', 'd']])
+    expect(hiddenKeys(footer).map(k => [k.props['key'], k.props['hotkey']])).toEqual([
+      ['nav-detail', 'd'],
+      ['nav-team', 'm'],
+    ])
     expect(acts(footer, 'nav-detail')).toBe(false)
   })
 
@@ -282,7 +285,7 @@ describe('pinned footer', () => {
     const rows = rowsOf(footer)
     expect(rows.map(r => r.props['key'])).toEqual(['footer-row-1', 'footer-row-2'])
     expect(line(rows[0])).toBe('j: ↓  k: ↑  o: open')
-    expect(line(rows[1])).toBe('d: detail  s: search  m: team  │  b: ▲ page  f: ▼ page  h: less')
+    expect(line(rows[1])).toBe('d: detail  s: search  │  b: ▲ page  f: ▼ page  h: less')
     const hidden = byKey(footer, 'footer-hidden')!
     expect(hidden.props['display']).toBe('none')
     expect(hiddenKeys(footer).map(k => [k.props['key'], k.props['hotkey']])).toEqual([
@@ -291,6 +294,7 @@ describe('pinned footer', () => {
       ['nav-latest', 'l'],
       ['nav-copy', 'y'],
       ['nav-turns', 't'],
+      ['nav-team', 'm'],
       ['nav-expand', 'e'],
       ['nav-collapse', 'c'],
     ])
@@ -351,7 +355,7 @@ describe('pinned footer', () => {
     const footer = footerOf({ columns: 36, isLatest: false })
     expect(line(rowsOf(footer)[0])).toBe('p: ‹  n: ›  l: »')
     expect(line(rowsOf(footer)[1])).toBe('j: ↓  k: ↑  o: +  y: ⧉')
-    expect(line(rowsOf(footer)[2])).toBe('t: ≡  s: ⌕  m: ☺')
+    expect(line(rowsOf(footer)[2])).toBe('t: ≡  s: ⌕')
     expect(line(rowsOf(footer)[3])).toBe('e: ⊞  c: ⊟  b: ▲  f: ▼  h: ×')
     expect(String(byKey(footer, 'nav-prev')?.props['label']).trimEnd()).toBe('‹')
   })
@@ -598,5 +602,18 @@ describe('collapsed footer', () => {
   test('h is bound in the compact layout', () => {
     const tree = renderPane(el, { ...base, isFooterOpen: false, placement: 'inline', rows: 6, isFocused: true }, act)
     expect(byKey(tree, 'nav-keys')?.props['hotkey']).toBe('h')
+  })
+})
+
+describe('team key', () => {
+  test('without a team, m is bound but not drawn in the expanded footer', () => {
+    const f = byKey(renderPane(el, { ...base, isFooterOpen: true }, act), 'footer')!
+    expect(byKey(byKey(f, 'footer-hidden'), 'nav-team')?.props['hotkey']).toBe('m')
+  })
+
+  test('with a team, m shows', () => {
+    const members = [{ name: 'alice', type: 'teammate', status: 'running' as const }]
+    const f = byKey(renderPane(el, { ...base, isFooterOpen: true, members }, act), 'footer')!
+    expect(nodes(byKey(f, 'footer-hidden')).some(n => n.props['key'] === 'nav-team')).toBe(false)
   })
 })

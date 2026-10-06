@@ -1224,14 +1224,14 @@ describe('empty states', () => {
     expect(lines(renderPane(el, { ...base, turns: [] }, act))).toEqual([
       { text: 'No turns yet.', color: 'text' },
       { text: 'Send a prompt; tool calls and subagents appear here.', color: 'inactive' },
-      { text: 'Keys: t turns · s search · e expand · click or ctrl+x tab for keys', color: 'inactive' },
+      { text: 'Keys: t turns · s search · h keys · click or ctrl+x tab to use them', color: 'inactive' },
     ])
     expect(lines(renderPane(el, { ...base, turns: [], view: 'turns' }, act))).toHaveLength(3)
     expect(lines(renderPane(el, { ...base, turns: [], isBarShown: true }, act)).at(-1)?.text).toBe(
-      'Keys: t turns · s search · e expand · click or ctrl+x tab ×2 for keys',
+      'Keys: t turns · s search · h keys · click or ctrl+x tab ×2 to use them',
     )
     expect(text(renderPane(el, { ...base, turns: [], icons: ICON_SETS.ascii }, act))).toContain(
-      'Keys: t turns . s search . e expand . click or ctrl+x tab for keys',
+      'Keys: t turns . s search . h keys . click or ctrl+x tab to use them',
     )
   })
 
@@ -1469,5 +1469,17 @@ describe('footer modes by room', () => {
           Math.max(1, rows - header - drawn(f).length),
         )
       }
+  })
+})
+
+describe('empty state hint', () => {
+  const empty = (isFocused: boolean | undefined) =>
+    text(renderPane(el, { ...base, turns: [], stats: [], isFocused }, act))
+
+  test('names only keys that act, and agrees with the footer on the focus', () => {
+    expect(empty(true)).not.toContain('e expand')
+    expect(empty(true)).toContain('h keys')
+    expect(empty(true)).not.toContain('click or')
+    expect(empty(false)).toMatch(/click or ctrl\+x tab/)
   })
 })
