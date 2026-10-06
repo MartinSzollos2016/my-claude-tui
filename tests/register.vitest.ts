@@ -258,8 +258,10 @@ describe('commands', () => {
       await say(unfocused.$, name)
       await settle()
       expect(unfocused.world.focusRequests, name).toBe(6)
-      // The retries keep the width the person has.
-      expect(unfocused.world.opened.slice(1), name).toEqual([undefined, undefined, undefined, undefined, undefined])
+      // Each retry asks for the width of the open it follows (a width the
+      // person dragged still wins in the engine).
+      const first = unfocused.world.opened[0]
+      expect(unfocused.world.opened.slice(1), name).toEqual([first, first, first, first, first])
 
       const focused = fakeEngine()
       await say(focused.$, name)
@@ -1276,6 +1278,17 @@ describe('keyboard cursor', () => {
     // The ring follows the cursor, so Enter presses the row under it.
     expect(world.focused.at(-1)).toBe('r1')
     expect(world.focused).toContain('t0:o0')
+  })
+
+  test('the focus retries after /tail keep the pane at its width', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    world.isPaneFocused = false
+    await say($, 'tail')
+    await settle()
+    for (let i = 0; i < 10; i++) await settle()
+    const opens = world.openArgs as { columns?: number; focus?: true }[]
+    expect(opens.length).toBeGreaterThan(1)
+    for (const open of opens) expect(typeof open.columns, JSON.stringify(open)).toBe('number')
   })
 
   test('taking the keys back after Esc keeps the pane at its width', async () => {

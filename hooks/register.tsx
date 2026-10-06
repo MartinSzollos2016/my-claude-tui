@@ -516,7 +516,7 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       if (isTextOnly(surfaces)) return { text: await turnsReport($, true) }
       await showView($, 'turns')
       await openPane($, true, e.presentation.columns)
-      claimFocus($).catch(ignore)
+      claimFocus($, e.presentation.columns).catch(ignore)
       return { text: 'Turn list opened: Enter or click a turn to see it in detail.' }
     }
     case 'open': {
@@ -524,7 +524,7 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       if (isTextOnly(surfaces)) return { text: await turnsReport($, false) }
       await seedSearch($)
       await openPane($, true, e.presentation.columns)
-      claimFocus($).catch(ignore)
+      claimFocus($, e.presentation.columns).catch(ignore)
       return { text: 'Detail view opened. /tail-help lists the commands and keys.' }
     }
   }
@@ -769,12 +769,14 @@ async function openPane($: EngineInterface, focus: boolean, terminalColumns?: nu
 const FOCUS_TRIES = 5
 const FOCUS_RETRY_MS = 100
 
-async function claimFocus($: EngineInterface): Promise<void> {
+// Each try asks for the same width as the open it follows: an open without
+// one lets the engine fall back to its default.
+async function claimFocus($: EngineInterface, terminalColumns: number): Promise<void> {
   for (let i = 0; i < FOCUS_TRIES; i++) {
     await $.clock.sleep(FOCUS_RETRY_MS)
     const pane = (await $.ui.panes()).find(p => p.id === PANE)
     if (pane === undefined || !pane.isPlaced || pane.isFocused) return
-    await openPane($, true)
+    await openPane($, true, terminalColumns)
   }
 }
 
