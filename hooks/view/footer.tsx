@@ -264,12 +264,12 @@ function collapsedPlan(groups: FooterGroups, data: Ctx, layout: FooterLayout, co
 }
 
 // The keys a view does not draw: its own key (d in the detail view, t in the
-// turn list and on the team board), those that act on the detail turn outside
-// the detail view; on the team board the cursor and the board's own key too.
+// turn list, m on the team board), those that act on the detail turn outside
+// the detail view; on the team board the cursor too.
 const HIDDEN_KEYS: Record<'detail' | 'turns' | 'team', ReadonlySet<string>> = {
   detail: new Set(['detail']),
   turns: new Set(['prev', 'next', 'latest', 'copy', 'turns', 'expand', 'collapse']),
-  team: new Set(['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'turns', 'team', 'expand', 'collapse']),
+  team: new Set(['prev', 'next', 'latest', 'down', 'up', 'open', 'copy', 'team', 'expand', 'collapse']),
 }
 
 // The rows the footer of this pane draws, for the window's height: the plan
@@ -454,13 +454,13 @@ export function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): F
     views: [
       // Both view keys stay bound in every view: the key of the view the pane
       // is in is hidden and does nothing, so it never reaches the prompt.
-      key('turns', 't', 'turns', icons.keyTurns, isDetail, act.showTurns),
+      key('turns', 't', 'turns', icons.keyTurns, data.view !== 'turns', act.showTurns),
       key('detail', 'd', 'detail', icons.keyDetail, !isDetail, act.showDetail),
       key('search', 's', 'search', icons.keySearch, true, act.focusSearch),
       key('team', 'm', 'team', icons.keyTeam, hasTeam && data.view !== 'team', act.showTeam),
     ],
     expand: [
-      key('expand', 'e', 'expand', icons.keyExpand, isDetail && hasRows, act.expandAll),
+      key('expand', 'e', 'expand', icons.keyExpand, isDetail && hasRows && data.isAllExpanded !== true, act.expandAll),
       key('collapse', 'c', 'collapse', icons.keyCollapse, isDetail && hasRows, act.collapseAll),
     ],
     page: [
