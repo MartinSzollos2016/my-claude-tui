@@ -3,7 +3,7 @@
 import type { RenderChildren } from 'claude-code'
 import { hoverCard } from '../model/card'
 import { formatDuration, shortModel, treePrefix } from '../model/format'
-import { contentRows } from '../model/scroll'
+import { blockRows } from '../model/scroll'
 import type { Item, Turn } from '../model/types'
 import { displayWidth, durationBar, expandTabs, padEndDisplay } from '../model/width'
 import { C, modelColor, type ThemeKey } from '../theme'
@@ -111,7 +111,15 @@ type Line = {
   model?: string
   onPress: () => void
   // The lines of the card a hover on the row reveals.
-  card?: readonly string[]
+  // Built only for a row the window shows (lazy: the others never draw it).
+  card?: () => readonly string[] | undefined
+}
+
+// The rows drawn so far: counted on from the last count, not from the top.
+function rowsSoFar(data: Ctx): number {
+  const counted = (data.counted ??= { blocks: 0, rows: 0 })
+  for (; counted.blocks < data.layout.length; counted.blocks++) counted.rows += blockRows(data.layout[counted.blocks]!)
+  return counted.rows
 }
 
 // The cells the time of a timed row takes, right-aligned.
@@ -128,14 +136,19 @@ export function renderLine(
 ) {
   // The row's hover card goes to the pane's layer over the window, which
   // places it above the row or below it, where it fits.
-  if (line.card !== undefined)
-    data.cards?.push({
-      id: line.id,
-      lines: line.card,
-      row: contentRows(data.layout).total,
-      // Rows of a trace sit inside its first level's indent, however deep.
-      left: CARD_INDENT + (place === undefined ? 0 : TRACE_INDENT),
-    })
+  if (line.card !== undefined && data.cards !== undefined) {
+    const row = rowsSoFar(data)
+    const top = data.scrollTop ?? 0
+    const lines = row >= top && row < top + data.rows ? line.card() : undefined
+    if (lines !== undefined)
+      data.cards.push({
+        id: line.id,
+        lines,
+        row,
+        // Rows of a trace sit inside its first level's indent, however deep.
+        left: CARD_INDENT + (place === undefined ? 0 : TRACE_INDENT),
+      })
+  }
   data.layout.push({ kind: 'line', id: line.id })
   const { icons } = data
   const { Box, Button, Text } = el
