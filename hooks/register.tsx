@@ -94,6 +94,8 @@ const git = atom({ plugin: 'tail-view', key: 'git' } as const, null)
 const mode = atom({ plugin: 'tail-view', key: 'mode' } as const, null)
 const isWorking = atom({ plugin: 'tail-view', key: 'isWorking' } as const, false)
 const isBarHidden = atom({ plugin: 'tail-view', key: 'isBarHidden' } as const, false)
+// Whether the pane's footer shows its full key map (h); for the session only.
+const footerOpen = atom({ plugin: 'tail-view', key: 'footerOpen' } as const, false)
 const spinner = atom({ plugin: 'tail-view', key: 'spinner' } as const, null)
 
 const bump = ($: EngineInterface) => update($, tick, n => n + 1)
@@ -888,6 +890,7 @@ export const register: Register = on => {
       fullIds,
       isBarOff,
       field,
+      isFooterOpen,
     ] = await Promise.all([
       read($, tick),
       currentTurns($, true),
@@ -909,6 +912,7 @@ export const register: Register = on => {
       read($, fullBlocks),
       read($, isBarHidden),
       read($, searchField),
+      read($, footerOpen),
     ])
     const turns = turnsMemo.value
     const latest = turns.length - 1
@@ -973,6 +977,7 @@ export const register: Register = on => {
         cursor: cursorId,
         isFocused: e.props.isFocused,
         isBarShown: !isBarOff,
+        isFooterOpen,
         turnCursor: turnCursorAt,
         columns: e.props.bodyColumns,
         rows:
@@ -992,6 +997,7 @@ export const register: Register = on => {
       },
       {
         toggle: id => update($, expanded, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
+        toggleKeys: () => update($, footerOpen, open => !open).catch(ignore),
         prev: () => step(-1).catch(ignore),
         next: () => step(1).catch(ignore),
         latest: () => step(null).catch(ignore),

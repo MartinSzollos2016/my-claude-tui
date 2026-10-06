@@ -31,7 +31,8 @@ type FooterKey = {
 export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: FooterLayout, frame: ScrollFrame) {
   const { Box, Text } = el
   const { icons } = data
-  const plan = footerPlan(footerGroups(data, act, frame), layout, data.columns)
+  const groups = footerGroups(data, act, frame)
+  const plan = footerPlan(groups, layout, data.columns)
   const { leftWidth, page, isPageInRow } = plan
   const textOf = (k: FooterKey) => footerText(k, layout)
   // The gap between keys is part of the key before it (trailing cells of its
@@ -99,6 +100,36 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
         </Box>
       </Box>
     )
+  // Collapsed: one row of the keys that act now with the status at its end,
+  // or below it when both do not fit; the rest keep their hotkeys hidden.
+  if (data.isFooterOpen !== true) {
+    const collapsed = collapsedPlan(groups, data, layout, data.columns)
+    const keysWidth = displayWidth(collapsed.keys.map(textOf).join('  '))
+    const keysRow = keys(collapsed.keys)
+    return (
+      <Box key="footer" flexDirection="column" width={data.columns} backgroundColor={C.paneBackground}>
+        <Text key="footer-rule" color={C.muted}>
+          {icons.rule.repeat(data.columns)}
+        </Text>
+        {collapsed.isStatusInRow ? (
+          <Box key="footer-row-keys" flexDirection="row" width={inner}>
+            <Box key="footer-keys" flexDirection="row" flexShrink={0}>
+              {keysRow}
+            </Box>
+            {statusBox(inner - keysWidth)}
+          </Box>
+        ) : (
+          <Box key="footer-row-keys" flexDirection="row">
+            {keysRow}
+          </Box>
+        )}
+        {!collapsed.isStatusInRow && statusBox(inner)}
+        <Box key="footer-hidden" display="none">
+          {collapsed.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+        </Box>
+      </Box>
+    )
+  }
   return (
     <Box key="footer" flexDirection="column" width={data.columns} backgroundColor={C.paneBackground}>
       <Text key="footer-rule" color={C.muted}>
@@ -155,8 +186,9 @@ export function footerPlan(groups: FooterGroups, layout: FooterLayout, columns: 
   const isTwo = layout.columns === 'two'
   // The views row with the page keys at its end: the left column and the
   // separator (two gaps around it), then the expand keys.
-  const isPageInRow = (isTwo ? leftWidth + 5 : 0) + groupWidth(expand) + 2 + groupWidth(page) <= inner
-  const expandKeys = isPageInRow ? [...expand, ...page] : expand
+  const help = groups.help
+  const isPageInRow = (isTwo ? leftWidth + 5 : 0) + groupWidth([...expand, ...help]) + 2 + groupWidth(page) <= inner
+  const expandKeys = isPageInRow ? [...expand, ...page, ...help] : [...expand, ...help]
   const rows: FooterRow[] = isTwo
     ? [
         { id: '1', left: move, keys: cursor },
@@ -168,7 +200,7 @@ export function footerPlan(groups: FooterGroups, layout: FooterLayout, columns: 
         { id: 'views', keys: views },
         { id: 'expand', keys: expandKeys },
       ]
-  const all = [groups.move, groups.cursor, groups.views, groups.expand, groups.page].flat()
+  const all = allKeys(groups)
   return {
     rows: rows.filter(row => (row.left?.length ?? 0) + row.keys.length > 0),
     leftWidth,
@@ -176,6 +208,59 @@ export function footerPlan(groups: FooterGroups, layout: FooterLayout, columns: 
     isPageInRow,
     hidden: all.filter(k => !k.isShown),
   }
+}
+
+const allKeys = (groups: FooterGroups) =>
+  [groups.move, groups.cursor, groups.views, groups.expand, groups.page, groups.help].flat()
+
+// The keys a collapsed footer shows, by view, most wanted first; only those
+// that act now, as many as fit, `h` always last.
+const PRIORITY: Record<'detail' | 'turns' | 'team', readonly string[]> = {
+  detail: [
+    'prev',
+    'next',
+    'down',
+    'up',
+    'open',
+    'turns',
+    'pagedown',
+    'pageup',
+    'latest',
+    'expand',
+    'search',
+    'team',
+    'copy',
+  ],
+  turns: ['down', 'up', 'open', 'search', 'detail', 'pagedown', 'pageup', 'team'],
+  team: ['detail', 'turns', 'search', 'pagedown', 'pageup'],
+}
+
+type CollapsedPlan = { keys: FooterKey[]; hidden: FooterKey[]; isStatusInRow: boolean }
+
+function collapsedPlan(groups: FooterGroups, data: Ctx, layout: FooterLayout, columns: number): CollapsedPlan {
+  const all = allKeys(groups)
+  const byName = new Map(all.map(k => [k.key.slice('nav-'.length), k] as const))
+  const help = groups.help[0]!
+  const width = (k: FooterKey) => displayWidth(footerText(k, layout))
+  const inner = columns - STATUS_INSET
+  // The status keeps its place at the end of the row while it takes at most
+  // half of it; a longer one goes below and the keys get the whole row.
+  const statusCells = statusWidthOf(data) + KEY_GAP
+  const isStatusInRow = statusCells * 2 <= inner
+  const room = inner - width(help) - (isStatusInRow ? statusCells : 0)
+  const keys: FooterKey[] = []
+  let used = 0
+  for (const name of PRIORITY[data.view]) {
+    const k = byName.get(name)
+    if (k === undefined || !k.isOn) continue
+    const cells = width(k) + KEY_GAP
+    if (used + cells > room) continue
+    keys.push(k)
+    used += cells
+  }
+  keys.push(help)
+  const shown = new Set(keys)
+  return { keys, hidden: all.filter(k => !shown.has(k)), isStatusInRow }
 }
 
 // The keys a view does not draw: its own key (d in the detail view, t in the
@@ -192,6 +277,10 @@ const HIDDEN_KEYS: Record<'detail' | 'turns' | 'team', ReadonlySet<string>> = {
 export function footerRowsOf(data: Ctx, act: PaneActions): FooterLayout {
   const all = footerLayout(data.columns)
   const groups = footerGroups(data, act, { scrollTop: 0, windowRows: 1, total: 0, starts: {} })
+  if (data.isFooterOpen !== true) {
+    const plan = collapsedPlan(groups, data, all, data.columns)
+    return footerLayout(data.columns, plan.isStatusInRow ? 0 : 1)
+  }
   return footerLayout(data.columns, footerPlan(groups, all, data.columns).rows.length)
 }
 
@@ -231,6 +320,13 @@ function statusVariants(data: Ctx, place: string): StatusSegment[][] {
 }
 
 const joinWidth = (segments: readonly StatusSegment[], dot: string) => displayWidth(segments.map(s => s.text).join(dot))
+
+// The width of the fullest status, with `end` shown: the collapsed footer
+// decides from it whether the status fits beside the keys, before the
+// window (and so the place) is known.
+function statusWidthOf(data: Ctx): number {
+  return joinWidth(statusVariants(data, 'end')[0]!, ` ${data.icons.dot} `)
+}
 
 export function footerStatus(data: Ctx, room: number, frame: ScrollFrame) {
   const { icons } = data
@@ -288,8 +384,8 @@ function renderFooterKey(el: El, k: FooterKey, label: string, pad: number) {
 }
 
 // The keys by purpose: moving between turns, the cursor over rows, the views,
-// expanding and paging the window.
-type FooterGroups = Record<'move' | 'cursor' | 'views' | 'expand' | 'page', FooterKey[]>
+// expanding and paging the window, and the key that shows them all.
+type FooterGroups = Record<'move' | 'cursor' | 'views' | 'expand' | 'page' | 'help', FooterKey[]>
 
 export function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): FooterGroups {
   const { icons } = data
@@ -377,6 +473,16 @@ export function footerGroups(data: Ctx, act: PaneActions, frame: ScrollFrame): F
         frame.scrollTop < lastTop,
         () => act.scroll(paged(1)),
         icons.pageDown,
+      ),
+    ],
+    help: [
+      key(
+        'keys',
+        'h',
+        data.isFooterOpen === true ? 'less' : 'keys',
+        data.isFooterOpen === true ? icons.times : '?',
+        true,
+        act.toggleKeys,
       ),
     ],
   }
