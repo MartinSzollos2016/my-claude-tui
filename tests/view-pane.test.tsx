@@ -1138,23 +1138,28 @@ describe('own scroll', () => {
     }
   })
 
-  test('a short inline pane keeps the header line, a window of rows and a one-row footer', () => {
+  test('a short inline pane keeps the header line, a window of rows and a collapsed or bare footer', () => {
     const footerRows = (tree: Node) =>
       kids(byKey(tree, 'footer')).filter(n => n.props['key'] !== 'footer-hidden').length
-    // Inline above the prompt the engine spares few rows: the full footer and
-    // header would leave the window two rows, so the pane goes compact.
-    for (const rows of [6, 8, 9]) {
+    // Inline above the prompt the engine spares few rows: the prompt line goes
+    // first (9 rows keep the full footer), then the footer steps down to the
+    // collapsed one (8 rows) and to one bare row of keys with h (6 rows).
+    for (const [rows, footer] of [
+      [6, 1],
+      [8, 2],
+      [9, 4],
+    ] as const) {
       const short = pane({ placement: 'inline', rows, isFocused: true })
       expect(short.props['height'], `${rows}`).toBe(rows)
       expect(byKey(short, 'pane-header')?.props['height']).toBe(1)
       expect(byKey(byKey(short, 'pane-header'), 'brand-mark')).toBeDefined()
       expect(byKey(short, 'prompt')).toBeUndefined()
-      expect(footerRows(short)).toBe(1)
-      expect(byKey(short, 'footer-rule')).toBeUndefined()
+      expect(footerRows(short), `${rows}`).toBe(footer)
       expect(text(byKey(short, 'footer-status'))).toContain('keys on')
+      if (footer < 4) expect(byKey(byKey(short, 'footer-row-keys'), 'nav-keys')).toBeDefined()
       // Every key keeps its hotkey, drawn or not.
       expect(byKey(short, 'nav-turns')?.props['hotkey']).toBe('t')
-      expect(byKey(short, 'pane-window')?.props['height']).toBe(rows - 2)
+      expect(byKey(short, 'pane-window')?.props['height']).toBe(rows - 1 - footer)
     }
     // With room for the full layout an inline pane draws as a docked one.
     const tall = pane({ placement: 'inline', rows: 14 })
@@ -1390,3 +1395,42 @@ describe('pane budget with everything on', () => {
 })
 
 const foldedStats = [{ prompt: '日本語 fold', durationMs: 9_000, endedAt: 0, inputTokens: 3, outputTokens: 4 }]
+
+describe('footer modes by room', () => {
+  const footerOf = (extra: Record<string, unknown>) =>
+    byKey(renderPane(el, { ...base, placement: 'inline', isFocused: true, ...extra }, act), 'footer')!
+  const drawn = (f: Node) => (f.children as Node[]).filter(n => n && n.props['key'] !== 'footer-hidden')
+  const shown = (f: Node) =>
+    nodes(f)
+      .filter(n => n.type === 'Button' && !nodes(byKey(f, 'footer-hidden')).includes(n))
+      .map(n => String(n.props['hotkey']))
+
+  test('a pane of five rows keeps a bare footer with h', () => {
+    const f = footerOf({ rows: 5, isFooterOpen: false })
+    expect(drawn(f)).toHaveLength(1)
+    expect(shown(f).at(-1)).toBe('h')
+    expect(text(f)).toMatch(/1\/2/)
+  })
+
+  test('an expanded footer without room falls back to the collapsed one', () => {
+    const f = footerOf({ rows: 10, columns: 60, isFooterOpen: true })
+    expect(byKey(f, 'footer-row-keys')).toBeDefined()
+    expect(byKey(f, 'nav-keys')?.props['label']).toMatch(/^less/)
+  })
+
+  test('40 columns, 25 rows: the collapsed footer shows its keys', () => {
+    expect(shown(footerOf({ rows: 14, columns: 40, isFooterOpen: false })).length).toBeGreaterThan(1)
+  })
+
+  test('the window height matches the footer drawn in every mode', () => {
+    for (const rows of [5, 8, 12, 30])
+      for (const isFooterOpen of [false, true]) {
+        const tree = renderPane(el, { ...base, placement: 'inline', rows, columns: 60, isFooterOpen }, act)
+        const header = Number(byKey(tree, 'pane-header')?.props['height'] ?? 0)
+        const f = byKey(tree, 'footer')!
+        expect(byKey(tree, 'pane-window')?.props['height'], `${rows} ${isFooterOpen}`).toBe(
+          Math.max(1, rows - header - drawn(f).length),
+        )
+      }
+  })
+})
