@@ -59,12 +59,28 @@ function fitRows<T>(
 
 // The rows of a turn (no `path`) or of a trace (the guides of its parent
 // levels): single items, and folded runs of calls.
-export function renderRows(el: El, items: readonly Item[], data: Ctx, act: PaneActions, path?: readonly boolean[]) {
+export function renderRows(
+  el: El,
+  items: readonly Item[],
+  data: Ctx,
+  act: PaneActions,
+  path?: readonly boolean[],
+  nameWidth = nameWidthOf(items),
+) {
   const rows = groupRuns(items)
   return fitRows(el, rows, data, rows[0]?.id ?? 'rows', path === undefined ? 0 : TRACE_INDENT, (row, i) => {
     const at = path === undefined ? undefined : { path, isLast: i === rows.length - 1 }
-    return row.kind === 'group' ? renderGroup(el, row, data, act, at) : renderItem(el, row, data, act, at)
+    return row.kind === 'group' ? renderGroup(el, row, data, act, at) : renderItem(el, row, data, act, at, nameWidth)
   })
+}
+
+// The name column of a list: as wide as its widest name, at most NAME_CELLS,
+// so the summaries of one turn, trace or folded run start in one column.
+const NAME_CELLS = 12
+
+export function nameWidthOf(items: readonly Item[], extra: readonly string[] = []): number {
+  const names = [...items.map(itemName), ...extra]
+  return Math.min(NAME_CELLS, Math.max(0, ...names.map(name => displayWidth(name))))
 }
 
 // A folded run: `Read ×7 · 4 files` with the total time as one bar. Open, it
@@ -86,10 +102,17 @@ function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, plac
     isOpen && (
       <Box flexDirection="column">
         {fitRows(el, group.items, data, group.id, TRACE_INDENT, (child, i) =>
-          renderItem(el, child, data, act, {
-            path: place === undefined ? [] : [...place.path, !place.isLast],
-            isLast: i === group.items.length - 1,
-          }),
+          renderItem(
+            el,
+            child,
+            data,
+            act,
+            {
+              path: place === undefined ? [] : [...place.path, !place.isLast],
+              isLast: i === group.items.length - 1,
+            },
+            nameWidthOf(group.items),
+          ),
         )}
       </Box>
     )
@@ -112,7 +135,7 @@ function renderGroup(el: El, group: GroupItem, data: Ctx, act: PaneActions, plac
   )
 }
 
-function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: TreePlace) {
+function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place: TreePlace | undefined, nameWidth: number) {
   const trunc = cutter(data.icons)
   const { icons } = data
   const isOpen = data.expanded.has(item.id)
@@ -120,8 +143,9 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
   const name = itemName(item)
   const summary = withWorkflowNote(item, itemSummary(item), data)
 
+  // Only a row that opens has a chevron; the others keep its column blank.
   const chevron = !canOpen
-    ? icons.selected
+    ? ' '
     : isSubagent(item)
       ? isOpen
         ? icons.expanded
@@ -137,7 +161,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place?: Tre
       ? statusMark(itemStatus(item, { ...data, isAgentRunning: isAgentRunning(agent) }), data.frame, icons)
       : undefined
 
-  const prefix = `${padEndDisplay(name, 12)} - `
+  const prefix = `${padEndDisplay(name, nameWidth)}  `
   return renderLine(
     el,
     {
