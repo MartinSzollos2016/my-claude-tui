@@ -1168,6 +1168,25 @@ describe('keyboard cursor', () => {
     expect(world.focused).toContain('t0:o0')
   })
 
+  test('Esc in the search field leaves the field, not the pane', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    const focused = (isFocused: boolean) => ({ ...PANE_EVENT, props: { ...PANE_EVENT.props, isFocused } })
+    await run('ui.render', $, focused(true))
+    // The plugin's own $.ui.focus raises no ui.focus hook of its own (seen
+    // live), so `s` alone must mark the field.
+    await press($, 'nav-search')
+    await run('ui.render', $, focused(true))
+    const before = world.focusRequests
+    await run('ui.render', $, focused(false))
+    await settle()
+    expect(world.focusRequests).toBe(before + 1)
+    // Once back, a second Esc (outside the field) returns the keys for good.
+    await run('ui.render', $, focused(true))
+    await run('ui.render', $, focused(false))
+    await settle()
+    expect(world.focusRequests).toBe(before + 1)
+  })
+
   test('a Tab or a click that moves the ring onto a row moves the cursor there', async () => {
     const { $ } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
     await draw($)
