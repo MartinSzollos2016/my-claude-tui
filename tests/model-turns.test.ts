@@ -250,10 +250,13 @@ describe('incrementalTurns', () => {
     expect(before.messages).toBeGreaterThan(0)
     expect(before.tools).toBeGreaterThan(0)
     turns.build(copy(rows))
-    expect(turns.work).toEqual(before)
+    // Pieces built again: none. (A pending call, or a fixture id reused with
+    // another input, is serialized again to be compared; that is not work.)
+    const built = (w: typeof before) => ({ messages: w.messages, tools: w.tools })
+    expect(built(turns.work)).toEqual(built(before))
     rows.push({ role: 'assistant', text: 'One more.', toolUses: [{ ...read, tool_use_id: 'n1' }] })
     turns.build(copy(rows))
-    expect(turns.work).toEqual({ messages: before.messages + 1, tools: before.tools + 1 })
+    expect(built(turns.work)).toEqual({ messages: before.messages + 1, tools: before.tools + 1 })
   })
 })
 
@@ -440,5 +443,41 @@ describe('turn starts with repeated replies', () => {
       'Message from agent',
       'second',
     ])
+  })
+})
+
+describe('incremental tool pieces', () => {
+  const rows = (tail: string): SessionMessage[] => [
+    { role: 'user', text: 'go', toolUses: [] },
+    {
+      role: 'assistant',
+      text: '',
+      toolUses: Array.from({ length: 20 }, (_, n) => ({
+        tool_use_id: `b${n}`,
+        tool: 'Bash',
+        input: { command: `echo ${n}` },
+        text: 'ok',
+      })),
+    },
+    { role: 'assistant', text: tail, toolUses: [] },
+  ]
+
+  test('a tail change re-serializes no finished call', () => {
+    const turns = incrementalTurns()
+    turns.build(rows('one'))
+    const before = turns.work.serialized
+    expect(before).toBe(20)
+    turns.build(structuredClone(rows('two')))
+    expect(turns.work.serialized).toBe(before)
+  })
+
+  test('a call that finishes is rebuilt', () => {
+    const turns = incrementalTurns()
+    const pending = rows('x')
+    delete (pending[1]!.toolUses[0] as { text?: string }).text
+    const first = turns.build(pending)
+    expect(first[0]!.items.find(i => i.id === 'b0')).toMatchObject({ isPending: true })
+    const done = turns.build(rows('x'))
+    expect(done[0]!.items.find(i => i.id === 'b0')).toMatchObject({ isPending: false, resultText: 'ok' })
   })
 })
