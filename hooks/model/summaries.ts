@@ -38,8 +38,8 @@ export function toolSummary(name: string, f: Record<string, unknown>): string {
     case 'Bash': {
       const desc = str(f, 'description')
       const cmd = str(f, 'command')
-      if (desc && cmd) return truncate(`${desc}: ${cmd}`, 60)
-      if (desc || cmd) return truncate(desc || cmd, 60)
+      if (desc && cmd) return truncate(`${desc}: ${cmd}`, SUMMARY_CHARS)
+      if (desc || cmd) return truncate(desc || cmd, SUMMARY_CHARS)
       return 'Bash'
     }
     case 'Grep':
@@ -158,6 +158,10 @@ export function toolCategory(name: string): ToolCategory {
 }
 
 // Display name for a row: the subagent type for Agent calls, the tool otherwise.
+// The longest summary of a command or a message: enough for a wide pane's
+// row, which cuts it to the room it has.
+const SUMMARY_CHARS = 200
+
 export function itemName(item: Item): string {
   if (item.kind === 'output') return 'Output'
   if (SUBAGENT_TOOLS.has(item.tool)) return str(item.input, 'subagent_type') || 'Subagent'
@@ -166,7 +170,7 @@ export function itemName(item: Item): string {
 }
 
 export function itemSummary(item: Item): string {
-  if (item.kind === 'output') return truncate(item.text, 40)
+  if (item.kind === 'output') return truncate(item.text, SUMMARY_CHARS)
   if (SUBAGENT_TOOLS.has(item.tool)) return str(item.input, 'description') || item.summary
   return item.summary === item.tool ? '' : item.summary
 }
