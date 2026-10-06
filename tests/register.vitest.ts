@@ -821,6 +821,51 @@ describe('detail pane', () => {
       expect(text(await draw($))).toContain('Resumed answer')
     })
 
+    test('a collapsed finished agent is read once for its failures, a running one not at all', async () => {
+      const { $, world } = fakeEngine({
+        messages: spawn('agent-done'),
+        agentMessages: { 'agent-done': reply('Answer') },
+        agents: [{ id: 'agent-done', description: 'Job', type: 'Explore', status: 'completed' }],
+      })
+      await draw($)
+      await draw($)
+      expect(world.calls.filter(c => c === 'messages:agent-done')).toHaveLength(1)
+      const live = fakeEngine({
+        messages: spawn('agent-run'),
+        agentMessages: { 'agent-run': reply('Working') },
+        agents: [{ id: 'agent-run', description: 'Job', type: 'Explore', status: 'running' }],
+      })
+      await draw(live.$)
+      expect(live.world.calls).not.toContain('messages:agent-run')
+    })
+
+    test('a collapsed subagent the engine does not list is not read', async () => {
+      const { $, world } = fakeEngine({ messages: spawn('agent-old'), agentMessages: { 'agent-old': reply('Old') } })
+      await draw($)
+      expect(world.calls).not.toContain('messages:agent-old')
+    })
+
+    test("e opens a finished subagent's trace rows too, the cursor walks only open rows", async () => {
+      const { $ } = fakeEngine({
+        messages: spawn('agent-x'),
+        agentMessages: {
+          'agent-x': [
+            { role: 'user', text: 'Go', toolUses: [] },
+            {
+              role: 'assistant',
+              text: '',
+              toolUses: [{ tool_use_id: 'c1', tool: 'Bash', input: { command: 'ls' }, text: 'listing' }],
+            },
+          ],
+        },
+        agents: [{ id: 'agent-x', description: 'Job', type: 'Explore', status: 'completed' }],
+      })
+      await press($, 'nav-expand')
+      const all = text(await draw($))
+      expect(all).toContain('Execution Trace')
+      expect(all).toContain('listing')
+    })
+
     test('reuses a running agent trace until it changes', async () => {
       let reads = 0
       const steady: SessionMessage = {
