@@ -87,22 +87,28 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
       </Box>
     )
   }
-  if (layout.isCompact === true)
+  // Bare: one row, no rule, the collapsed keys with h and the status at its
+  // shortest; a pane too short for more keeps every key by its hotkey.
+  if (layout.mode === 'bare') {
+    const bare = collapsedPlan(groups, data, layout, data.columns, { isRowForced: true })
+    const keysWidth = displayWidth(bare.keys.map(textOf).join('  '))
     return (
       <Box key="footer" flexDirection="column" width={data.columns} backgroundColor={C.paneBackground}>
-        {statusBox(inner)}
+        <Box key="footer-row-keys" flexDirection="row" width={inner}>
+          <Box key="footer-keys" flexDirection="row" flexShrink={0}>
+            {keys(bare.keys)}
+          </Box>
+          {statusBox(inner - keysWidth)}
+        </Box>
         <Box key="footer-hidden" display="none">
-          {[
-            ...plan.rows.flatMap(row => [...(row.left ?? []), ...row.keys]),
-            ...(isPageInRow ? [] : page),
-            ...plan.hidden,
-          ].map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+          {bare.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
         </Box>
       </Box>
     )
+  }
   // Collapsed: one row of the keys that act now with the status at its end,
   // or below it when both do not fit; the rest keep their hotkeys hidden.
-  if (data.isFooterOpen !== true) {
+  if (data.isFooterOpen !== true || layout.mode === 'collapsed') {
     const collapsed = collapsedPlan(groups, data, layout, data.columns)
     const keysWidth = displayWidth(collapsed.keys.map(textOf).join('  '))
     const keysRow = keys(collapsed.keys)
@@ -237,7 +243,14 @@ const PRIORITY: Record<'detail' | 'turns' | 'team', readonly string[]> = {
 
 type CollapsedPlan = { keys: FooterKey[]; hidden: FooterKey[]; isStatusInRow: boolean }
 
-function collapsedPlan(groups: FooterGroups, data: Ctx, layout: FooterLayout, columns: number): CollapsedPlan {
+// `isRowForced`: the bare row, the status in it at its shortest.
+function collapsedPlan(
+  groups: FooterGroups,
+  data: Ctx,
+  layout: FooterLayout,
+  columns: number,
+  options: { isRowForced?: boolean } = {},
+): CollapsedPlan {
   const all = allKeys(groups)
   const byName = new Map(all.map(k => [k.key.slice('nav-'.length), k] as const))
   const help = groups.help[0]!
@@ -245,8 +258,11 @@ function collapsedPlan(groups: FooterGroups, data: Ctx, layout: FooterLayout, co
   const inner = columns - STATUS_INSET
   // The status keeps its place at the end of the row while it takes at most
   // half of it; a longer one goes below and the keys get the whole row.
-  const statusCells = statusWidthOf(data) + KEY_GAP
-  const isStatusInRow = statusCells * 2 <= inner
+  const isStatusInRow = options.isRowForced === true || (statusWidthOf(data) + KEY_GAP) * 2 <= inner
+  const statusCells =
+    (options.isRowForced === true
+      ? joinWidth(statusVariants(data, '').at(-1)!, ` ${data.icons.dot} `)
+      : statusWidthOf(data)) + KEY_GAP
   const room = inner - width(help) - (isStatusInRow ? statusCells : 0)
   const keys: FooterKey[] = []
   let used = 0
@@ -274,12 +290,18 @@ const HIDDEN_KEYS: Record<'detail' | 'turns' | 'team', ReadonlySet<string>> = {
 
 // The rows the footer of this pane draws, for the window's height: the plan
 // of the keys does not depend on where the window stands.
-export function footerRowsOf(data: Ctx, act: PaneActions): FooterLayout {
+// The footers a pane steps down through when it is short of rows: the one
+// the person asked for, the collapsed one, one bare row.
+export type FooterMode = 'full' | 'collapsed' | 'bare'
+
+export function footerRowsOf(data: Ctx, act: PaneActions, mode: FooterMode = 'full'): FooterLayout {
   const all = footerLayout(data.columns)
+  if (mode === 'bare') return { ...footerLayout(data.columns, 0), rows: 1, mode: 'bare' }
   const groups = footerGroups(data, act, { scrollTop: 0, windowRows: 1, total: 0, starts: {} })
-  if (data.isFooterOpen !== true) {
+  if (mode === 'collapsed' || data.isFooterOpen !== true) {
     const plan = collapsedPlan(groups, data, all, data.columns)
-    return footerLayout(data.columns, plan.isStatusInRow ? 0 : 1)
+    const layout = footerLayout(data.columns, plan.isStatusInRow ? 0 : 1)
+    return mode === 'collapsed' ? { ...layout, mode: 'collapsed' } : layout
   }
   return footerLayout(data.columns, footerPlan(groups, all, data.columns).rows.length)
 }

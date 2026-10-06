@@ -3,7 +3,6 @@
 import { ICON_SETS } from '../icons'
 import { C, contextColor, modelColor } from '../theme'
 import { contextMeter, formatClock, formatDuration, formatTokens, shortModel } from '../model/format'
-import { compactFooter } from '../model/footer'
 import { clampScroll, contentRows, overflowRows, type ScrollFrame } from '../model/scroll'
 import { reserveSections } from '../model/sections'
 import { EMPTY_TURN_TEXT } from '../model/turn-table'
@@ -24,7 +23,7 @@ import {
   type PaneData,
   type PaneParts,
 } from './context'
-import { focusChord, footerRowsOf, renderFooter, STATUS_INSET } from './footer'
+import { focusChord, footerRowsOf, renderFooter, STATUS_INSET, type FooterMode } from './footer'
 import { nameWidthOf, renderRows } from './items'
 import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, type El } from './kit'
 import { renderThinking } from './row'
@@ -122,14 +121,21 @@ const MIN_INLINE_WINDOW = 4
 function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   const { Box, Text } = el
   const { icons } = data
-  const full = footerRowsOf(data, act)
   const sumRows = (list: PaneParts['header']) => list.reduce((sum, part) => sum + part.rows, 0)
-  // Inline above the prompt the engine spares few rows: a pane that would
-  // leave its window under MIN_INLINE_WINDOW keeps the header's first line and
-  // the footer's status line only.
-  const isCompact = data.placement === 'inline' && data.rows - sumRows(parts.header) - full.rows < MIN_INLINE_WINDOW
-  const layout = isCompact ? compactFooter(full) : full
-  const wanted = isCompact ? parts.header.filter((part, i) => i === 0 || part.isKept === true) : parts.header
+  const short = parts.header.filter((part, i) => i === 0 || part.isKept === true)
+  // Inline above the prompt the engine spares few rows: the first of these
+  // that leaves the window MIN_INLINE_WINDOW rows wins, the header's prompt
+  // line dropped before the footer steps down; the bare row is the floor.
+  const tries: [PaneParts['header'], FooterMode][] = [
+    [parts.header, 'full'],
+    [short, 'full'],
+    [short, 'collapsed'],
+    [short, 'bare'],
+  ]
+  const fits = ([head, mode]: [PaneParts['header'], FooterMode]) =>
+    data.placement !== 'inline' || data.rows - sumRows(head) - footerRowsOf(data, act, mode).rows >= MIN_INLINE_WINDOW
+  const [wanted, mode] = tries.find(fits) ?? [short, 'bare']
+  const layout = footerRowsOf(data, act, mode)
   // A pane too short for the header and a row of content drops the header,
   // all but the parts it keeps.
   const header = data.rows - sumRows(wanted) - layout.rows >= 1 ? wanted : wanted.filter(part => part.isKept === true)
