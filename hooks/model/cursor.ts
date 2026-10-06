@@ -11,15 +11,22 @@ export type ChildrenOf = (agentId: string) => readonly Item[] | undefined
 
 // The ids of the rows the cursor can stand on, top to bottom: a folded run
 // is one row and shows its calls only while open; a subagent's trace rows
-// count only while the subagent is open.
-export function cursorRows(items: readonly Item[], open: ReadonlySet<string>, childrenOf: ChildrenOf): string[] {
+// count only while the subagent is open. `seen` stops a trace that names an
+// agent already walked (itself, or a cycle of two).
+export function cursorRows(
+  items: readonly Item[],
+  open: ReadonlySet<string>,
+  childrenOf: ChildrenOf,
+  seen = new Set<string>(),
+): string[] {
   const ids: string[] = []
   for (const row of groupRuns(items)) {
     ids.push(row.id)
     if (row.kind === 'group') {
       if (open.has(row.id)) ids.push(...row.items.map(item => item.id))
-    } else if (isSubagent(row) && open.has(row.id)) {
-      ids.push(...cursorRows(childrenOf(row.agentId) ?? [], open, childrenOf))
+    } else if (isSubagent(row) && open.has(row.id) && !seen.has(row.agentId)) {
+      seen.add(row.agentId)
+      ids.push(...cursorRows(childrenOf(row.agentId) ?? [], open, childrenOf, seen))
     }
   }
   return ids

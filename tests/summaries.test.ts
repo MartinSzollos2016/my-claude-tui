@@ -6,7 +6,7 @@ import { clampText } from '../hooks/model/clamp'
 import { formatClock, shortMode } from '../hooks/model/format'
 import { itemName, itemSummary, toolCategory, toolSummary } from '../hooks/model/summaries'
 import { resultLine } from '../hooks/model/transcript'
-import { traceStats } from '../hooks/model/turns'
+import { buildTurns, traceStats } from '../hooks/model/turns'
 import type { Item } from '../hooks/model/types'
 
 const cases: [string, Record<string, unknown>, string][] = [
@@ -175,5 +175,17 @@ describe('formatting edges', () => {
 
   test('helpText names the page keys of the pane', () => {
     expect(helpText()).toContain('f/b page the pane down/up')
+  })
+})
+
+describe('tabs in row texts', () => {
+  test('a tab in a command, an output or a prompt never reaches a row', () => {
+    expect(toolSummary('Bash', { command: 'printf "a\tb"' })).not.toContain('\t')
+    expect(itemSummary({ kind: 'output', id: 'o', text: 'a\tb' })).not.toContain('\t')
+    const turns = buildTurns([
+      { role: 'user', text: 'fix\tthis', toolUses: [] },
+      { role: 'assistant', text: 'ok', toolUses: [] },
+    ])
+    expect(turns[0]!.prompt).not.toContain('\t')
   })
 })

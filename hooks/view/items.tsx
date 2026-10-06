@@ -81,7 +81,8 @@ function failedUnder(items: readonly Item[], traces: Ctx['traces'], seen = new S
   let failed = 0
   for (const item of items) {
     if (item.kind !== 'tool') continue
-    if (item.isError) failed += 1
+    // A call the person interrupted is not a failure.
+    if (item.isError && item.isInterrupted !== true) failed += 1
     if (isSubagent(item) && !seen.has(item.agentId)) {
       seen.add(item.agentId)
       const trace = traces.get(item.agentId)

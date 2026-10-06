@@ -2,9 +2,14 @@
 // and the category each tool falls in.
 import { SUBAGENT_TOOLS, type Item } from './types'
 import { lineCount, num, str } from './values'
-import { basename, shortPath, truncate } from './width'
+import { basename, expandTabs, shortPath, truncate } from './width'
 
+// A call's one-line summary, tabs expanded: a row draws it in its own cells.
 export function toolSummary(name: string, f: Record<string, unknown>): string {
+  return expandTabs(summaryOf(name, f))
+}
+
+function summaryOf(name: string, f: Record<string, unknown>): string {
   switch (name) {
     case 'Read': {
       const fp = str(f, 'file_path')
@@ -170,7 +175,7 @@ export function itemName(item: Item): string {
 }
 
 export function itemSummary(item: Item): string {
-  if (item.kind === 'output') return truncate(item.text, SUMMARY_CHARS)
-  if (SUBAGENT_TOOLS.has(item.tool)) return str(item.input, 'description') || item.summary
+  if (item.kind === 'output') return truncate(expandTabs(item.text), SUMMARY_CHARS)
+  if (SUBAGENT_TOOLS.has(item.tool)) return expandTabs(str(item.input, 'description')) || item.summary
   return item.summary === item.tool ? '' : item.summary
 }
