@@ -140,14 +140,14 @@ export function renderLine(
     const row = rowsSoFar(data)
     const top = data.scrollTop ?? 0
     const lines = row >= top && row < top + data.rows ? line.card() : undefined
-    if (lines !== undefined)
-      data.cards.push({
-        id: line.id,
-        lines,
-        row,
-        // Rows of a trace sit inside its first level's indent, however deep.
-        left: CARD_INDENT + (place === undefined ? 0 : TRACE_INDENT),
-      })
+    data.cards.push({
+      id: line.id,
+      ...(lines === undefined ? {} : { lines }),
+      build: line.card,
+      row,
+      // Rows of a trace sit inside its first level's indent, however deep.
+      left: CARD_INDENT + (place === undefined ? 0 : TRACE_INDENT),
+    })
   }
   data.layout.push({ kind: 'line', id: line.id })
   const { icons } = data
