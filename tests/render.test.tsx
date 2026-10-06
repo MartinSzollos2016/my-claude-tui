@@ -596,12 +596,12 @@ describe('detail pane', () => {
       const labels = (await ui.findAll({ type: 'Button' }))
         .filter(b => String(b.key ?? '').startsWith('turn-'))
         .map(b => String(b.props['label']))
-      // The selected (latest) turn is drawn as bold text, the others as buttons.
+      // Every turn is a button, newest first; the selected (latest) one too.
       expect(await ui.find({ text: /#3.*Thanks/ })).toBeDefined()
-      expect(labels.length).toBe(2)
-      expect(labels[1]).toContain('#1')
-      expect(labels[1]).toContain('Fix the bug')
-      expect(labels[1]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
+      expect(labels.length).toBe(3)
+      expect(labels[2]).toContain('#1')
+      expect(labels[2]).toContain('Fix the bug')
+      expect(labels[2]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
 
       await ui.press({ key: 'turn-0' })
       expect(await ui.find({ text: /Turns \(3\)/ })).toBeUndefined()

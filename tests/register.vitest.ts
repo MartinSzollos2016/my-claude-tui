@@ -1152,7 +1152,7 @@ describe('keyboard cursor', () => {
     return found
   }
 
-  test('j and k move the cursor and mark the row, without taking the keyboard focus', async () => {
+  test('j and k move the cursor, mark the row and take the engine focus ring with them', async () => {
     const { $, world } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
     expect(markOf(await draw($))).toEqual([])
     await press($, 'nav-down')
@@ -1163,7 +1163,55 @@ describe('keyboard cursor', () => {
     expect(markOf(await draw($))).toEqual(['a1'])
     await press($, 'nav-up')
     expect(markOf(await draw($))).toEqual(['r1'])
+    // The ring follows the cursor, so Enter presses the row under it.
+    expect(world.focused.at(-1)).toBe('r1')
+    expect(world.focused).toContain('t0:o0')
+  })
+
+  test('a Tab or a click that moves the ring onto a row moves the cursor there', async () => {
+    const { $ } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
+    await draw($)
+    await run(
+      'ui.focus',
+      $,
+      { component: 'Pane', requestId: 'tail', element: 'r1', origin: { kind: 'person' } },
+      async () => ({}),
+    )
+    expect(markOf(await draw($))).toEqual(['r1'])
+    await run(
+      'ui.focus',
+      $,
+      { component: 'Pane', requestId: 'tail', element: 'nav-down', origin: { kind: 'person' } },
+      async () => ({}),
+    )
+    expect(markOf(await draw($))).toEqual(['r1'])
+  })
+
+  test('the cursor moves on a row the ring cannot take', async () => {
+    const { $, world } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
+    world.focusDenied = ['t0:o0']
+    await draw($)
+    await press($, 'nav-down')
+    expect(markOf(await draw($))).toEqual(['t0:o0'])
     expect(world.focused).toEqual([])
+  })
+
+  test('in the turn list j moves the ring onto the turn row, the selected turn a button too', async () => {
+    const { $, world } = fakeEngine({
+      messages: [
+        ...main,
+        { role: 'user', text: 'Second', toolUses: [] },
+        { role: 'assistant', text: 'two', toolUses: [] },
+      ],
+    })
+    await press($, 'nav-turns')
+    await draw($)
+    await press($, 'nav-down')
+    await press($, 'nav-down')
+    const key = world.focused.at(-1)
+    expect(key).toMatch(/^turn-\d+$/)
+    const tree = await draw($)
+    for (const row of ['turn-0', 'turn-1']) expect(byKey(tree, row)?.type, row).toBe('Button')
   })
 
   test('o opens and closes the row under the cursor, a subagent adds its trace rows', async () => {

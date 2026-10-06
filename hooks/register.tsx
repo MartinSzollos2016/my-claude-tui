@@ -535,9 +535,20 @@ async function copyBlock($: EngineInterface, text: string, surface?: RenderSurfa
   $.ui.toast(copied.isCopied ? 'Copied' : `Not copied: ${copied.reason}`)
 }
 
-// Moves the keyboard cursor one row along `ids`. The engine's focus ring is
-// not used: it draws the focused button in reverse video of the terminal's
-// own colors, which can be unreadable under the other theme.
+// The rows the detail view drew last, by the key the engine's focus ring
+// names them: a Tab or a click that moves the ring onto one moves the row
+// cursor there, and the cursor moves the ring, so Enter presses the row
+// under the cursor.
+let drawnRowIds: ReadonlySet<string> = new Set()
+
+// Moves the engine's focus ring onto the element `key`; a row drawn as Text
+// cannot take it, and the cursor stays its own mark.
+async function ringTo($: EngineInterface, key: string | null): Promise<void> {
+  if (key === null) return
+  await $.ui.focus({ requestId: PANE, key }).catch(ignore)
+}
+
+// Moves the keyboard cursor one row along `ids`, and the focus ring with it.
 // The detail view's content scrolls so the row the cursor lands on stays in
 // the window (`at`: the window as drawn).
 async function moveRowCursor(
@@ -548,6 +559,7 @@ async function moveRowCursor(
 ): Promise<void> {
   const landed = await update($, cursor, cur => stepCursor(ids, cur, delta, at))
   await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
+  await ringTo($, landed)
 }
 
 // Moves the turn list's cursor one turn along the rows the list draws (newest
@@ -560,6 +572,7 @@ async function moveTurnCursor($: EngineInterface, delta: number, at: ScrollFrame
     return id === null ? null : Number(id.slice('turn:'.length))
   })
   await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
+  await ringTo($, landed === null ? null : `turn-${landed}`)
 }
 
 // Where each view's window stood at its last drawing; a reload starts over
@@ -999,6 +1012,7 @@ export const register: Register = on => {
       return trace && 'items' in trace ? trace.items : undefined
     }
     const rowIds = cursorRows(turn?.items ?? [], open, childrenOf)
+    if (view === 'detail') drawnRowIds = new Set(rowIds)
     const cursorId = stored !== null && rowIds.includes(stored) ? stored : null
     const cursorText = cursorId === null ? undefined : rowText(turn?.items ?? [], cursorId, childrenOf, icons)
 
@@ -1090,6 +1104,16 @@ export const register: Register = on => {
         toggleFull: id => update($, fullBlocks, ids => toggleId(ids, id, MAX_EXPANDED)).catch(ignore),
       },
     )
+  })
+
+  // The ring moved by a Tab or a click onto a row takes the row cursor along.
+  on('ui.focus', { requestId: PANE }, async ($, e, next) => {
+    const element = e.element
+    if (element !== undefined && drawnRowIds.has(element))
+      await update($, cursor, cur => (cur === element ? cur : element)).catch(ignore)
+    else if (element !== undefined && /^turn-\d+$/.test(element))
+      await update($, turnCursor, () => Number(element.slice('turn-'.length))).catch(ignore)
+    return next(e)
   })
 
   on('ui.scroll', { requestId: PANE }, ($, e) => scrollPane($, e))
