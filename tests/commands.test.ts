@@ -56,3 +56,34 @@ describe('helpText legend', () => {
     }
   })
 })
+
+describe('help legend and focus', () => {
+  test('the legend names everything the header draws', () => {
+    for (const icons of [ICON_SETS.nerd, ICON_SETS.unicode, ICON_SETS.ascii]) {
+      const help = helpText(icons)
+      for (const part of [
+        `${icons.wrench} tool calls`,
+        `${icons.output} outputs`,
+        `${icons.thinking} thinking blocks`,
+        `${icons.robot} a subagent`,
+        `${icons.token} tokens`,
+        'context use',
+        `${icons.clock} duration`,
+        'end time',
+      ])
+        expect(help, part).toContain(part)
+    }
+  })
+
+  test('help says how the pane gets the keys', () => {
+    expect(helpText()).toMatch(/ctrl\+x tab or a click gives the pane the keys/)
+  })
+
+  test('the legend in the ascii set is ASCII', () => {
+    const legend = helpText(ICON_SETS.ascii)
+      .split('\n')
+      .filter(line => line.startsWith('The header') || line.startsWith('at the right'))
+    expect(legend).toHaveLength(2)
+    expect(legend.join('')).toMatch(/^[\x20-\x7e]+$/)
+  })
+})
