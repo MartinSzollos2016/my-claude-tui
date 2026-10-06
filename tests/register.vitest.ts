@@ -1462,6 +1462,20 @@ describe('own scroll', () => {
   })
 })
 
+// Every node of a tree, keyed or not.
+const byKeyless = (tree: unknown): { type: string; props: Record<string, unknown> }[] => {
+  const out: { type: string; props: Record<string, unknown> }[] = []
+  const walk = (t: unknown) => {
+    if (Array.isArray(t)) t.forEach(walk)
+    else if (t !== null && typeof t === 'object' && 'props' in t) {
+      out.push(t as { type: string; props: Record<string, unknown> })
+      walk((t as { children?: unknown }).children)
+    }
+  }
+  walk(tree)
+  return out
+}
+
 describe('compact transcript', () => {
   const RESULT = {
     component: 'ToolResult',
@@ -1480,6 +1494,17 @@ describe('compact transcript', () => {
       isInterrupted: false,
     },
   }
+
+  test('a compact tool row never shrinks the tool name', async () => {
+    const { $ } = fakeEngine()
+    const long = {
+      ...USE,
+      props: { ...USE.props, input: { command: 'echo '.repeat(40), description: 'x'.repeat(80) } },
+    }
+    const tree = (await run('ui.render', $, long, async () => 'engine')) as Parameters<typeof text>[0]
+    const fixed = byKeyless(tree).filter(n => n.type === 'Box' && n.props['flexShrink'] === 0)
+    expect(fixed.some(n => text(n) === 'Bash')).toBe(true)
+  })
 
   test('draws one-line rows until /tail-compact turns it off', async () => {
     const { $ } = fakeEngine()

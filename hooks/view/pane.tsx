@@ -18,6 +18,7 @@ import {
   PANE_TEXT_BUDGET,
   textLine,
   tracesOf,
+  type CardSpot,
   type Ctx,
   type PaneActions,
   type PaneData,
@@ -25,7 +26,7 @@ import {
 } from './context'
 import { focusChord, footerRowsOf, renderFooter, STATUS_INSET, type FooterMode } from './footer'
 import { nameWidthOf, renderRows } from './items'
-import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, type El } from './kit'
+import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, scopeOf, type El } from './kit'
 import { renderThinking } from './row'
 import { renderTeam } from './team'
 import { renderTurnList } from './turn-list'
@@ -40,6 +41,7 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     cardBudget: { left: CARD_BUDGET },
     maxMs: longestCall(input, turn),
     layout: [],
+    cards: [],
   }
   const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces, input.expanded)]
   reserveSections(lists.reduce((sum, items) => sum + items.length, 0))
@@ -175,10 +177,53 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
         >
           {parts.content}
         </Box>
+        {(data.cards ?? []).map(spot => renderCard(el, spot, scrollTop, windowRows, more, data))}
         {more.above > 0 && edge('more-above', 0, `${icons.moreAbove} ${more.above} more above`)}
         {more.below > 0 && edge('more-below', windowRows - 1, `${icons.moreBelow} ${more.below} more below`)}
       </Box>
       {renderFooter(el, data, act, layout, frame)}
+    </Box>
+  )
+}
+
+// A row's hover card over the window, revealed by the hover of its row: above
+// the row where the window has room for it under its top edge (and the
+// `▲ more above` row), else below the row above the window's bottom edge;
+// laid after the content, so no row paints over it. A row out of the window,
+// or one with room on neither side, has none.
+function renderCard(
+  el: El,
+  spot: CardSpot,
+  scrollTop: number,
+  windowRows: number,
+  more: { above: number; below: number },
+  data: Ctx,
+) {
+  const { Box, Text } = el
+  const at = spot.row - scrollTop
+  const height = spot.lines.length + 2
+  const top = more.above > 0 ? 1 : 0
+  const bottom = windowRows - (more.below > 0 ? 1 : 0)
+  if (at < top || at >= bottom) return undefined
+  const y = at - height >= top ? at - height : at + 1 + height <= bottom ? at + 1 : undefined
+  if (y === undefined) return undefined
+  return (
+    <Box
+      key={`card-${spot.id}`}
+      position="absolute"
+      display="none"
+      top={y}
+      left={spot.left}
+      backgroundColor={C.paneBackground}
+      flexDirection="column"
+      borderStyle={data.icons.border}
+      borderColor={C.muted}
+      paddingX={1}
+      hover={{ scope: scopeOf('row:', spot.id), display: 'flex' }}
+    >
+      {spot.lines.map(text => (
+        <Text color={C.muted}>{text}</Text>
+      ))}
     </Box>
   )
 }

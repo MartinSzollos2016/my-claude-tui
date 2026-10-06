@@ -1179,15 +1179,27 @@ export const register: Register = on => {
           ? C.ongoing
           : undefined
     return (
+      // The bullet, the name and the note never shrink; the summary gives way,
+      // cut at the edge (the ascii set without its Unicode ellipsis).
       <Box flexDirection="row">
-        <Text color={mark} dimColor={mark === undefined}>
-          {`${icons.bullet} `}
-        </Text>
-        <Text bold>{name}</Text>
-        <Text dimColor wrap={icons.ellipsis === ICON_SETS.nerd.ellipsis ? 'truncate-end' : 'wrap'}>
-          {summary ? `  ${summary}` : ''}
-        </Text>
-        {e.props.isInterrupted && <Text color={C.interrupted}>{` ${icons.dot} interrupted`}</Text>}
+        <Box flexShrink={0}>
+          <Text color={mark} dimColor={mark === undefined}>
+            {`${icons.bullet} `}
+          </Text>
+        </Box>
+        <Box flexShrink={0}>
+          <Text bold>{name}</Text>
+        </Box>
+        <Box flexShrink={1}>
+          <Text dimColor wrap={icons === ICON_SETS.ascii ? 'truncate' : 'truncate-end'}>
+            {summary ? `  ${summary}` : ''}
+          </Text>
+        </Box>
+        {e.props.isInterrupted && (
+          <Box flexShrink={0}>
+            <Text color={C.interrupted}>{` ${icons.dot} interrupted`}</Text>
+          </Box>
+        )}
       </Box>
     )
   })
