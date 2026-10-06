@@ -75,15 +75,17 @@ export function renderRows(
 }
 
 // The failed calls in a subagent's trace and the traces under it that are
-// loaded; interrupted calls do not count.
-function failedUnder(items: readonly Item[], traces: Ctx['traces']): number {
+// loaded; interrupted calls do not count. `seen` stops a trace that names an
+// agent already counted.
+function failedUnder(items: readonly Item[], traces: Ctx['traces'], seen = new Set<string>()): number {
   let failed = 0
   for (const item of items) {
     if (item.kind !== 'tool') continue
     if (item.isError) failed += 1
-    if (isSubagent(item)) {
+    if (isSubagent(item) && !seen.has(item.agentId)) {
+      seen.add(item.agentId)
       const trace = traces.get(item.agentId)
-      if (trace !== undefined && 'items' in trace) failed += failedUnder(trace.items, traces)
+      if (trace !== undefined && 'items' in trace) failed += failedUnder(trace.items, traces, seen)
     }
   }
   return failed
@@ -95,7 +97,7 @@ function failedMark(item: Item, isOpen: boolean, data: Ctx): string | undefined 
   if (isOpen || !isSubagent(item) || !isAgentFinished(data.agents.get(item.agentId))) return undefined
   const trace = data.traces.get(item.agentId)
   if (trace === undefined || !('items' in trace)) return undefined
-  const failed = failedUnder(trace.items, data.traces)
+  const failed = failedUnder(trace.items, data.traces, new Set([item.agentId]))
   return failed > 0 ? `${data.icons.error}${failed}` : undefined
 }
 
@@ -208,11 +210,11 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place: Tree
     },
     data,
     place,
-    () => isOpen && canOpen && renderExpanded(el, item, data, act, place),
+    shown => isOpen && canOpen && renderExpanded(el, item, data, act, place, shown),
   )
 }
 
-function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place?: TreePlace) {
+function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place: TreePlace | undefined, shown: string) {
   const { Box } = el
 
   if (item.kind === 'output') {
@@ -241,7 +243,7 @@ function renderExpanded(el: El, item: Item, data: Ctx, act: PaneActions, place?:
     return renderTrace(el, item, data, act, place)
   }
 
-  return renderSections(el, item, data, act, rowInset(place))
+  return renderSections(el, item, data, act, rowInset(place), shown)
 }
 
 function renderTrace(el: El, item: ToolItem & { agentId: string }, data: Ctx, act: PaneActions, place?: TreePlace) {
