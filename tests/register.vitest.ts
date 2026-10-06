@@ -1069,8 +1069,9 @@ describe('detail pane', () => {
         agents: ids.map(id => ({ id, description: 'Job', type: 'Explore', status: 'completed' as const })),
       })
       await press($, 't-ag-225')
+      const drawn = text(await draw($))
       expect(world.calls).toContain('messages:ag-225')
-      expect(text(await draw($))).toContain('answer ag-225')
+      expect(drawn).toContain('answer ag-225')
     })
 
     test('reuses a running agent trace until it changes', async () => {
