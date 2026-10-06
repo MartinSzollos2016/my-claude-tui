@@ -1558,8 +1558,65 @@ describe('status line', () => {
   }
   const last = (world: { statuses: (string | undefined)[] }) => world.statuses.at(-1)
 
+  const spinnerOf = async ($: Parameters<typeof run>[1]) =>
+    (
+      (await run(
+        'ui.render',
+        $,
+        {
+          component: 'Spinner',
+          surface: 'terminal',
+          props: { word: 'Sauteing', message: null, suffix: '…', mode: 'tool-use' },
+        },
+        async x => x,
+      )) as { props: Record<string, unknown> }
+    ).props['message']
+
+  test('the status line is off until /tail-status on, the spinner text is on', async () => {
+    const { $, world } = fakeEngine()
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    expect(world.statuses.filter(s => s !== undefined)).toEqual([])
+    expect(String(await spinnerOf($))).toContain('Bash')
+    gate.release()
+    await running
+  })
+
+  test('/tail-status alone says the line is off by default and what stays on', async () => {
+    const { $ } = fakeEngine()
+    const answer = await say($, 'tail-status')
+    expect(answer).toContain('Status line: off')
+    expect(answer).toContain('spinner text and turn counts: on')
+    expect(await say($, 'tail-status', 'on')).toBe('Status line, spinner text and turn counts: on.')
+  })
+
+  test('a stored on keeps the status line', async () => {
+    const { $, world } = fakeEngine()
+    world.store.set('tail-view.status', true)
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    expect(world.statuses.filter(s => s !== undefined).length).toBeGreaterThan(0)
+    gate.release()
+    await running
+  })
+
+  test('off still turns the line and the spinner text off', async () => {
+    const { $, world } = fakeEngine()
+    world.store.set('tail-view.status', false)
+    const gate = hold()
+    const running = run('tool.call', $, call, gate.next)
+    await settle()
+    expect(world.statuses.filter(s => s !== undefined)).toEqual([])
+    expect(await spinnerOf($)).toBeNull()
+    gate.release()
+    await running
+  })
+
   test('a main-loop tool sets the status while it runs and clears it after', async () => {
     const { $, world } = fakeEngine()
+    world.store.set('tail-view.status', true)
     const gate = hold()
     const running = run('tool.call', $, call, gate.next)
     await settle()
@@ -1573,6 +1630,7 @@ describe('status line', () => {
 
   test('the ticker refreshes the elapsed time and sets nothing when the text is unchanged', async () => {
     const { $, world } = fakeEngine()
+    world.store.set('tail-view.status', true)
     const gate = hold()
     const running = run('tool.call', $, call, gate.next)
     await settle()
@@ -1602,6 +1660,7 @@ describe('status line', () => {
 
   test('turn.complete and a dropped prompt clear it', async () => {
     const { $, world } = fakeEngine()
+    world.store.set('tail-view.status', true)
     const gate = hold()
     const running = run('tool.call', $, call, gate.next)
     await settle()
@@ -1643,6 +1702,7 @@ describe('status line', () => {
 
   test('turning it off clears a status that is showing, and the ascii set gives ASCII', async () => {
     const { $, world } = fakeEngine()
+    world.store.set('tail-view.status', true)
     await say($, 'tail-icons', 'ascii')
     const gate = hold()
     const running = run('tool.call', $, call, gate.next)
@@ -1690,6 +1750,7 @@ describe('transcript spinner and turn duration', () => {
 
   test('a status change redraws through state, never the whole transcript', async () => {
     const { $, world } = fakeEngine()
+    world.store.set('tail-view.status', true)
     const gate = hold()
     const running = run('tool.call', $, call, gate.next)
     await settle()
