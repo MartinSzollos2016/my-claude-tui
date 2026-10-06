@@ -541,10 +541,27 @@ async function copyBlock($: EngineInterface, text: string, surface?: RenderSurfa
 // under the cursor.
 let drawnRowIds: ReadonlySet<string> = new Set()
 
+// Whether the ring is in the search field, and whether the pane held the
+// keys at its last drawing. The engine's Esc in a field hands the whole
+// pane's keyboard back to the prompt, which the plugin cannot catch: the
+// drawing that sees the keys go while the field held them takes them back
+// once, so Esc leaves the field and a second Esc leaves the pane.
+let isRingOnSearch = false
+let wasFocused = false
+
+function keepKeysAfterSearchEsc($: EngineInterface, isFocused: boolean | undefined): void {
+  if (wasFocused && isFocused === false && isRingOnSearch) {
+    isRingOnSearch = false
+    openPane($, true).catch(ignore)
+  }
+  wasFocused = isFocused === true
+}
+
 // Moves the engine's focus ring onto the element `key`; a row drawn as Text
 // cannot take it, and the cursor stays its own mark.
 async function ringTo($: EngineInterface, key: string | null): Promise<void> {
   if (key === null) return
+  isRingOnSearch = false
   await $.ui.focus({ requestId: PANE, key }).catch(ignore)
 }
 
@@ -636,6 +653,8 @@ async function focusSearch($: EngineInterface): Promise<void> {
   await showView($, 'turns')
   const { gen } = await read($, searchField)
   await $.ui.focus({ requestId: PANE, key: searchFieldKey(gen) })
+  // The plugin's own $.ui.focus raises no ui.focus hook here: mark it.
+  isRingOnSearch = true
 }
 
 // A search field drawn anew (another view, the pane opened) starts from the
@@ -922,6 +941,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    keepKeysAfterSearchEsc($, e.props.isFocused)
     noteViewport(e.viewport)
     const viewport = e.viewport
     if (viewport !== undefined)
@@ -1109,6 +1129,7 @@ export const register: Register = on => {
   // The ring moved by a Tab or a click onto a row takes the row cursor along.
   on('ui.focus', { requestId: PANE }, async ($, e, next) => {
     const element = e.element
+    isRingOnSearch = element !== undefined && element.startsWith('turn-search')
     if (element !== undefined && drawnRowIds.has(element))
       await update($, cursor, cur => (cur === element ? cur : element)).catch(ignore)
     else if (element !== undefined && /^turn-\d+$/.test(element))
