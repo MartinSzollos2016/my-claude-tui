@@ -232,13 +232,6 @@ function statusVariants(data: Ctx, place: string): StatusSegment[][] {
 
 const joinWidth = (segments: readonly StatusSegment[], dot: string) => displayWidth(segments.map(s => s.text).join(dot))
 
-// The width of the fullest status, with `end` shown: the collapsed footer
-// decides from it whether the status fits beside the keys, before the
-// window (and so the place) is known.
-export function statusWidthOf(data: Ctx): number {
-  return joinWidth(statusVariants(data, 'end')[0]!, ` ${data.icons.dot} `)
-}
-
 export function footerStatus(data: Ctx, room: number, frame: ScrollFrame) {
   const { icons } = data
   const width = Math.max(1, room)
