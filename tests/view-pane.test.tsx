@@ -500,12 +500,11 @@ describe('renderPane', () => {
     expect(new Set(scopes.map(s => s.scope)).size).toBe(scopes.length)
   })
 
-  test('the selected turn is bold full-contrast text, not a button', () => {
+  test('the selected turn is a full-contrast button the focus ring can take', () => {
     const list = renderPane(el, { ...base, view: 'turns', selected: 1 }, act)
     const row = byKey(list, 'turn-1')
-    expect(row?.type).toBe('Text')
-    expect(row?.props['color']).toBe('text')
-    expect(row?.props['bold']).toBe(true)
+    expect(row?.type).toBe('Button')
+    expect(row?.props['dimColor']).toBe(false)
     expect(text(row)).toContain('Thanks')
     expect(byKey(list, 'turn-0')?.type).toBe('Button')
   })
@@ -629,7 +628,9 @@ describe('renderPane', () => {
         }
         if (n.type === 'Button') {
           buttons++
-          expect(n.props['dimColor'], String(n.props['key'])).toBe(true)
+          // The selected turn of the turn list is the one full-contrast button.
+          const isSelectedTurn = String(n.props['key']) === `turn-${base.selected}` && n.props['dimColor'] === false
+          if (!isSelectedTurn) expect(n.props['dimColor'], String(n.props['key'])).toBe(true)
           expect((n.props['hover'] as { color?: string } | undefined)?.color, String(n.props['key'])).toBe('text')
         }
       }
