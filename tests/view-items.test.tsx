@@ -746,3 +746,48 @@ describe('row columns', () => {
     expect(label(tree, 't0:thinking')).toMatch(/^Thinking {2}pondering/)
   })
 })
+
+describe('failed children', () => {
+  const turns = buildTurns([
+    { role: 'user', text: 'go', toolUses: [] },
+    {
+      role: 'assistant',
+      text: '',
+      toolUses: [{ tool_use_id: 'ag1', tool: 'Agent', input: { description: 'Job' }, agentId: 'A', text: 'ok' }],
+    },
+  ])
+  const call = (id: string, isError: boolean) => ({
+    tool_use_id: id,
+    tool: 'Bash',
+    input: { command: 'ls' },
+    text: isError ? 'Error: no' : 'ok',
+    ...(isError ? { isError: true as const } : {}),
+  })
+  const items = buildTurns(
+    [{ role: 'assistant', text: '', toolUses: [call('c1', true), call('c2', false), call('c3', true)] }],
+    'A/',
+  )[0]!.items
+  const traces = new Map([['A', { items }]])
+  const draw = (status: 'completed' | 'running', extra: Record<string, unknown> = {}) =>
+    renderPane(el, { ...base, turns, stats: [undefined], traces, agents: new Map([['A', status]]), ...extra }, act)
+
+  test('a collapsed finished subagent counts the failed calls of its trace, in the error colour', () => {
+    const badge = byKey(draw('completed'), 'badge-ag1')
+    expect(text(badge)).toBe(` ${ICON_SETS.nerd.error}2`)
+    expect(badge?.props['color']).toBe(C.error)
+  })
+
+  test('a running, an open or a clean subagent has no mark', () => {
+    expect(byKey(draw('running'), 'badge-ag1')).toBeUndefined()
+    expect(byKey(draw('completed', { expanded: new Set(['ag1']) }), 'badge-ag1')).toBeUndefined()
+    const clean = new Map([['A', { items: items.filter(item => item.kind === 'tool' && !item.isError) }]])
+    expect(byKey(draw('completed', { traces: clean }), 'badge-ag1')).toBeUndefined()
+  })
+
+  test('the mark takes its room from the label, the row keeps its width', () => {
+    const tree = draw('completed')
+    const plain = draw('completed', { traces: new Map() })
+    const width = (t: unknown) => displayWidth(String(byKey(t, 'ag1')?.props['label']))
+    expect(width(plain) - width(tree)).toBe(1 + displayWidth(`${ICON_SETS.nerd.error}2`))
+  })
+})
