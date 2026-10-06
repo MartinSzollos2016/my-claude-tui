@@ -419,10 +419,9 @@ describe('detail pane', () => {
     expect(card?.hover).toMatchObject({ scope: 'row:r1', display: 'flex' })
     expect(card?.props?.['display']).toBe('none')
     expect(card?.props?.['position']).toBe('absolute')
-    // Painted over what comes before it only: it sits above its row, and its
-    // own fill keeps the rows it covers from showing through.
-    // Laid over the window at a row of its own: above its row, or below it
-    // where the window has no room above.
+    // Laid over the window after the content, so no row paints over it: above
+    // its row, or below it where the window has no room above; its own fill
+    // keeps the rows it covers from showing through.
     expect(typeof card?.props?.['top']).toBe('number')
     expect(card?.props?.['backgroundColor']).toBe('inverseText')
     expect(textsOf(card).join('')).toContain('/a/b/main.go')
