@@ -28,6 +28,12 @@ describe('helpText', () => {
   })
 })
 
+describe('helpText keys', () => {
+  test('help names h for the full key map', () => {
+    expect(helpText()).toMatch(/\bh shows or hides all keys\b/)
+  })
+})
+
 describe('unknownText', () => {
   test('names the word it did not know and lists the valid subcommands', () => {
     const answer = unknownText('foo')
