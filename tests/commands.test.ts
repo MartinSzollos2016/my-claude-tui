@@ -97,3 +97,11 @@ describe('command descriptions', () => {
     expect(help).toMatch(/\/tail-width \[30-80\]\s+Show or set/)
   })
 })
+
+describe('help on Esc', () => {
+  test('says Esc leaves the search field first, then gives the keys back', () => {
+    const help = helpText()
+    expect(help).not.toContain('Esc returns to the prompt')
+    expect(help).toMatch(/Esc leaves the search field, then gives the keys back to the prompt/)
+  })
+})
