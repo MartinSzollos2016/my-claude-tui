@@ -886,3 +886,54 @@ describe('row edges', () => {
     if (scrolled !== undefined) expect(Number(scrolled.props['top'])).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('card of a nested row', () => {
+  test('a row two levels deep has its card where the row is indented', () => {
+    const inner = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: 'deep', tool: 'Bash', input: { command: 'ls -la' }, text: 'ok' }],
+        },
+      ],
+      'B/',
+    )[0]!.items
+    const outer = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [{ tool_use_id: 'mid', tool: 'Agent', input: { description: 'inner' }, agentId: 'B', text: 'ok' }],
+        },
+      ],
+      'A/',
+    )[0]!.items
+    const turns = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'ag1', tool: 'Agent', input: { description: 'Job' }, agentId: 'A', text: 'ok' }],
+      },
+    ])
+    const tree = renderPane(
+      el,
+      {
+        ...base,
+        turns,
+        stats: [undefined],
+        rows: 60,
+        traces: new Map([
+          ['A', { items: outer }],
+          ['B', { items: inner }],
+        ]),
+        expanded: new Set(['ag1', 'A/mid']),
+      },
+      act,
+    )
+    const card = byKey(tree, 'card-B/deep')
+    expect(card).toBeDefined()
+    expect(card?.props['left']).toBe(4 + 4)
+  })
+})

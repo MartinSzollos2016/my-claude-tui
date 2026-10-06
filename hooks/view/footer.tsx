@@ -244,6 +244,15 @@ const PRIORITY: Record<'detail' | 'turns' | 'team', readonly string[]> = {
 type CollapsedPlan = { keys: FooterKey[]; hidden: FooterKey[]; isStatusInRow: boolean }
 
 // `isRowForced`: the bare row, the status in it at its shortest.
+// The status the bare row keeps beside its keys: the position with the
+// short focus note (how to get the keys) when it fits next to h, else the
+// position alone.
+function bareStatusWidth(data: Ctx, room: number): number {
+  const dot = ` ${data.icons.dot} `
+  const withNote = joinWidth(statusVariants(data, '')[3]!, dot)
+  return withNote + KEY_GAP <= room ? withNote : joinWidth(statusVariants(data, '').at(-1)!, dot)
+}
+
 function collapsedPlan(
   groups: FooterGroups,
   data: Ctx,
@@ -266,7 +275,7 @@ function collapsedPlan(
   const isOverflowing = frame !== undefined && frame.total > frame.windowRows
   const statusCells =
     (options.isRowForced === true
-      ? joinWidth(statusVariants(data, '').at(-1)!, ` ${data.icons.dot} `)
+      ? bareStatusWidth(data, inner - width(help))
       : isOverflowing
         ? joinWidth(statusVariants(data, 'end')[1]!, ` ${data.icons.dot} `)
         : statusWidthOf(data)) + KEY_GAP

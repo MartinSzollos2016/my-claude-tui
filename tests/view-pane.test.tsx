@@ -1410,6 +1410,38 @@ describe('footer modes by room', () => {
       .filter(n => n.type === 'Button' && !nodes(byKey(f, 'footer-hidden')).includes(n))
       .map(n => String(n.props['hotkey']))
 
+  test('the bare row of an unfocused pane still says how to get the keys', () => {
+    for (const columns of [40, 60, 80]) {
+      const f = byKey(
+        renderPane(el, { ...base, placement: 'inline', rows: 5, columns, isFocused: false }, act),
+        'footer',
+      )!
+      expect(text(byKey(f, 'footer-status')), `${columns}`).toContain('click for keys')
+    }
+  })
+
+  test('the status never touches the last key', () => {
+    for (const [columns, rows, isFooterOpen] of [
+      [20, 5, true],
+      [30, 5, true],
+      [39, 5, true],
+      [39, 14, false],
+      [44, 14, false],
+      [50, 14, false],
+    ] as const) {
+      const tree = renderPane(
+        el,
+        { ...base, placement: 'inline', rows, columns, isFooterOpen, expanded: new Set(['b1', 'e1', 'a1']) },
+        act,
+      )
+      const row = byKey(byKey(tree, 'footer'), 'footer-row-keys')!
+      if (byKey(row, 'footer-keys') === undefined) continue
+      const keys = displayWidth(text(byKey(row, 'footer-keys')))
+      const status = displayWidth(text(byKey(row, 'footer-status')))
+      expect(keys + 2 + status, `${columns}`).toBeLessThanOrEqual(columns - 2)
+    }
+  })
+
   test('a pane of five rows keeps a bare footer with h', () => {
     const f = footerOf({ rows: 5, isFooterOpen: false })
     expect(drawn(f)).toHaveLength(1)
