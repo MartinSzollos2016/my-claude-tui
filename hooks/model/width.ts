@@ -105,10 +105,13 @@ function graphemeWidth(grapheme: string): number {
 // A character that can join its neighbour into one grapheme: combining and
 // enclosing marks, format characters (ZWJ, ZWNJ), variation selectors,
 // regional indicators, skin-tone modifiers, the keycap, tag characters,
-// Hangul conjoining jamo and CR (of CR LF). Text with none of these splits
+// Hangul conjoining jamo, CR (of CR LF), and the letters that join though
+// they are not marks: Thai and Lao SARA AM, the halfwidth kana voice marks
+// and the Prepend letters (a test walks every code point against the
+// segmenter). Text with none of these splits
 // into graphemes per code point, without Intl.Segmenter.
 const JOINING =
-  /[\p{M}\p{Cf}\u200c\u200d\ufe00-\ufe0f\u{e0100}-\u{e01ef}\u{1f1e6}-\u{1f1ff}\u{1f3fb}-\u{1f3ff}\u20e3\u{e0020}-\u{e007f}\u1100-\u11ff\ua960-\ua97f\ud7b0-\ud7ff\r]/u
+  /[\p{M}\p{Cf}\u200c\u200d\ufe00-\ufe0f\u{e0100}-\u{e01ef}\u{1f1e6}-\u{1f1ff}\u{1f3fb}-\u{1f3ff}\u20e3\u{e0020}-\u{e007f}\u1100-\u11ff\ua960-\ua97f\ud7b0-\ud7ff\r\u0d4e\u0e33\u0eb3\uff9e\uff9f\u{111c2}\u{111c3}\u{113d1}\u{1193f}\u{11941}\u{11a84}-\u{11a89}\u{11d46}\u{11f02}\u{16d63}\u{16d67}-\u{16d6a}]/u
 
 // The graphemes of a text; `null` for a runtime without Intl.Segmenter.
 export const graphemesOf = (text: string, segmenter: Intl.Segmenter | null = SEGMENTER ?? null): string[] =>

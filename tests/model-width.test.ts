@@ -415,3 +415,30 @@ describe('graphemes without the segmenter', () => {
     expect(truncateDisplay('日本語のコマンド', 7, '…')).toBe('日本語…')
   })
 })
+
+describe('joining characters, every code point', () => {
+  test('Thai and Lao SARA AM and the halfwidth kana marks join as the segmenter joins them', () => {
+    expect(displayWidth('ทำงาน')).toBe(4)
+    expect(displayWidth('ｶﾞｷﾞ')).toBe(2)
+    expect(truncateDisplay('ｶﾞｷﾞｶﾞｷﾞ', 6, '…')).not.toMatch(/ｶ…$/)
+  })
+
+  test('no code point joins a neighbour unless the fast path sends it to the segmenter', () => {
+    const segmenter = new Intl.Segmenter()
+    const missed: string[] = []
+    for (let point = 0x20; point <= 0x2ffff; point++) {
+      if (point >= 0xd800 && point <= 0xdfff) continue
+      // The Private Use Area draws one cell per point (NARROW, as on main);
+      // the engine's ICU joins a few Apple-private points, which no
+      // transcript draws as text.
+      if (point >= 0xe000 && point <= 0xf8ff) continue
+      const ch = String.fromCodePoint(point)
+      for (const text of [`a${ch}`, `${ch}a`]) {
+        const reference = Array.from(segmenter.segment(text), part => part.segment)
+        if (reference.length !== Array.from(text).length && graphemesOf(text).length !== reference.length)
+          missed.push(point.toString(16))
+      }
+    }
+    expect(missed).toEqual([])
+  })
+})
