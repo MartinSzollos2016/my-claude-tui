@@ -35,17 +35,17 @@ To run a local checkout instead: `claude --plugin-dir path/to/my-claude-tui`.
 
 The commands run at once, even while Claude is answering.
 
-| Command                  | What it does                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------- |
-| `/tail`                  | open the detail pane                                                            |
-| `/tail-turns`            | list the session's turns and open one in the pane                               |
-| `/tail-width <30-80>`    | pane width as % of the terminal (default 80, kept)                              |
-| `/tail-compact`          | toggle the compact transcript (on by default, kept)                             |
-| `/tail-icons [set]`      | icon set: `nerd` (default), `unicode` or `ascii`                                |
-| `/tail-bar`              | show or hide the info bar                                                       |
-| `/tail-status [on\|off]` | status line, spinner text and turn counts while tools run (on by default, kept) |
-| `/tail-notify [on\|off]` | toast when a subagent or workflow finishes (off by default, kept)               |
-| `/tail-help`             | list commands and keys                                                          |
+| Command                  | What it does                                                                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/tail`                  | open the detail pane                                                                                                         |
+| `/tail-turns`            | list the session's turns and open one in the pane                                                                            |
+| `/tail-width <30-80>`    | pane width as % of the terminal (default 80, kept)                                                                           |
+| `/tail-compact`          | toggle the compact transcript (on by default, kept)                                                                          |
+| `/tail-icons [set]`      | icon set: `nerd` (default), `unicode` or `ascii`                                                                             |
+| `/tail-bar`              | show or hide the info bar                                                                                                    |
+| `/tail-status [on\|off]` | status line under the prompt (off by default), spinner text and turn counts (on by default); on or off sets all three (kept) |
+| `/tail-notify [on\|off]` | toast when a subagent or workflow finishes (off by default, kept)                                                            |
+| `/tail-help`             | list commands and keys                                                                                                       |
 
 `/tail <sub>` works too, e.g. `/tail width 70`.
 
@@ -100,7 +100,7 @@ Claude Code paints the pane's frame grey and a plugin cannot change it.
   tool in the transcript's spinner and to add the tool and agent counts to a turn's "Baked for
   3s" line (both left to Claude Code with `/tail-status off`).
 - **Shows** the running tool and its elapsed time in the status line under the prompt
-  (`$.ui.status`, off with `/tail-status off`), and a toast when a subagent or a Workflow
+  (`$.ui.status`, only after `/tail-status on`; Claude Code draws it with a warning mark and the plugin's name), and a toast when a subagent or a Workflow
   finishes (`$.ui.toast`, only after `/tail-notify on`), plus "Copied" after a copy. It makes no
   permission decisions and changes no settings.
 

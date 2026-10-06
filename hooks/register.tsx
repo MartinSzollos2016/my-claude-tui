@@ -311,12 +311,17 @@ async function isStatusOn($: EngineInterface): Promise<boolean> {
   return (await $.store.get(STATUS_KEY)) !== false
 }
 
+// The status line under the prompt (the engine draws it with a warning mark
+// and the plugin's name): off until /tail-status on. The spinner text and
+// the turn counts follow isStatusOn: on unless switched off.
+const isStatusLineOn = (stored: unknown) => stored === true
+
 // The switches and the icon set, read once per tick and passed on.
-type Prefs = { isStatusOn: boolean; isNotifyOn: boolean; icons: Icons }
+type Prefs = { isStatusOn: boolean; isStatusLineOn: boolean; isNotifyOn: boolean; icons: Icons }
 
 async function loadPrefs($: EngineInterface): Promise<Prefs> {
-  const [statusOn, notify, icons] = await Promise.all([isStatusOn($), $.store.get(NOTIFY_KEY), currentIcons($)])
-  return { isStatusOn: statusOn, isNotifyOn: notify === true, icons }
+  const [status, notify, icons] = await Promise.all([$.store.get(STATUS_KEY), $.store.get(NOTIFY_KEY), currentIcons($)])
+  return { isStatusOn: status !== false, isStatusLineOn: isStatusLineOn(status), isNotifyOn: notify === true, icons }
 }
 
 // Sets the status line and the spinner text to what the running tools say
@@ -327,7 +332,7 @@ async function syncStatus($: EngineInterface, given?: Prefs): Promise<void> {
   const prefs = given ?? (await loadPrefs($))
   const now = await $.clock.now()
   // Read after the awaits: the latest state wins whichever sync ends last.
-  const text = prefs.isStatusOn ? statusText(runningTools, now, prefs.icons) : undefined
+  const text = prefs.isStatusLineOn ? statusText(runningTools, now, prefs.icons) : undefined
   const message = prefs.isStatusOn ? (spinnerMessage(runningTools, now, prefs.icons) ?? null) : null
   if (text !== lastStatus) {
     lastStatus = text
@@ -818,9 +823,13 @@ async function setSwitch(
 // the turn duration lines already drawn take or drop their counts.
 async function setStatus($: EngineInterface, arg: string): Promise<string> {
   const wasOn = await isStatusOn($)
+  const stored = await $.store.get(STATUS_KEY)
+  // Nothing stored: the line is off, the spinner text and counts are on.
+  if (arg.trim() === '' && typeof stored !== 'boolean')
+    return 'Status line: off, spinner text and turn counts: on. /tail-status on shows the line too, off hides all three.'
   const text = await setSwitch(
     $,
-    { command: 'tail-status', key: STATUS_KEY, label: 'Status line', fallback: true },
+    { command: 'tail-status', key: STATUS_KEY, label: 'Status line, spinner text and turn counts', fallback: true },
     arg,
   )
   if ((await isStatusOn($)) !== wasOn) $.ui.invalidate('ui.render')
