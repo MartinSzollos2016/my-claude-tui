@@ -368,7 +368,7 @@ describe('turn starts from the API form', () => {
       { role: 'user', content: [{ type: 'text', text: 'run' }] },
       { role: 'assistant', content: [{ type: 'tool_use', id: 'b1', name: 'Bash', input: {} }] },
     ])
-    expect([...starts.keys()]).toEqual(['tu:b1'])
+    expect([...starts.keys]).toEqual(['tu:b1'])
     expect(rowKey({ role: 'assistant', text: '', toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: {} }] })).toBe(
       'tu:b1',
     )
@@ -387,6 +387,58 @@ describe('turn starts from the API form', () => {
       },
       { role: 'assistant', content: [{ type: 'text', text: 'b' }] },
     ])
-    expect(starts.size).toBe(0)
+    expect(starts.keys.size).toBe(0)
+  })
+})
+
+describe('turn starts with repeated replies', () => {
+  test('a short reply repeated in a later turn does not split it', () => {
+    const rows: SessionMessage[] = [
+      { role: 'user', text: 'first', toolUses: [] },
+      { role: 'assistant', text: 'OK', toolUses: [] },
+      { role: 'user', text: 'second', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 't1', tool: 'Bash', input: { command: 'ls' }, text: 'x' }],
+      },
+      { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 't1', text: 'x' }] as never },
+      { role: 'assistant', text: 'OK', toolUses: [] },
+    ]
+    const api = [
+      { role: 'user' as const, content: [{ type: 'text', text: 'first' }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'OK' }] },
+      { role: 'user' as const, content: [{ type: 'text', text: 'second' }] },
+      { role: 'assistant' as const, content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }] },
+      { role: 'user' as const, content: [{ type: 'tool_result', tool_use_id: 't1', content: 'x' }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'OK' }] },
+    ]
+    expect(buildTurns(rows, '', apiTurnStarts(api)).map(t => t.prompt)).toEqual(['first', 'second'])
+  })
+
+  test('a hand-back reply that repeats an earlier reply opens only its own turn', () => {
+    const handBack = 'Another Claude session sent a message: <agent-message from="a">x</agent-message>'
+    const rows: SessionMessage[] = [
+      { role: 'user', text: 'first', toolUses: [] },
+      { role: 'assistant', text: 'spawned', toolUses: [] },
+      { role: 'assistant', text: 'Done.', toolUses: [] },
+      { role: 'user', text: 'second', toolUses: [] },
+      { role: 'assistant', text: 'working', toolUses: [] },
+      { role: 'assistant', text: 'Done.', toolUses: [] },
+    ]
+    const api = [
+      { role: 'user' as const, content: [{ type: 'text', text: 'first' }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'spawned' }] },
+      { role: 'user' as const, content: [{ type: 'text', text: handBack }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'Done.' }] },
+      { role: 'user' as const, content: [{ type: 'text', text: 'second' }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'working' }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'Done.' }] },
+    ]
+    expect(buildTurns(rows, '', apiTurnStarts(api)).map(t => t.prompt)).toEqual([
+      'first',
+      'Message from agent',
+      'second',
+    ])
   })
 })
