@@ -6,7 +6,20 @@ import { resetSectionCache, sectionCacheSize } from '../hooks/model/sections'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
 import { renderPane } from '../hooks/view/pane'
-import { act, acts, base, byKey, calls, el, foldedTimings, foldedTurn, nodes, text, type Node } from './fixtures/view'
+import {
+  act,
+  acts,
+  base,
+  byKey,
+  calls,
+  el,
+  foldedOpen,
+  foldedTimings,
+  foldedTurn,
+  nodes,
+  text,
+  type Node,
+} from './fixtures/view'
 
 describe('trace tree guides', () => {
   const traceOf = () =>
@@ -935,5 +948,16 @@ describe('card of a nested row', () => {
     const card = byKey(tree, 'card-B/deep')
     expect(card).toBeDefined()
     expect(card?.props['left']).toBe(4 + 4)
+  })
+})
+
+describe('open run name width', () => {
+  test('an open run pads its rows to the widest name among them', () => {
+    const tree = renderPane(
+      el,
+      { ...base, turns: foldedTurn, expanded: foldedOpen, timings: foldedTimings, stats: [undefined] },
+      act,
+    )
+    expect(String(byKey(tree, 'fr1')?.props['label'])).toMatch(/^Read {2}\S/)
   })
 })
