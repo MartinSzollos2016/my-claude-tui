@@ -209,7 +209,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place: Tree
       badge: failedMark(item, isOpen, data),
       model: item.kind === 'tool' && item.agentId ? data.agentStats[item.agentId]?.model : undefined,
       onPress: () => canOpen && act.toggle(item.id),
-      ...(isOpen || !canOpen ? {} : { card: cardFor(item, data, place) }),
+      ...(isOpen || !canOpen ? {} : { card: () => cardFor(item, data, place) }),
     },
     data,
     place,

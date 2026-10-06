@@ -123,6 +123,8 @@ export type Ctx = PaneData & {
   // The agents whose traces are being drawn, outermost first: a trace that
   // names one of them again is not drawn a second time.
   tracing?: string[]
+  // The rows of `layout` counted so far: a row's place without a recount.
+  counted?: { blocks: number; rows: number }
 }
 
 // A row's hover card: its lines, the content row it belongs to and how far

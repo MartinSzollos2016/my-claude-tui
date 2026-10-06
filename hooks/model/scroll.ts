@@ -94,7 +94,7 @@ function pieceRows(piece: string, width: number, format: 'markdown' | 'diff' | u
 const textRows = (text: string | undefined, width: number | undefined): number =>
   text === undefined || width === undefined ? 1 : wrappedRows(text, width)
 
-function blockRows(block: RowBlock): number {
+export function blockRows(block: RowBlock): number {
   switch (block.kind) {
     case 'line':
       return textRows(block.text, block.width)
