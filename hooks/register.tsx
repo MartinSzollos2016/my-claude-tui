@@ -185,7 +185,11 @@ async function loadTraces(
   agents: ReadonlyMap<string, AgentStatus>,
 ): Promise<Map<string, Trace>> {
   const traces = new Map<string, Trace>()
-  let frontier = items.filter(item => isSubagent(item) && open.has(item.id))
+  // Open subagents, and finished ones too: a finished trace is read once (it
+  // is final), so a collapsed row can count its failed calls.
+  let frontier = items
+    .filter(item => isSubagent(item) && (open.has(item.id) || isAgentFinished(agents.get(item.agentId))))
+    .slice(0, MAX_TRACES)
 
   // One level at a time, its traces read together.
   while (frontier.length > 0) {

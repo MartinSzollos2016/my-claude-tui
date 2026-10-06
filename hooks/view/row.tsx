@@ -105,6 +105,8 @@ type Line = {
   // The label cut to the room (cells) the fixed columns leave.
   label: (room: number) => string
   duration?: number
+  // The failed calls under a collapsed row, drawn after its label.
+  badge?: string
   model?: string
   onPress: () => void
   // The lines of the card a hover on the row reveals.
@@ -140,7 +142,9 @@ export function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | und
   const timeRoom = hasDuration ? 1 + DURATION_CELLS + (hasBar ? 1 + BAR_CELLS : 0) : 0
   // Once a cursor exists every row keeps one cell for its marker.
   const hasCursorColumn = data.cursor !== undefined && data.cursor !== null
-  const room = width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - timeRoom - (hasCursorColumn ? 1 : 0)
+  const badgeRoom = line.badge === undefined ? 0 : 1 + displayWidth(line.badge)
+  const room =
+    width - displayWidth(guide) - 2 - 3 - 2 - badgeRoom - displayWidth(modelText) - timeRoom - (hasCursorColumn ? 1 : 0)
   // A row that opens takes a click anywhere from the chevron to the model
   // column: the chevron is a button too, and the label fills its room.
   const label = canOpen ? padEndDisplay(line.label(room), room) : line.label(room)
@@ -186,6 +190,11 @@ export function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | und
             </Text>
           )}
         </Box>
+        {line.badge !== undefined && (
+          <Text key={`badge-${id}`} color={C.error} hover={hover}>
+            {` ${line.badge}`}
+          </Text>
+        )}
         {(modelText !== '' || hasDuration) && (
           <Box flexShrink={0}>
             {modelText !== '' && model !== undefined && (

@@ -6,7 +6,7 @@ import { groupLabel } from '../model/card'
 import { shortModel } from '../model/format'
 import { groupRuns, type GroupItem } from '../model/groups'
 import { itemName, itemSummary } from '../model/summaries'
-import { isAgentRunning, isSubagent, itemStatus, traceStats, type ItemStatus } from '../model/turns'
+import { isAgentFinished, isAgentRunning, isSubagent, itemStatus, traceStats, type ItemStatus } from '../model/turns'
 import type { Item, ToolItem } from '../model/types'
 import { displayWidth, fitPath, padEndDisplay, pathOf } from '../model/width'
 import {
@@ -72,6 +72,31 @@ export function renderRows(
     const at = path === undefined ? undefined : { path, isLast: i === rows.length - 1 }
     return row.kind === 'group' ? renderGroup(el, row, data, act, at) : renderItem(el, row, data, act, at, nameWidth)
   })
+}
+
+// The failed calls in a subagent's trace and the traces under it that are
+// loaded; interrupted calls do not count.
+function failedUnder(items: readonly Item[], traces: Ctx['traces']): number {
+  let failed = 0
+  for (const item of items) {
+    if (item.kind !== 'tool') continue
+    if (item.isError) failed += 1
+    if (isSubagent(item)) {
+      const trace = traces.get(item.agentId)
+      if (trace !== undefined && 'items' in trace) failed += failedUnder(trace.items, traces)
+    }
+  }
+  return failed
+}
+
+// A collapsed finished subagent says how many calls under it failed; open,
+// its rows show them, and a running one is not counted yet.
+function failedMark(item: Item, isOpen: boolean, data: Ctx): string | undefined {
+  if (isOpen || !isSubagent(item) || !isAgentFinished(data.agents.get(item.agentId))) return undefined
+  const trace = data.traces.get(item.agentId)
+  if (trace === undefined || !('items' in trace)) return undefined
+  const failed = failedUnder(trace.items, data.traces)
+  return failed > 0 ? `${data.icons.error}${failed}` : undefined
 }
 
 // The name column of a list: as wide as its widest name, at most NAME_CELLS,
@@ -176,6 +201,7 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place: Tree
           ? prefix + fitPath(item, summary, Math.max(8, room - displayWidth(prefix)), icons.ellipsis)
           : trunc(summary ? prefix + summary : name, Math.max(8, room)),
       duration: itemDuration(item, data),
+      badge: failedMark(item, isOpen, data),
       model: item.kind === 'tool' && item.agentId ? data.agentStats[item.agentId]?.model : undefined,
       onPress: () => canOpen && act.toggle(item.id),
       ...(isOpen || !canOpen ? {} : { card: cardFor(item, data, place) }),
