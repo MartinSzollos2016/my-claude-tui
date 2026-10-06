@@ -225,4 +225,14 @@ describe('frame titles', () => {
     const long = 'Describe a very long command that goes on and on past the sixty cells of a summary'
     expect(count(open(long), 'Describe a very long')).toBe(1)
   })
+
+  test('a narrow row that cuts the description leaves it whole in the frame', () => {
+    const description = 'List every file of the project folder with its size'
+    const tree = renderPane(
+      el,
+      { ...base, turns: bash(description), stats: [undefined], columns: 40, expanded: new Set(['x1']) },
+      act,
+    )
+    expect(text(tree)).toContain(description)
+  })
 })

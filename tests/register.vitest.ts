@@ -846,10 +846,60 @@ describe('detail pane', () => {
       expect(live.world.calls).not.toContain('messages:agent-run')
     })
 
+    test('a finished agent whose trace is denied is asked once, not on every drawing', async () => {
+      const { $, world } = fakeEngine({
+        messages: spawn('agent-denied'),
+        agents: [{ id: 'agent-denied', description: 'Job', type: 'Explore', status: 'completed' }],
+      })
+      await draw($)
+      await draw($)
+      await draw($)
+      expect(world.calls.filter(c => c === 'messages:agent-denied')).toHaveLength(1)
+    })
+
     test('a collapsed subagent the engine does not list is not read', async () => {
       const { $, world } = fakeEngine({ messages: spawn('agent-old'), agentMessages: { 'agent-old': reply('Old') } })
       await draw($)
       expect(world.calls).not.toContain('messages:agent-old')
+    })
+
+    test('e on a turn with more rows than it keeps opens every subagent first, then their rows', async () => {
+      const ids = Array.from({ length: 15 }, (_, i) => `agent-${i}`)
+      const calls = (id: string) => [
+        { role: 'user' as const, text: 'Go', toolUses: [] },
+        {
+          role: 'assistant' as const,
+          text: '',
+          toolUses: Array.from({ length: 25 }, (_, n) => ({
+            tool_use_id: `${id}-c${n}`,
+            tool: n % 2 === 0 ? 'Bash' : 'Grep',
+            input: n % 2 === 0 ? { command: `echo ${n}` } : { pattern: `p${n}` },
+            text: 'ok',
+          })),
+        },
+      ]
+      const { $ } = fakeEngine({
+        messages: [
+          { role: 'user', text: 'Run them', toolUses: [] },
+          {
+            role: 'assistant',
+            text: '',
+            toolUses: ids.map(id => ({
+              tool_use_id: `t-${id}`,
+              tool: 'Agent',
+              input: { subagent_type: 'Explore', description: `Job ${id}` },
+              agentId: id,
+              text: 'ok',
+            })),
+          },
+        ],
+        agentMessages: Object.fromEntries(ids.map(id => [id, calls(id)])),
+        agents: ids.map(id => ({ id, description: 'Job', type: 'Explore', status: 'completed' as const })),
+      })
+      await draw($)
+      await press($, 'nav-expand')
+      const all = text(await draw($))
+      expect(all.split('Execution Trace').length - 1).toBe(15)
     })
 
     test("e opens a finished subagent's trace rows too, the cursor walks only open rows", async () => {

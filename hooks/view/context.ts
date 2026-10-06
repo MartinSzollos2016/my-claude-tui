@@ -198,18 +198,27 @@ export function groupDuration(group: GroupItem, data: Timed): number | undefined
   return times.length === 0 ? undefined : times.reduce((sum, d) => sum + d, 0)
 }
 
-// The loaded traces of the subagents among `items`, nested ones included.
-export function tracesOf(items: readonly Item[], traces: PaneData['traces']): Item[][] {
+// The traces drawn under the open subagents among `items`, nested ones
+// included; a collapsed subagent's trace may be loaded (to count its
+// failures) but is not drawn. `seen` stops a trace that names an agent twice.
+export function tracesOf(
+  items: readonly Item[],
+  traces: PaneData['traces'],
+  open: ReadonlySet<string>,
+  seen = new Set<string>(),
+): Item[][] {
   return items.filter(isSubagent).flatMap(item => {
+    if (!open.has(item.id) || seen.has(item.agentId)) return []
+    seen.add(item.agentId)
     const trace = traces.get(item.agentId)
-    return trace && 'items' in trace ? [trace.items, ...tracesOf(trace.items, traces)] : []
+    return trace && 'items' in trace ? [trace.items, ...tracesOf(trace.items, traces, open, seen)] : []
   })
 }
 
 // The longest measured row among the turn's and its loaded traces' (a
 // folded run counts as its total).
 export function longestCall(input: PaneData, turn: Turn | undefined): number {
-  const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces)]
+  const lists = [turn?.items ?? [], ...tracesOf(turn?.items ?? [], input.traces, input.expanded)]
   const rows = lists.flatMap(items => groupRuns(items))
   return Math.max(
     0,
