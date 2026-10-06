@@ -189,6 +189,8 @@ async function tickTurns($: EngineInterface): Promise<Memo<Turn[]>> {
 type CachedTrace = { key: string; trace: Trace; isFinal: boolean }
 const traceCache = new Map<string, CachedTrace>()
 const MAX_TRACES = 200
+// The first level's traces and room as large for the nested ones opened.
+const TRACE_CACHE_SIZE = 2 * MAX_TRACES
 
 async function loadTrace($: EngineInterface, agentId: string, status: AgentStatus | undefined): Promise<Trace> {
   const cached = traceCache.get(agentId)
@@ -197,13 +199,13 @@ async function loadTrace($: EngineInterface, agentId: string, status: AgentStatu
   if ('deny' in found) {
     const denied = { denied: sanitizeText(String(found.deny)) }
     // A finished agent's denial is final too: it is not asked again.
-    remember(traceCache, agentId, { key: '', trace: denied, isFinal: isAgentFinished(status) }, MAX_TRACES)
+    remember(traceCache, agentId, { key: '', trace: denied, isFinal: isAgentFinished(status) }, TRACE_CACHE_SIZE)
     return denied
   }
   const key = turnsKey(found)
   const trace =
     cached?.key === key && 'items' in cached.trace ? cached.trace : { items: traceItems(found, `${agentId}/`) }
-  remember(traceCache, agentId, { key, trace, isFinal: isAgentFinished(status) }, MAX_TRACES)
+  remember(traceCache, agentId, { key, trace, isFinal: isAgentFinished(status) }, TRACE_CACHE_SIZE)
   return trace
 }
 
@@ -217,9 +219,12 @@ async function loadTraces(
   const traces = new Map<string, Trace>()
   // Open subagents, and finished ones too: a finished trace is read once (it
   // is final), so a collapsed row can count its failed calls.
-  let frontier = items
-    .filter(item => isSubagent(item) && (open.has(item.id) || isAgentFinished(agents.get(item.agentId))))
-    .slice(0, MAX_TRACES)
+  const subagents = items.filter(isSubagent)
+  // Opened subagents first: the cap never cuts one the person opened.
+  let frontier: Item[] = [
+    ...subagents.filter(item => open.has(item.id)),
+    ...subagents.filter(item => !open.has(item.id) && isAgentFinished(agents.get(item.agentId))),
+  ].slice(0, MAX_TRACES)
 
   // One level at a time, its traces read together.
   while (frontier.length > 0) {
