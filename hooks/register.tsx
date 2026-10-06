@@ -830,7 +830,8 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    lastPrompt = sanitizePrompt(e.text.trim())
+    // In the form a turn's prompt takes, so the fallback stat finds its turn.
+    lastPrompt = sanitizePrompt(sanitizeText(e.text).trim())
     const pushed = e.turnId === undefined ? await notePrompt($) : undefined
     const wasWorking = await read($, isWorking)
     await update($, isWorking, () => true)
