@@ -445,7 +445,7 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
         ),
       }
     case 'help':
-      return { text: helpText() }
+      return { text: helpText(await currentIcons($)) }
     case 'unknown':
       return { text: unknownText(parsed.arg) }
     case 'turns': {

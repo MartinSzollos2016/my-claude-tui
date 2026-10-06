@@ -490,7 +490,8 @@ describe('detail pane', () => {
       const error = frames.find(f => f.text.includes('exit status 1'))
       expect(command?.color).toBe('permission')
       expect(command?.text).toContain('$ command')
-      expect(command?.text).toContain('Run tests')
+      // The description reads in the row above; the frame does not repeat it.
+      expect(command?.text).not.toContain('Run tests')
       expect(output?.color).toBe('success')
       expect(output?.text).toContain('ok · 1 line')
       expect(error?.color).toBe('error')

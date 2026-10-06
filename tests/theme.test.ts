@@ -45,6 +45,11 @@ describe('theme', () => {
     expect(modeColor('default')).toBe(undefined)
     expect(modeColor(null)).toBe(undefined)
   })
+
+  test('opus is orange, not the red that reads as an error', () => {
+    expect(modelColor('claude-opus-5-5')).toBe('orange_FOR_SUBAGENTS_ONLY')
+    expect(modelColor('opus5.5')).not.toBe('red_FOR_SUBAGENTS_ONLY')
+  })
 })
 
 describe('sanitizeText', () => {

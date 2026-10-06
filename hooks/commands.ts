@@ -1,6 +1,8 @@
 // The slash commands tail-view registers. Each subcommand is its own command
 // so the slash menu lists it; `/tail <sub>` stays as a shorthand.
 
+import { ICON_SETS, type Icons } from './icons'
+
 type Subcommand = 'turns' | 'bar' | 'compact' | 'icons' | 'width' | 'status' | 'notify' | 'help'
 
 type CommandSpec = {
@@ -69,7 +71,9 @@ export function unknownText(word: string): string {
   return `Unknown /tail subcommand "${word}". Valid: ${subs.join(', ')}. /tail alone opens the pane, /tail-help lists the keys.`
 }
 
-export function helpText(): string {
+// The commands, the keys and what the header's glyphs count, in the icon set
+// the pane draws.
+export function helpText(icons: Icons = ICON_SETS.nerd): string {
   const width = Math.max(...COMMANDS.map(c => `/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''}`.length))
   const lines = COMMANDS.map(
     c => `  ${`/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''}`.padEnd(width)}  ${c.description}`,
@@ -82,5 +86,6 @@ export function helpText(): string {
     't turn list, d detail view, s search turns, m team board, j/k move the row cursor, o opens it, y copies it, e/c expand/collapse all,',
     'f/b page the pane down/up (the wheel and PgUp/PgDn scroll it too), "show all" opens a long block,',
     '"copy" copies it whole, h shows or hides all keys in the footer, Esc returns to the prompt.',
+    `The header counts: ${icons.wrench} tool calls, ${icons.output} outputs, ${icons.thinking} thinking blocks, ${icons.token} tokens, ${icons.clock} duration.`,
   ].join('\n')
 }

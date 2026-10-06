@@ -205,3 +205,24 @@ describe('code blocks', () => {
     expect(at).toBe(1505)
   })
 })
+
+describe('frame titles', () => {
+  const bash = (description: string) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [{ tool_use_id: 'x1', tool: 'Bash', input: { command: 'ls -la', description }, text: 'ok' }],
+      },
+    ])
+  const count = (haystack: string, needle: string) => haystack.split(needle).length - 1
+  const open = (description: string) =>
+    text(renderPane(el, { ...base, turns: bash(description), stats: [undefined], expanded: new Set(['x1']) }, act))
+
+  test('the command frame drops a description the row already shows', () => {
+    expect(count(open('List files'), 'List files')).toBe(1)
+    const long = 'Describe a very long command that goes on and on past the sixty cells of a summary'
+    expect(count(open(long), 'Describe a very long')).toBe(1)
+  })
+})

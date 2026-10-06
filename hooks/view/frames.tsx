@@ -5,6 +5,7 @@ import { C, TONE, type ThemeKey } from '../theme'
 import { chunkText, clampText } from '../model/clamp'
 import { clampDiff, expandDiffTabs, splitDiff } from '../model/diff'
 import { cachedSections, firstErrorLine, languageFor, pieceStarts, type Section } from '../model/sections'
+import { itemSummary } from '../model/summaries'
 import type { ToolItem } from '../model/types'
 import { displayWidth, expandTabs, truncateMiddle } from '../model/width'
 import {
@@ -25,6 +26,11 @@ import { buttonHover, cutter, endWrap, isUnicodeCut, middleWrap, scopeOf, type E
 // `inset`: the cells left of the sections' box (a trace's indent).
 export function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActions, inset: number) {
   const { Box } = el
+  // The row above already reads the description; a frame title repeating it,
+  // whole or cut, is noise.
+  const summary = itemSummary(item)
+  const repeats = (meta: string) =>
+    summary !== '' && (summary.startsWith(meta) || meta.startsWith(summary.replace(/…$/, '')))
   const frames = cachedSections(item, data.icons).map(section => {
     const id = `${item.id}:${section.kind}`
     const preview = renderLong(el, id, section.body, longSpec(section), data, act)
@@ -33,7 +39,7 @@ export function renderSections(el: El, item: ToolItem, data: Ctx, act: PaneActio
       el,
       id,
       isError ? `${data.icons.error} ${section.title}` : section.title,
-      section.meta,
+      section.meta !== undefined && repeats(section.meta) ? undefined : section.meta,
       section.isPathMeta === true,
       TONE[section.kind],
       isError ? withFirstError(el, section.body, preview, data) : preview,

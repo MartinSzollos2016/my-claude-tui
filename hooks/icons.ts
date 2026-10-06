@@ -160,7 +160,7 @@ const unicode: Icons = {
   book: '▤',
   web: '◎',
   output: '❯',
-  thinking: '…',
+  thinking: '∴',
   clock: '◷',
   token: 'Σ',
   collapsed: '⏵',
