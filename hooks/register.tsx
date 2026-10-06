@@ -779,7 +779,23 @@ async function autoSize($: EngineInterface, terminalColumns: number) {
   await openPane($, false, terminalColumns)
 }
 
+// The pane's width as the engine drew it last (the Pane render's bodyColumns).
+let drawnColumns: number | undefined
+
 async function setWidth($: EngineInterface, arg: string, terminalColumns: number): Promise<string> {
+  // Alone: what is stored, what that asks for, and what was drawn.
+  if (arg.trim() === '') {
+    const stored = await widthShare($)
+    const asked = paneColumns(terminalColumns, stored)
+    const drawn = drawnColumns === undefined ? '' : `, drawn ${drawnColumns}`
+    // A terminal too narrow to dock a pane asks for no columns.
+    if (asked === undefined) return `Pane width ${stored}% of the terminal (too narrow to dock it now${drawn}).`
+    const override =
+      drawnColumns !== undefined && Math.abs(drawnColumns - asked) > 2
+        ? ' A width you dragged the dock to wins over it; /tail width N asks again.'
+        : ''
+    return `Pane width ${stored}% of the terminal: ${asked} columns${drawn}.${override}`
+  }
   const share = Number(arg)
   if (!Number.isInteger(share) || share < MIN_WIDTH || share > MAX_WIDTH) {
     return `Give the pane width as a share of the terminal between ${MIN_WIDTH} and ${MAX_WIDTH} (percent), e.g. /tail width 60.`
@@ -965,6 +981,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     keepKeysAfterSearchEsc($, e.props.isFocused)
+    drawnColumns = e.props.bodyColumns
     noteViewport(e.viewport)
     const viewport = e.viewport
     if (viewport !== undefined)

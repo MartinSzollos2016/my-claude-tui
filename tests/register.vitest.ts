@@ -209,6 +209,24 @@ describe('commands', () => {
     expect(await say($, 'tail-help')).toContain(`${ICON_SETS.ascii.thinking} thinking blocks`)
   })
 
+  test('/tail-width alone names the stored share, the columns asked for and the width drawn', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    world.store.set('paneWidth', 50)
+    await draw($)
+    const answer = await say($, 'tail-width')
+    expect(answer).toMatch(/50%/)
+    expect(answer).toMatch(/\d+ columns/)
+    expect(answer).toMatch(/drawn \d+/)
+    expect(world.store.get('paneWidth')).toBe(50)
+  })
+
+  test('before a drawing the width answer names no drawn width', async () => {
+    const { $ } = fakeEngine()
+    const answer = await say($, 'tail-width')
+    expect(answer).toMatch(/80%/)
+    expect(answer).not.toMatch(/drawn/)
+  })
+
   test('/tail with an unknown subcommand names it, lists the valid ones and does not open the pane', async () => {
     const { $, world } = fakeEngine()
     const answer = await say($, 'tail', 'foo')
