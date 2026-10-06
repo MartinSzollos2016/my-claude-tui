@@ -87,3 +87,13 @@ describe('help legend and focus', () => {
     expect(legend.join('')).toMatch(/^[\x20-\x7e]+$/)
   })
 })
+
+describe('command descriptions', () => {
+  test('/tail-status names all three things it switches, /tail-width that it shows the width alone', () => {
+    const help = helpText()
+    expect(help).toMatch(
+      /\/tail-status \[on\|off\]\s+Status line under the prompt \(off by default\), spinner text and turn counts/,
+    )
+    expect(help).toMatch(/\/tail-width \[30-80\]\s+Show or set/)
+  })
+})

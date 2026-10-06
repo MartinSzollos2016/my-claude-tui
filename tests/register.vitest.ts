@@ -228,6 +228,12 @@ describe('commands', () => {
     expect(answer).not.toMatch(/drawn 88/)
   })
 
+  test('after an inline drawing the width answer says the pane takes the whole width', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    await run('ui.render', $, { ...PANE_EVENT, props: { ...PANE_EVENT.props, placement: 'inline', bodyColumns: 88 } })
+    expect(await say($, 'tail-width')).toContain('inline: the pane takes the whole width')
+  })
+
   test('before a drawing the width answer names no drawn width', async () => {
     const { $ } = fakeEngine()
     const answer = await say($, 'tail-width')
