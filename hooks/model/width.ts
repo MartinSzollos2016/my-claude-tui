@@ -238,7 +238,11 @@ const PATH_SEGMENTS = 6
 // Everything else is cut at the end.
 export function fitPath(item: ToolItem, summary: string, max: number, ellipsis = '…'): string {
   const path = pathOf(item)
-  const known = [shortPath(path, 2), shortPath(path, 1)].find(k => k !== '' && summary.includes(k))
+  // A quoted pattern opens the summary (Grep, Glob): the path is only looked
+  // for after it, so a pattern that names the path stays the pattern.
+  const from = summary.startsWith('"') ? summary.indexOf('"', 1) + 1 : 0
+  const tail = summary.slice(from)
+  const known = [shortPath(path, 2), shortPath(path, 1)].find(k => k !== '' && tail.includes(k))
   if (path === '' || known === undefined) return truncateDisplay(summary, max, ellipsis)
   const at = summary.lastIndexOf(known)
   const prefix = summary.slice(0, at)

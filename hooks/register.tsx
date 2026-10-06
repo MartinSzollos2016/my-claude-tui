@@ -1089,7 +1089,12 @@ export const register: Register = on => {
         next: () => step(1).catch(ignore),
         latest: () => step(null).catch(ignore),
         expandAll: () =>
-          update($, expanded, ids => [...new Set([...ids, ...openable])].slice(-MAX_EXPANDED)).catch(ignore),
+          // This turn's rows go last, so the trim drops earlier expansions
+          // first, never a row this turn opens.
+          update($, expanded, ids => {
+            const fresh = new Set(openable)
+            return [...ids.filter(id => !fresh.has(id)), ...openable].slice(-MAX_EXPANDED)
+          }).catch(ignore),
         collapseAll: () => {
           update($, expanded, () => []).catch(ignore)
           update($, fullBlocks, () => []).catch(ignore)
