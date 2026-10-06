@@ -21,8 +21,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   { name: 'tail-turns', description: 'List the turns of this session and switch the detail pane to one', sub: 'turns' },
   {
     name: 'tail-width',
-    description: 'Set the detail pane width as a share of the terminal (30-80 %)',
-    argumentHint: '<30-80>',
+    description: 'Show or set the detail pane width as a share of the terminal (30-80 %)',
+    argumentHint: '[30-80]',
     sub: 'width',
   },
   { name: 'tail-compact', description: 'Toggle one-line tool results in the transcript', sub: 'compact' },
@@ -35,7 +35,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   { name: 'tail-bar', description: 'Show or hide the tail-view info bar above the prompt', sub: 'bar' },
   {
     name: 'tail-status',
-    description: 'Show a status line under the prompt while a tool runs',
+    description:
+      'Status line under the prompt (off by default), spinner text and turn counts (on); on|off sets all three',
     argumentHint: '[on|off]',
     sub: 'status',
   },
