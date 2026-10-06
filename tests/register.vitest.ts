@@ -572,10 +572,16 @@ describe('detail pane', () => {
     expect(drawn).not.toContain('\u{F09D1}')
   })
 
-  test('pairs thinking from the end when the API form is shorter, refetches on a new fingerprint, expand all opens it', async () => {
+  test('finds thinking by its reply when the API form is shorter, refetches on a new fingerprint, expand all opens it', async () => {
     const api = [
       { role: 'user', content: [{ type: 'text', text: 'Second misaligned' }] },
-      { role: 'assistant', content: [{ type: 'thinking', thinking: 'Only late thought', signature: 's' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'Only late thought', signature: 's' },
+          { type: 'text', text: 'two' },
+        ],
+      },
     ]
     const { $, world } = fakeEngine({
       messages: [
@@ -607,6 +613,52 @@ describe('detail pane', () => {
     expect(world.calls.filter(call => call === 'messages:api').length).toBe(2)
   })
 
+  test('a reply to an agent hand-back is its own turn, with its own thinking', async () => {
+    const late = '<task-notification><task-id>t9</task-id><summary>Agent done</summary></task-notification>'
+    const { $ } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'go', toolUses: [] },
+        { role: 'assistant', text: 'spawned', toolUses: [] },
+        { role: 'assistant', text: 'Both failed', toolUses: [] },
+        { role: 'user', text: late, toolUses: [] },
+      ],
+      api: [
+        { role: 'user', content: [{ type: 'text', text: 'go' }] },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'plan it', signature: 's' },
+            { type: 'text', text: 'spawned' },
+          ],
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Another Claude session sent a message: <agent-message from="a">x</agent-message>' },
+          ],
+        },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'read the report', signature: 's' },
+            { type: 'thinking', thinking: 'two fails', signature: 's' },
+            { type: 'text', text: 'Both failed' },
+          ],
+        },
+        { role: 'user', content: [{ type: 'text', text: `<system-reminder>${late}</system-reminder>` }] },
+      ],
+    })
+    const latest = text(await draw($))
+    expect(latest).toContain('Message from agent')
+    expect(latest).toContain('Both failed')
+    expect(latest).toContain('\u{F09D1} 2')
+    expect(latest).not.toContain('No tool calls or output in this turn')
+    await press($, 'nav-prev')
+    const first = text(await draw($))
+    expect(first).toContain('\u{F09D1} 1')
+    expect(first).not.toContain('Both failed')
+  })
+
   test('counts the shown turn thinking from the API form, read once per transcript', async () => {
     // The thinking cache is keyed by the transcript's fingerprint, so a
     // second draw of the same transcript reads the API form only once.
@@ -617,7 +669,13 @@ describe('detail pane', () => {
       ],
       api: [
         { role: 'user', content: [{ type: 'text', text: 'Think about main.go' }] },
-        { role: 'assistant', content: [{ type: 'thinking', thinking: 'Look at main.go', signature: 's' }] },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'Look at main.go', signature: 's' },
+            { type: 'text', text: 'Thought it through.' },
+          ],
+        },
       ],
     })
     expect(text(await draw($))).toContain('\u{F09D1} 1')

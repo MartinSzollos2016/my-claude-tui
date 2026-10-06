@@ -60,7 +60,7 @@ import { sanitizePrompt, sanitizeText } from './model/sanitize'
 import { engineScroll, scrollToRow, stepCursor, type EngineScroll, type ScrollFrame } from './model/scroll'
 import { searchTurns, type TurnMatch } from './model/search'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
-import { alignFromEnd, thinkingCounts, type ApiLike, type TurnThinking } from './model/thinking'
+import { thinkingByStart, type ApiLike, type TurnThinking } from './model/thinking'
 import { durationSuffix, inlineRows, paneColumns, paneRows, resultLine, terminalWidth } from './model/transcript'
 import {
   apiTurnStarts,
@@ -126,7 +126,7 @@ async function refreshGit($: EngineInterface): Promise<void> {
 // Module-local caches: a reload starts them over, which costs one rebuild.
 let turnsCache: Memo<Turn[]> | undefined
 let searchCache: Memo<TurnMatch[]> | undefined
-let thinkingCache: Memo<TurnThinking[]> | undefined
+let thinkingCache: Memo<ReadonlyMap<string, TurnThinking>> | undefined
 let tasksCache: Memo<TaskEntry[]> | undefined
 
 // The Messages API form, read once per transcript fingerprint: it holds the
@@ -144,11 +144,11 @@ async function apiForm($: EngineInterface, key: string): Promise<readonly ApiLik
 
 // Thinking per turn from the Messages API form, read again only when the
 // transcript's fingerprint moved.
-async function turnThinking($: EngineInterface, key: string): Promise<TurnThinking[]> {
+async function turnThinking($: EngineInterface, key: string): Promise<ReadonlyMap<string, TurnThinking>> {
   if (thinkingCache === undefined || thinkingCache.key !== key) {
     const api = await apiForm($, key)
-    if (api === undefined) return []
-    thinkingCache = { key, value: thinkingCounts(api) }
+    if (api === undefined) return new Map()
+    thinkingCache = { key, value: thinkingByStart(api) }
   }
   return thinkingCache.value
 }
@@ -973,7 +973,7 @@ export const register: Register = on => {
     const [traces, detailTop, thinkingByTurn, turnCursorAt] = await Promise.all([
       loadTraces($, turn?.items ?? [], open, agents),
       detailScroll($, turnKey, scrolled.detail),
-      view === 'detail' && turn ? turnThinking($, turnsMemo.key) : [],
+      view === 'detail' && turn ? turnThinking($, turnsMemo.key) : new Map<string, TurnThinking>(),
       view === 'turns' ? read($, turnCursor) : null,
     ])
 
@@ -988,7 +988,8 @@ export const register: Register = on => {
         searchTurns(turns, query, icons.ellipsis),
       )
 
-    const thinking = alignFromEnd(thinkingByTurn, turns.length, selected)
+    // Keyed to the turn that holds the reply, not paired by place.
+    const thinking = turn?.startKey === undefined ? undefined : thinkingByTurn.get(turn.startKey)
     tasksCache = memo(tasksCache, turnsMemo.key, () => taskBoard(turns))
     const tasks = tasksCache.value
 
