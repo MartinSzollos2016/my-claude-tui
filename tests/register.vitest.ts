@@ -4,6 +4,7 @@
 import type { SessionMessage } from 'claude-code'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
+import { ICON_SETS } from '../hooks/icons'
 import { BAR_EVENT, byKey, fakeEngine, hooksOf, PANE_EVENT, settle, text } from './coverage/engine'
 
 // register.tsx keeps module-level state (pending turns, caches, the ticker):
@@ -200,6 +201,12 @@ describe('commands', () => {
     expect(await say($, 'tail-compact')).toContain('off')
     expect(await say($, 'tail-compact')).toContain('on')
     expect(await say($, 'tail-help')).toContain('/tail-turns')
+  })
+
+  test('/tail-help explains the header glyphs in the icon set the pane draws', async () => {
+    const { $ } = fakeEngine()
+    await say($, 'tail-icons', 'ascii')
+    expect(await say($, 'tail-help')).toContain(`${ICON_SETS.ascii.thinking} thinking blocks`)
   })
 
   test('/tail with an unknown subcommand names it, lists the valid ones and does not open the pane', async () => {
