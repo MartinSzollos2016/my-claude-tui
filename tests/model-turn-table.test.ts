@@ -85,3 +85,30 @@ describe('turnTable', () => {
     expect(turnTable([], [], 100, ICON_SETS.nerd).rows).toEqual([])
   })
 })
+
+describe('turn table memo', () => {
+  const turns = buildTurns([
+    { role: 'user', text: 'first', toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [] },
+    { role: 'user', text: 'second', toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [] },
+  ])
+
+  test('the same turns, stats, width and icons give the same table object', () => {
+    const stats = turns.map(() => undefined)
+    expect(turnTable(turns, stats, 100, ICON_SETS.nerd)).toBe(turnTable(turns, [...stats], 100, ICON_SETS.nerd))
+  })
+
+  test('the turn table follows a changed stat', () => {
+    const before = turnTable(
+      turns,
+      turns.map(() => undefined),
+      100,
+      ICON_SETS.nerd,
+    )
+    const stat = { prompt: 'first', durationMs: 4_000, endedAt: 0 }
+    const after = turnTable(turns, [stat, undefined], 100, ICON_SETS.nerd)
+    expect(after).not.toBe(before)
+    expect(after.rows[0]!.label).toContain('4.0s')
+  })
+})

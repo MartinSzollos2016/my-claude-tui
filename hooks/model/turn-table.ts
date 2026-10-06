@@ -22,7 +22,27 @@ const padStartDisplay = (text: string, width: number) => ' '.repeat(Math.max(0, 
 // relative to the longest turn. Narrow panes drop tokens and the bar, then
 // tools. Rows are as wide as the table, so the marker column the view puts
 // in front lines up under the header.
+// The last table: the turn list draws on every tick with the same turns.
+let last: { turns: readonly Turn[]; statsKey: string; width: number; icons: object; table: TurnTable } | undefined
+
+const statsKeyOf = (stats: readonly (TurnStat | undefined)[]) =>
+  stats.map(s => (s === undefined ? '-' : `${s.durationMs},${s.inputTokens ?? ''},${s.outputTokens ?? ''}`)).join(';')
+
 export function turnTable(
+  turns: readonly Turn[],
+  stats: readonly (TurnStat | undefined)[],
+  width: number,
+  icons: Pick<Icons, 'ellipsis' | 'bar'>,
+): TurnTable {
+  const statsKey = statsKeyOf(stats)
+  if (last?.turns === turns && last.statsKey === statsKey && last.width === width && last.icons === icons)
+    return last.table
+  const table = buildTable(turns, stats, width, icons)
+  last = { turns, statsKey, width, icons, table }
+  return table
+}
+
+function buildTable(
   turns: readonly Turn[],
   stats: readonly (TurnStat | undefined)[],
   width: number,
