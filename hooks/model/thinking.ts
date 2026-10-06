@@ -1,6 +1,7 @@
 // Thinking: how many thinking blocks each turn has and their readable text.
 import { sanitizeText } from './sanitize'
 import { apiKeyOf, apiPromptOf, blocksOf } from './turns'
+import type { Turn } from './types'
 
 //
 // The rows ($.session.messages()) carry no thinking; the Messages API form
@@ -15,7 +16,7 @@ export type TurnThinking = { count: number; text: string }
 // prompt up to the next one, keyed by the row key of the first of them that
 // a row carries (apiKeyOf, as Turn.startKey), so it lands on the turn that
 // holds the reply, however the rows group it.
-export function thinkingByStart(api: readonly ApiLike[]): ReadonlyMap<string, TurnThinking> {
+export function thinkingByStart(api: readonly ApiLike[]): ReadonlyMap<string, readonly TurnThinking[]> {
   type Group = { key?: string; count: number; texts: string[] }
   const groups: Group[] = []
   let current: Group | undefined
@@ -38,9 +39,26 @@ export function thinkingByStart(api: readonly ApiLike[]): ReadonlyMap<string, Tu
       if (clean !== '') current.texts.push(clean)
     }
   }
-  return new Map(
-    groups.flatMap(group =>
-      group.key === undefined ? [] : [[group.key, { count: group.count, text: group.texts.join('\n\n') }] as const],
-    ),
-  )
+  // Turns whose replies start alike share a key: their thinking is listed in
+  // order, and a turn takes its own by counting from the end (thinkingOf).
+  const out = new Map<string, TurnThinking[]>()
+  for (const group of groups) {
+    if (group.key === undefined) continue
+    out.set(group.key, [...(out.get(group.key) ?? []), { count: group.count, text: group.texts.join('\n\n') }])
+  }
+  return out
+}
+
+// The thinking of `turn`: the entry of its start key that the turn's place
+// among the turns with that key names, both counted from the end.
+export function thinkingOf(
+  turns: readonly Turn[],
+  turn: Turn | undefined,
+  byStart: ReadonlyMap<string, readonly TurnThinking[]>,
+): TurnThinking | undefined {
+  const key = turn?.startKey
+  if (turn === undefined || key === undefined) return undefined
+  const list = byStart.get(key) ?? []
+  const same = turns.filter(t => t.startKey === key)
+  return list[list.length - (same.length - same.indexOf(turn))]
 }

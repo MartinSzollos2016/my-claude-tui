@@ -110,13 +110,22 @@ export function apiKeyOf(blocks: readonly Block[]): string | undefined {
 
 const taskIdOf = (text: string): string | undefined => /<task-id>([^<]*)<\/task-id>/.exec(text)?.[1]?.trim()
 
-// Where the API form says a turn begins, by the row key of the first
-// assistant message after each user message with a prompt (a prompt, an
-// agent's hand-back, a notification): the rows lack some of these prompts.
-// `task:<id>` entries name the notifications the API form holds as a prompt;
-// one it holds only as a reminder (written after its turn's reply) opens no
-// turn.
-export type TurnStarts = ReadonlyMap<string, string>
+// What the API form says about where turns begin, for the rows to follow:
+// `keys`, the row key of each turn's first reply; `replies`, per key, every
+// assistant message with that key in order, true where it is the first reply
+// to a prompt the rows lack (an agent's hand-back), so a row is paired with
+// the message it is by counting from the end (both forms end on the latest
+// message, while their windows may open at different places); `prompts`, the
+// hand-back prompt per key; `tasks`, the notification ids the API form holds
+// as prompts (one it holds only as a reminder opens no turn).
+export type TurnStarts = {
+  keys: ReadonlySet<string>
+  replies: ReadonlyMap<string, readonly boolean[]>
+  prompts: ReadonlyMap<string, string>
+  tasks: ReadonlySet<string>
+}
+
+const isHandBack = (prompt: string) => prompt.includes('<agent-message')
 
 // The prompt an API user message carries, reminders left out; undefined for
 // a tool result or a message with nothing to read (reminders only).
@@ -131,7 +140,10 @@ export function apiPromptOf(blocks: readonly Block[]): string | undefined {
 }
 
 export function apiTurnStarts(api: readonly ApiLike[]): TurnStarts {
-  const starts = new Map<string, string>()
+  const keys = new Set<string>()
+  const replies = new Map<string, boolean[]>()
+  const prompts = new Map<string, string>()
+  const tasks = new Set<string>()
   let pending: string | undefined
   for (const m of api) {
     if (m === null || typeof m !== 'object') continue
@@ -140,17 +152,38 @@ export function apiTurnStarts(api: readonly ApiLike[]): TurnStarts {
       const own = apiPromptOf(blocks)
       if (own === undefined) continue
       const task = taskIdOf(own)
-      if (task !== undefined) starts.set(`task:${task}`, own)
+      if (task !== undefined) tasks.add(task)
       pending = own
       continue
     }
-    if (pending === undefined) continue
     const key = apiKeyOf(blocks)
     if (key === undefined) continue
-    starts.set(key, pending)
+    const isOpener = pending !== undefined && isHandBack(pending)
+    if (pending !== undefined) keys.add(key)
+    if (isOpener && pending !== undefined) prompts.set(key, pending)
+    replies.set(key, [...(replies.get(key) ?? []), isOpener])
     pending = undefined
   }
-  return starts
+  return { keys, replies, prompts, tasks }
+}
+
+// The rows (by index) that open a turn: each row with a hand-back key is
+// paired from the end with the API message of the same key, and opens a turn
+// where that message is the first reply to a hand-back.
+function openerRows(keys: readonly (string | undefined)[], starts: TurnStarts): Set<number> {
+  const byKey = new Map<string, number[]>()
+  keys.forEach((key, i) => {
+    if (key === undefined || !starts.prompts.has(key)) return
+    byKey.set(key, [...(byKey.get(key) ?? []), i])
+  })
+  const openers = new Set<number>()
+  for (const [key, rows] of byKey) {
+    const api = starts.replies.get(key) ?? []
+    rows.forEach((row, j) => {
+      if (api[api.length - (rows.length - j)] === true) openers.add(row)
+    })
+  }
+  return openers
 }
 
 // Where a text's memo entry is looked for: a short text is its own key, a
@@ -294,15 +327,23 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
     return turn
   }
 
+  // Each row's text, read once (a row's text may be a getter over the
+  // engine's copy), and the key it shares with the API form.
+  const texts = messages.map(m => (m.role === 'assistant' ? m.text : ''))
+  const keys = messages.map((m, i) =>
+    starts === undefined || m.role !== 'assistant' ? undefined : rowKey(m, texts[i]),
+  )
+  const openers = starts === undefined ? new Set<number>() : openerRows(keys, starts)
+
   // Whether the current turn was opened by a reply whose prompt the rows lack.
   let isOpenedByReply = false
-  for (const m of messages) {
+  for (const [i, m] of messages.entries()) {
     if (m.role === 'user') {
       // A notification written after the reply of the turn its agent's
       // hand-back opened (the API form holds it only as a reminder) opens no
       // turn of its own; an older one, outside the API window, still does.
       const task = isOpenedByReply ? taskIdOf(m.text) : undefined
-      if (task !== undefined && !starts?.has(`task:${task}`)) continue
+      if (task !== undefined && !starts?.tasks.has(task)) continue
       const prompt = pieces.prompt(m.text, (m.toolResults?.length ?? 0) > 0)
       if (prompt !== undefined) {
         current = open(prompt)
@@ -312,19 +353,17 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
     }
 
     current ??= open('')
-    // Read once: a row's text may be a getter over the engine's copy.
-    const raw = m.text
-    const key = starts === undefined ? undefined : rowKey(m, raw)
-    const started = key === undefined ? undefined : starts?.get(key)
-    if (key !== undefined && started !== undefined) {
-      // The rows lack this turn's prompt (an agent's hand-back): its reply
-      // opens it. A turn the rows opened themselves only takes the key.
-      if (current.items.length > 0) {
-        current = open(pieces.prompt(started, false) ?? '')
-        isOpenedByReply = true
-      }
-      current.startKey ??= key
+    const raw = texts[i] ?? ''
+    const key = keys[i]
+    const started = key === undefined ? undefined : starts?.prompts.get(key)
+    // The rows lack this turn's prompt (an agent's hand-back): its reply
+    // opens it.
+    if (started !== undefined && openers.has(i) && current.items.length > 0) {
+      current = open(pieces.prompt(started, false) ?? '')
+      isOpenedByReply = true
     }
+    // A turn's first reply names it for its thinking (thinkingByStart).
+    if (key !== undefined && current.items.length === 0 && starts?.keys.has(key)) current.startKey ??= key
     const text = pieces.output(raw)
     if (text !== '') {
       current.items.push({

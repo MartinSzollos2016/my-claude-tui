@@ -513,6 +513,21 @@ describe('live data', () => {
     expect(text(await draw($))).not.toContain('9.0s')
   })
 
+  test('turn.start passes the turn on before it reads the API form', async () => {
+    const { $, world } = fakeEngine()
+    world.messages = [{ role: 'user', text: 'ping', toolUses: [] }]
+    let readsAtNext = -1
+    await run('turn.start', $, { text: 'ping', turnId: 'q' }, async e => {
+      readsAtNext = world.calls.filter(call => call === 'messages:api').length
+      return e
+    })
+    expect(readsAtNext).toBe(0)
+    await settle()
+    await finish('q', 3_000, $)
+    await press($, 'nav-turns')
+    expect(text(byKey(await draw($), 'turn-0'))).toContain('3.0s')
+  })
+
   test('a turn started by a notification falls back to the transcript', async () => {
     const { $, world } = fakeEngine()
     world.messages = [{ role: 'user', text: 'ping', toolUses: [] }]
@@ -1166,6 +1181,19 @@ describe('keyboard cursor', () => {
     // The ring follows the cursor, so Enter presses the row under it.
     expect(world.focused.at(-1)).toBe('r1')
     expect(world.focused).toContain('t0:o0')
+  })
+
+  test("after leaving the search for another view, a later focus loss is the person's", async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    const focused = (isFocused: boolean) => ({ ...PANE_EVENT, props: { ...PANE_EVENT.props, isFocused } })
+    await run('ui.render', $, focused(true))
+    await press($, 'nav-search')
+    await press($, 'nav-detail')
+    await run('ui.render', $, focused(true))
+    const before = world.focusRequests
+    await run('ui.render', $, focused(false))
+    await settle()
+    expect(world.focusRequests).toBe(before)
   })
 
   test('Esc in the search field leaves the field, not the pane', async () => {
