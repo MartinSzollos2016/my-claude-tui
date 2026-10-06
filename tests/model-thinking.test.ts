@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { thinkingByStart, type ApiLike } from '../hooks/model/thinking'
+import { thinkingByStart, thinkingOf, type ApiLike } from '../hooks/model/thinking'
+import { apiTurnStarts, buildTurns } from '../hooks/model/turns'
 
 describe('thinkingByStart, malformed input', () => {
   test('string content opens a turn; null blocks and messages are skipped', () => {
@@ -17,7 +18,7 @@ describe('thinkingByStart, malformed input', () => {
       },
       { role: 'user', content: '   ' },
     ] as unknown as ApiLike[]
-    expect(thinkingByStart(api).get('tx:reply')).toEqual({ count: 2, text: 'a' })
+    expect(thinkingByStart(api).get('tx:reply')).toEqual([{ count: 2, text: 'a' }])
     expect(thinkingByStart([])).toEqual(new Map())
   })
 })
@@ -56,8 +57,8 @@ describe('thinkingByStart', () => {
         ],
       },
     ])
-    expect(map.get('tx:spawned')).toEqual({ count: 1, text: 'plan' })
-    expect(map.get('tx:Both failed')).toEqual({ count: 3, text: 'read it\n\nmore' })
+    expect(map.get('tx:spawned')).toEqual([{ count: 1, text: 'plan' }])
+    expect(map.get('tx:Both failed')).toEqual([{ count: 3, text: 'read it\n\nmore' }])
   })
 
   test('a thinking-only message before the reply counts toward the start the reply opens', () => {
@@ -66,6 +67,69 @@ describe('thinkingByStart', () => {
       { role: 'assistant', content: [{ type: 'thinking', thinking: 'first' }] },
       { role: 'assistant', content: [{ type: 'text', text: 'answer' }] },
     ])
-    expect(map.get('tx:answer')).toEqual({ count: 1, text: 'first' })
+    expect(map.get('tx:answer')).toEqual([{ count: 1, text: 'first' }])
+  })
+})
+
+describe('thinking of turns that start alike', () => {
+  test('two turns whose replies start the same keep their own thinking, paired from the end', () => {
+    const map = thinkingByStart([
+      { role: 'user', content: [{ type: 'text', text: 'first' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'A-think' },
+          { type: 'text', text: 'OK' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'second' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'B-think' },
+          { type: 'text', text: 'OK' },
+        ],
+      },
+    ])
+    expect(map.get('tx:OK')).toEqual([
+      { count: 1, text: 'A-think' },
+      { count: 1, text: 'B-think' },
+    ])
+  })
+})
+
+describe('thinkingOf', () => {
+  test('each of two turns that start alike shows its own thinking', () => {
+    const api: ApiLike[] = [
+      { role: 'user', content: [{ type: 'text', text: 'first' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'A-think' },
+          { type: 'text', text: 'OK' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'second' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'B-think' },
+          { type: 'text', text: 'OK' },
+        ],
+      },
+    ]
+    const turns = buildTurns(
+      [
+        { role: 'user', text: 'first', toolUses: [] },
+        { role: 'assistant', text: 'OK', toolUses: [] },
+        { role: 'user', text: 'second', toolUses: [] },
+        { role: 'assistant', text: 'OK', toolUses: [] },
+      ],
+      '',
+      apiTurnStarts(api),
+    )
+    const map = thinkingByStart(api)
+    expect(thinkingOf(turns, turns[0], map)?.text).toBe('A-think')
+    expect(thinkingOf(turns, turns[1], map)?.text).toBe('B-think')
   })
 })

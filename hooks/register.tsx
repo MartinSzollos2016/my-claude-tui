@@ -60,7 +60,7 @@ import { sanitizePrompt, sanitizeText } from './model/sanitize'
 import { engineScroll, scrollToRow, stepCursor, type EngineScroll, type ScrollFrame } from './model/scroll'
 import { searchTurns, type TurnMatch } from './model/search'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
-import { thinkingByStart, type ApiLike, type TurnThinking } from './model/thinking'
+import { thinkingByStart, thinkingOf, type ApiLike, type TurnThinking } from './model/thinking'
 import { durationSuffix, inlineRows, paneColumns, paneRows, resultLine, terminalWidth } from './model/transcript'
 import {
   apiTurnStarts,
@@ -126,7 +126,7 @@ async function refreshGit($: EngineInterface): Promise<void> {
 // Module-local caches: a reload starts them over, which costs one rebuild.
 let turnsCache: Memo<Turn[]> | undefined
 let searchCache: Memo<TurnMatch[]> | undefined
-let thinkingCache: Memo<ReadonlyMap<string, TurnThinking>> | undefined
+let thinkingCache: Memo<ReadonlyMap<string, readonly TurnThinking[]>> | undefined
 let tasksCache: Memo<TaskEntry[]> | undefined
 
 // The Messages API form, read once per transcript fingerprint: it holds the
@@ -144,7 +144,7 @@ async function apiForm($: EngineInterface, key: string): Promise<readonly ApiLik
 
 // Thinking per turn from the Messages API form, read again only when the
 // transcript's fingerprint moved.
-async function turnThinking($: EngineInterface, key: string): Promise<ReadonlyMap<string, TurnThinking>> {
+async function turnThinking($: EngineInterface, key: string): Promise<ReadonlyMap<string, readonly TurnThinking[]>> {
   if (thinkingCache === undefined || thinkingCache.key !== key) {
     const api = await apiForm($, key)
     if (api === undefined) return new Map()
@@ -428,6 +428,9 @@ async function notePrompt($: EngineInterface): Promise<number | undefined> {
   }
 }
 
+// The index notes of the turns that started, until their turn.complete.
+const startNotes = new Map<string, Promise<void>>()
+
 async function noteTurnStart($: EngineInterface, turnId: string, text: string): Promise<void> {
   try {
     const turns = (await currentTurns($)).value
@@ -635,6 +638,8 @@ async function scrollToTop($: EngineInterface): Promise<void> {
 
 // Switches what the pane shows, from the top of its content.
 async function showView($: EngineInterface, view: 'detail' | 'turns' | 'team'): Promise<void> {
+  // A view change leaves the search field (focusSearch marks it again).
+  isRingOnSearch = false
   await update($, turnCursor, () => null)
   await seedSearch($)
   await update($, paneView, () => view)
@@ -883,8 +888,10 @@ export const register: Register = on => {
   })
 
   // Observe only: the turn's index is noted before it starts unchanged.
+  // The turn's index is noted in the background: reading the transcript (and
+  // its API form) must not hold the turn up; turn.complete waits for it.
   on('turn.start', async ($, e, next) => {
-    await noteTurnStart($, e.turnId, e.text)
+    remember(startNotes, e.turnId, noteTurnStart($, e.turnId, e.text), MAX_OPEN_TURNS)
     return next(e)
   })
 
@@ -923,6 +930,8 @@ export const register: Register = on => {
       await update($, agentStats, all => ({ ...all, [agentId]: stat }))
       trackWorkflow($, '', agentId).catch(ignore)
     } else {
+      await startNotes.get(e.turnId)
+      startNotes.delete(e.turnId)
       const opened = turnIndexes.get(e.turnId)
       turnIndexes.delete(e.turnId)
       if (opened !== undefined) lastDoneIndex = Math.max(lastDoneIndex, opened.index)
@@ -1007,7 +1016,7 @@ export const register: Register = on => {
     const [traces, detailTop, thinkingByTurn, turnCursorAt] = await Promise.all([
       loadTraces($, turn?.items ?? [], open, agents),
       detailScroll($, turnKey, scrolled.detail),
-      view === 'detail' && turn ? turnThinking($, turnsMemo.key) : new Map<string, TurnThinking>(),
+      view === 'detail' && turn ? turnThinking($, turnsMemo.key) : new Map<string, readonly TurnThinking[]>(),
       view === 'turns' ? read($, turnCursor) : null,
     ])
 
@@ -1023,7 +1032,7 @@ export const register: Register = on => {
       )
 
     // Keyed to the turn that holds the reply, not paired by place.
-    const thinking = turn?.startKey === undefined ? undefined : thinkingByTurn.get(turn.startKey)
+    const thinking = thinkingOf(turns, turn, thinkingByTurn)
     tasksCache = memo(tasksCache, turnsMemo.key, () => taskBoard(turns))
     const tasks = tasksCache.value
 
