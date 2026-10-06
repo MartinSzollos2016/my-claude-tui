@@ -22,7 +22,7 @@ import {
 
 // The turn's thinking as one row above the items, when any of it is
 // readable; expanded, it reads as highlighted Markdown like the model's output.
-export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) {
+export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions, nameWidth: number) {
   const trunc = cutter(data.icons)
   const { icons } = data
   const { Box, Button, Text } = el
@@ -32,7 +32,7 @@ export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions) 
   const isOpen = data.expanded.has(id)
   // The label fills the row after its chevron and glyph columns (6 cells).
   const label = padEndDisplay(
-    trunc(`${padEndDisplay('Thinking', 12)} - ${thinking.text}`, Math.max(8, data.columns - 8)),
+    trunc(`${padEndDisplay('Thinking', nameWidth)}  ${thinking.text}`, Math.max(8, data.columns - 8)),
     Math.max(8, data.columns - 6),
   )
   data.layout.push({ kind: 'line', id })
@@ -111,6 +111,9 @@ type Line = {
   card?: readonly string[]
 }
 
+// The cells the time of a timed row takes, right-aligned.
+const DURATION_CELLS = 7
+
 // `below` draws what an open row shows under it, after the row itself is
 // recorded, so the rows of the content are recorded top to bottom.
 export function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | undefined, below?: () => RenderChildren) {
@@ -124,18 +127,20 @@ export function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | und
   // and the tree prefix alone draws their indent.
   const indent = place === undefined || place.path.length > 0 ? 0 : TRACE_INDENT
   const width = Math.max(20, data.columns - (place === undefined ? 0 : TRACE_INDENT))
-  const modelText = model === undefined ? '' : `${shortModel(model)}  `
   const durationText =
     duration === undefined ? '' : duration >= 1000 ? formatDuration(duration) : duration > 0 ? '<1s' : ''
+  const hasDuration = durationText !== ''
+  const modelText = model === undefined ? '' : hasDuration ? `${shortModel(model)} ` : shortModel(model)
 
   // One button carries name and summary, so a click or Enter anywhere on the
-  // row toggles it; the label is cut to the room the fixed columns leave.
-  const hasBar = data.columns >= BAR_MIN_COLUMNS
-  const barRoom = hasBar ? BAR_CELLS + 1 : 0
+  // row toggles it; the label is cut to the room the other columns leave.
+  // The time and its bar stand at the right edge only on a timed row; an
+  // untimed row lets its label run to the edge.
+  const hasBar = hasDuration && data.columns >= BAR_MIN_COLUMNS
+  const timeRoom = hasDuration ? 1 + DURATION_CELLS + (hasBar ? 1 + BAR_CELLS : 0) : 0
   // Once a cursor exists every row keeps one cell for its marker.
   const hasCursorColumn = data.cursor !== undefined && data.cursor !== null
-  const room =
-    width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - 2 - 7 - barRoom - (hasCursorColumn ? 1 : 0)
+  const room = width - displayWidth(guide) - 2 - 3 - 2 - displayWidth(modelText) - timeRoom - (hasCursorColumn ? 1 : 0)
   // A row that opens takes a click anywhere from the chevron to the model
   // column: the chevron is a button too, and the label fills its room.
   const label = canOpen ? padEndDisplay(line.label(room), room) : line.label(room)
@@ -181,31 +186,25 @@ export function renderLine(el: El, line: Line, data: Ctx, place: TreePlace | und
             </Text>
           )}
         </Box>
-        <Box flexShrink={0}>
-          {modelText !== '' && model !== undefined && (
-            <Text color={modelColor(model) ?? C.text} hover={hover}>
-              {modelText}
-            </Text>
-          )}
-          <Text color={C.ongoing} hover={hover}>
-            {durationText !== '' ? `${icons.dot} ` : '  '}
-          </Text>
-          <Text color={C.muted} hover={hover}>
-            {`${padEndDisplay(durationText, 7)}${hasBar ? ' ' : ''}`}
-          </Text>
-          {hasBar && (
-            <Text
-              key={`bar-${id}`}
-              color={duration !== undefined && duration > 0 && duration >= data.maxMs ? C.accent : C.muted}
-              hover={hover}
-            >
-              {padEndDisplay(
-                duration === undefined ? '' : durationBar(duration, data.maxMs, BAR_CELLS, icons),
-                BAR_CELLS,
-              )}
-            </Text>
-          )}
-        </Box>
+        {(modelText !== '' || hasDuration) && (
+          <Box flexShrink={0}>
+            {modelText !== '' && model !== undefined && (
+              <Text color={modelColor(model) ?? C.text} hover={hover}>
+                {modelText}
+              </Text>
+            )}
+            {hasDuration && (
+              <Text color={C.muted} hover={hover}>
+                {` ${' '.repeat(Math.max(0, DURATION_CELLS - displayWidth(durationText)))}${durationText}${hasBar ? ' ' : ''}`}
+              </Text>
+            )}
+            {hasBar && duration !== undefined && (
+              <Text key={`bar-${id}`} color={duration > 0 && duration >= data.maxMs ? C.accent : C.muted} hover={hover}>
+                {padEndDisplay(durationBar(duration, data.maxMs, BAR_CELLS, icons), BAR_CELLS)}
+              </Text>
+            )}
+          </Box>
+        )}
       </Box>
       {line.card !== undefined && (
         <Box

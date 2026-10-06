@@ -156,14 +156,27 @@ describe('display-width alignment', () => {
 
   test('a row label with wide characters is cut to the room in cells', () => {
     const cjk = rowLabel('日本語'.repeat(70))
-    expect(displayWidth(cjk)).toBeLessThanOrEqual(75)
-    expect(displayWidth(cjk)).toBeGreaterThanOrEqual(74)
+    // An untimed row: 100 columns less chevron, status and icon (7 cells).
+    expect(displayWidth(cjk)).toBeLessThanOrEqual(93)
+    expect(displayWidth(cjk)).toBeGreaterThanOrEqual(92)
     expect(cjk.trimEnd().endsWith('…')).toBe(true)
   })
 
-  test('a wide tool name pads to the same name column as an ASCII one', () => {
-    const name = rowLabel('same', 'mcp__srv__日本')
-    expect(displayWidth(name.split(' - ')[0]!)).toBe(12)
+  test('a wide tool name sets the name column in cells, an ASCII one pads to it', () => {
+    const mixed = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          { tool_use_id: 'w1', tool: 'mcp__srv__日本語', input: { q: 'a' }, text: 'ok' },
+          { tool_use_id: 'r1', tool: 'Read', input: { file_path: '/a.ts' }, text: 'ok' },
+        ],
+      },
+    ])
+    const tree = renderPane(el, { ...base, turns: mixed, stats: [undefined] }, act)
+    expect(String(byKey(tree, 'r1')?.props['label'])).toMatch(/^Read {4}\S/)
+    expect(String(byKey(tree, 'w1')?.props['label'])).toMatch(/^日本語 {2}\S/)
   })
 
   test('the turn list pads its prompt column by cells', () => {
@@ -187,11 +200,11 @@ describe('duration bars', () => {
     expect(text(bar(tree, 'b1'))).toBe('█████   ')
     expect(bar(tree, 'b1')?.props['color']).toBe(C.muted)
     expect(text(bar(tree, 'p1'))).toBe('██      ')
-    for (const id of ['b1', 'e1', 'a1', 'p1']) expect(displayWidth(text(bar(tree, id)))).toBe(8)
+    for (const id of ['b1', 'a1', 'p1']) expect(displayWidth(text(bar(tree, id)))).toBe(8)
   })
 
-  test('a row without a duration keeps the column blank', () => {
-    expect(text(bar(renderPane(el, base, act), 'e1'))).toBe('        ')
+  test('a row without a duration draws no bar', () => {
+    expect(bar(renderPane(el, base, act), 'e1')).toBeUndefined()
   })
 
   test('the bar is left out under 70 columns and the label takes its room back', () => {
@@ -225,9 +238,9 @@ describe('duration bars', () => {
             ?.props['label'],
         ),
       )
-    // Fixed columns take 16 cells, and the bar 9 more while it shows.
-    expect(label(70)).toBe(70 - 16 - 9)
-    expect(label(69)).toBe(69 - 16)
+    // Chevron, status and icon take 7 cells, the time 8, and the bar 9 more while it shows.
+    expect(label(70)).toBe(70 - 15 - 9)
+    expect(label(69)).toBe(69 - 15)
   })
 })
 
@@ -652,7 +665,8 @@ describe('row hit areas', () => {
   test('the label of a row fills the room up to the model and duration columns', () => {
     const tree = renderPane(el, base, act)
     const labels = ['b1', 'e1'].map(id => String(byKey(tree, id)?.props['label']))
-    expect(displayWidth(labels[0]!)).toBe(displayWidth(labels[1]!))
+    // e1 has no time: it takes back the 17 cells of time and bar b1 keeps.
+    expect(displayWidth(labels[1]!) - displayWidth(labels[0]!)).toBe(17)
     expect(labels.some(label => / {2}$/.test(label))).toBe(true)
   })
 
@@ -664,6 +678,9 @@ describe('row hit areas', () => {
     const tree = renderPane(el, { ...base, turns: bare }, act)
     expect(byKey(tree, 'n1')?.type).not.toBe('Button')
     expect(byKey(tree, 'chevron-n1')).toBeUndefined()
+    // A blank chevron where the row cannot open.
+    expect(text(byKey(tree, 'item-n1')).startsWith('  ')).toBe(true)
+    expect(text(byKey(tree, 'item-n1'))).not.toContain(ICON_SETS.nerd.selected)
   })
 
   test('the thinking row has a chevron button and a label as wide as the row allows', () => {
@@ -672,5 +689,60 @@ describe('row hit areas', () => {
     press(byKey(tree, 'chevron-t0:thinking'))
     expect(calls).toEqual(['toggle:t0:thinking'])
     expect(displayWidth(String(byKey(tree, 't0:thinking')?.props['label']))).toBe(base.columns - 6)
+  })
+})
+
+describe('row columns', () => {
+  type Uses = Parameters<typeof buildTurns>[0][number]['toolUses']
+  const turnOf = (toolUses: Uses) =>
+    buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: '', toolUses },
+    ])
+  const three = turnOf([
+    { tool_use_id: 'r1', tool: 'Read', input: { file_path: '/a.ts' }, text: 'x' },
+    { tool_use_id: 'g1', tool: 'Grep', input: { pattern: 'foo' }, text: 'x' },
+    { tool_use_id: 'w1', tool: 'WebFetch', input: { url: 'https://e.x' }, text: 'x' },
+  ])
+  const draw = (extra: Record<string, unknown> = {}) =>
+    renderPane(el, { ...base, turns: three, stats: [undefined], timings: {}, ...extra }, act)
+  const label = (tree: unknown, id: string) => String(byKey(tree, id)?.props['label'])
+
+  test('names pad to the widest name of the list, the summary two cells after, no dash', () => {
+    const tree = draw()
+    expect(label(tree, 'r1')).toMatch(/^Read {6}\S/)
+    expect(label(tree, 'w1')).toMatch(/^WebFetch {2}\S/)
+    for (const id of ['r1', 'g1', 'w1']) expect(label(tree, id)).not.toContain(' - ')
+  })
+
+  test('names pad to at most 12 cells', () => {
+    const long = turnOf([
+      { tool_use_id: 'r1', tool: 'Read', input: { file_path: '/a.ts' }, text: 'x' },
+      { tool_use_id: 'm1', tool: 'mcp__server__a_very_long_tool_name', input: { q: 'a' }, text: 'x' },
+    ])
+    expect(label(renderPane(el, { ...base, turns: long, stats: [undefined], timings: {} }, act), 'r1')).toMatch(
+      /^Read {10}\S/,
+    )
+  })
+
+  test('a row without a duration runs its label to the edge and draws no bar', () => {
+    const tree = draw()
+    // 100 columns less chevron, status and icon (7 cells).
+    expect(displayWidth(label(tree, 'r1'))).toBe(93)
+    expect(byKey(tree, 'bar-r1')).toBeUndefined()
+  })
+
+  test('a timed row ends in its time and bar, the label gives up exactly their room', () => {
+    const tree = draw({ timings: { r1: { start: 0, end: 4_000 } } })
+    // A space, the time in 7 cells, a space and the 8-cell bar.
+    expect(displayWidth(label(tree, 'r1'))).toBe(93 - 17)
+    expect(displayWidth(text(byKey(tree, 'bar-r1')))).toBe(8)
+    expect(text(byKey(tree, 'item-r1'))).toContain('   4.0s ')
+    expect(text(byKey(tree, 'item-r1'))).not.toContain(ICON_SETS.nerd.dot)
+  })
+
+  test('the thinking row follows the name width of its turn', () => {
+    const tree = draw({ thinking: { count: 1, text: 'pondering' } })
+    expect(label(tree, 't0:thinking')).toMatch(/^Thinking {2}pondering/)
   })
 })
