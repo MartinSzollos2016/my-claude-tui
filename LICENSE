@@ -24,7 +24,7 @@ SOFTWARE.
 
 Third-party notices
 
-Portions of hooks/model.ts, hooks/view.tsx and hooks/theme.ts (per-tool
+Portions of hooks/model/, hooks/view/ and hooks/theme.ts (per-tool
 summaries, formatters, layout, icons and color roles) are ported from
 tail-claude (https://github.com/kylesnowschwartz/tail-claude) and
 agent-ouija (https://github.com/kylesnowschwartz/agent-ouija), both under:

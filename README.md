@@ -42,7 +42,7 @@ The commands run at once, even while Claude is answering.
 | `/tail-width <30-80>`    | pane width as % of the terminal (default 80, kept)                                                                           |
 | `/tail-compact`          | toggle the compact transcript (on by default, kept)                                                                          |
 | `/tail-icons [set]`      | icon set: `nerd` (default), `unicode` or `ascii`                                                                             |
-| `/tail-bar`              | show or hide the info bar                                                                                                    |
+| `/tail-bar`              | show or hide the info bar (this session)                                                                                     |
 | `/tail-status [on\|off]` | status line under the prompt (off by default), spinner text and turn counts (on by default); on or off sets all three (kept) |
 | `/tail-notify [on\|off]` | toast when a subagent or workflow finishes (off by default, kept)                                                            |
 | `/tail-help`             | list commands and keys                                                                                                       |
@@ -55,23 +55,23 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 
 `/tail` and `/tail-turns` give the pane the keyboard. Otherwise ctrl+x tab does, pressed twice while the info bar shows (the bar takes the first), or a click in the pane.
 
-| Key                    | Action                                                    |
-| ---------------------- | --------------------------------------------------------- |
-| Tab / shift+Tab        | move between rows                                         |
-| Enter / click on a row | expand or collapse, drill into a subagent                 |
-| `p` / `n` / `l`        | previous / next / latest turn                             |
-| `t` / `d`              | turn list / back to detail                                |
-| `s`                    | search the turn list (Enter opens the newest match)       |
-| `m`                    | team board: teammates and tasks (shown in a team session) |
-| `j` / `k` / `o` / `y`  | cursor down / up a row, open or close it, copy it         |
-| `e` / `c`              | expand all / collapse all                                 |
-| `f` / `b`              | page the pane's content down / up                         |
-| `h`                    | show every key in the footer, or only those that act now  |
-| Esc                    | back to the prompt                                        |
+| Key                    | Action                                                                     |
+| ---------------------- | -------------------------------------------------------------------------- |
+| Tab / shift+Tab        | move between rows                                                          |
+| Enter / click on a row | expand or collapse, drill into a subagent                                  |
+| `p` / `n` / `l`        | previous / next / latest turn                                              |
+| `t` / `d`              | turn list / back to detail                                                 |
+| `s`                    | search the turn list (Enter opens the newest match)                        |
+| `m`                    | team board: teammates and tasks (shown in a team session)                  |
+| `j` / `k` / `o` / `y`  | cursor down / up a row, open or close it, copy it                          |
+| `e` / `c`              | expand all / collapse all (detail view; `e` while some rows are collapsed) |
+| `f` / `b`              | page the pane's content down / up                                          |
+| `h`                    | show every key in the footer, or only those that act now                   |
+| Esc                    | back to the prompt                                                         |
 
 The keys are pinned to the bottom of the pane in a footer. It shows one row of the keys that act now, the most wanted first and `h: keys` last, with the position of the turn (`41/64`, `64/64 live`) and whether the pane has the keyboard on the right; when both do not fit, the status takes a second row. `h` expands the footer to every key in groups (moving, cursor, views and expand) and `h: less` collapses it again, for the rest of the session. Every key keeps its hotkey, shown or not: one that cannot act right now (`p` on the first turn, `o`/`y` without a cursor, `f` at the end, `d` in the detail view, `t` in the turn list) does nothing, so the pane keeps the keyboard. Expanded, under 64 columns each group takes its own row; under 40 columns only the keys and arrows stay.
 
-Each row reads `status icon name  summary`, the names of a turn padded to one column, with the time and a bar at the right edge when the call has one; only rows that open have a chevron, and a collapsed finished subagent ends in `✗N` when N calls under it failed. The header counts tool calls, outputs and thinking blocks with glyphs; `/tail-help` says what each one means in your icon set.
+Each row reads `status icon name  summary`, the names of a turn padded to one column, with the time and a bar at the right edge when the call has one; only rows that open have a chevron, and a collapsed finished subagent ends in the error mark and N (`✗N`; `xN` in the ascii set) when N calls under it failed. The header shows tool calls, outputs, thinking blocks and a robot per subagent with glyphs, and at the right tokens, context use, duration and the end time; `/tail-help` says what each glyph means in your icon set.
 
 The pane is exactly as tall as its window and scrolls its content itself: the header (metrics and prompt) stays on top, the footer at the bottom, and the rows between them move with `f` / `b` (a page each) or follow the `j` / `k` cursor; the mouse wheel and PgUp / PgDn scroll the same rows, so the header and footer never move. `▲ N more above` and `▼ N more below` say how much is out of view, and the status row says `top` or `end` while the content is longer than the window. Each view starts at the top again when the turn or the view changes.
 
