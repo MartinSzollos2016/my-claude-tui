@@ -4,7 +4,7 @@ import { C } from '../hooks/theme'
 import { footerLayout } from '../hooks/model/footer'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
-import { footerGroups, footerPlan } from '../hooks/view/footer'
+import { footerGroups, footerPlan, footerStatus } from '../hooks/view/footer'
 import { renderPane } from '../hooks/view/pane'
 import { act, acts, base, byKey, el, nodes, text, type Node } from './fixtures/view'
 
@@ -33,13 +33,13 @@ describe('footer', () => {
     const tree = renderPane(el, { ...base, selected: 1, isLatest: true }, act)
     const footer = footerOf(tree)
     expect(footer).toBeDefined()
-    expect(text(byKey(footer, 'turn-position'))).toBe('turn 2/2 (live)')
+    expect(text(byKey(footer, 'turn-position'))).toBe('2/2 live')
     expect(byKey(footer, 'turn-position')?.props['color']).toBe('inactive')
     // Nothing of the navigation is above the items.
     const body = nodes(tree)[0]!
     const head = (nodes(tree)[1]?.children as Node[]).filter(Boolean)[0]!
     expect(byKey(head, 'nav-prev')).toBeUndefined()
-    expect(text(head)).not.toContain('turn 2/2')
+    expect(text(head)).not.toContain('2/2 live')
     expect(nodes(body).filter(n => n.props['key'] === 'nav-prev')).toHaveLength(1)
   })
 
@@ -113,7 +113,7 @@ describe('pane focus', () => {
   test('the note ends the status row, right after the position of the turn', () => {
     const status = byKey(renderPane(el, { ...base, isFocused: true }, act), 'footer-status')
     expect(status?.props['justifyContent']).toBe('flex-end')
-    expect(text(status)).toBe('turn 1/2 · keys on')
+    expect(text(status)).toBe('1/2 · keys on')
     const parts = (status?.children as Node[]).filter(Boolean)
     expect(parts.at(-1)?.props['key']).toBe('focus-note')
   })
@@ -444,13 +444,14 @@ describe('pinned footer', () => {
     expect(fits.props['justifyContent']).toBe('flex-end')
     const beside = byKey(footerOf({ columns: 76, isFocused: true }), 'footer-status')!
     expect(beside.props['width']).toBe(74 - 22)
-    expect(text(beside)).toBe('turn 2/2 (live) · keys on')
-    expect(text(fits)).toBe('turn 2/2 (live) · keys on')
+    expect(text(beside)).toBe('2/2 live · keys on')
+    expect(text(fits)).toBe('2/2 live · keys on')
+    // A narrow pane shortens the status to a variant that fits before it cuts.
     const cut = byKey(footerOf({ columns: 20, isFocused: false }), 'footer-status')!
     expect(displayWidth(text(cut))).toBeLessThanOrEqual(18)
-    expect(text(cut)).toContain('…')
+    expect(text(cut)).toMatch(/^2\/2/)
     const ascii = byKey(footerOf({ columns: 20, isFocused: false, icons: ICON_SETS.ascii }), 'footer-status')!
-    expect(text(ascii)).toContain('...')
+    expect(text(ascii)).toMatch(/^[\x20-\x7e]*$/)
   })
 
   test('charges its text to the pane budget', () => {
@@ -461,5 +462,37 @@ describe('pinned footer', () => {
     const tree = renderPane(el, { ...base, turns: big, stats: [undefined], isLatest: true, selected: 0 }, act)
     const total = nodes(tree).reduce((n, node) => n + text(node.children).length, 0)
     expect(total).toBeLessThanOrEqual(100_000)
+  })
+})
+
+describe('status row texts', () => {
+  const status = (extra: Record<string, unknown>) =>
+    text(byKey(renderPane(el, { ...base, ...extra }, act), 'footer-status'))
+
+  test('the position is short, live is a word', () => {
+    expect(status({ selected: 0, isLatest: false, isFocused: true })).toMatch(/^1\/2 · keys on$/)
+    expect(status({ selected: 1, isLatest: true, isFocused: true })).toMatch(/^2\/2 live · keys on$/)
+  })
+
+  test('status shortens in order: focus note, then place, then live; the position stays', () => {
+    const data = {
+      ...base,
+      icons: ICON_SETS.nerd,
+      selected: 1,
+      isLatest: true,
+      isFocused: false,
+      isBarShown: true,
+    } as unknown as Parameters<typeof footerStatus>[0]
+    const atEnd = { scrollTop: 22, windowRows: 10, total: 30, starts: {} }
+    const at = (room: number) =>
+      footerStatus(data, room, atEnd)
+        .parts.map(p => p.text)
+        .join('')
+    expect(at(60)).toBe('2/2 live · end · click or ctrl+x tab ×2')
+    expect(at(32)).toBe('2/2 live · end · click for keys')
+    expect(at(26)).toBe('2/2 live · click for keys')
+    expect(at(21)).toBe('2/2 · click for keys')
+    expect(at(10)).toBe('2/2')
+    expect(at(2)).not.toContain('click')
   })
 })

@@ -617,7 +617,7 @@ describe('detail pane', () => {
     expect(text(await draw($))).toContain('Turns (1 of 3)')
     ;(byKey(await draw($), 'turn-search')?.props['onSubmit'] as (value: string) => void)('fix')
     await settle()
-    expect(text(await draw($))).toContain('turn 1/3')
+    expect(text(await draw($))).toContain('1/3')
   })
 
   test('typing is never overwritten: the field keeps its seed until clear resets it under a new key', async () => {
@@ -673,26 +673,26 @@ describe('detail pane', () => {
 
   test('navigates turns, drills into a subagent and expands everything', async () => {
     const { $ } = fakeEngine({ messages: three, agentMessages: { 'agent-1': child } })
-    expect(text(await draw($))).toContain('turn 3/3 (live)')
+    expect(text(await draw($))).toContain('3/3 live')
     await press($, 'nav-prev')
-    expect(text(await draw($))).toContain('turn 2/3')
+    expect(text(await draw($))).toContain('2/3')
     await press($, 'nav-prev')
-    expect(text(await draw($))).toContain('turn 1/3')
+    expect(text(await draw($))).toContain('1/3')
     // p on the first turn is still the pane's key and changes nothing.
     expect(byKey(await draw($), 'nav-prev')?.props['hotkey']).toBe('p')
     await press($, 'nav-prev')
-    expect(text(await draw($))).toContain('turn 1/3')
+    expect(text(await draw($))).toContain('1/3')
     await press($, 'nav-next')
-    expect(text(await draw($))).toContain('turn 2/3')
+    expect(text(await draw($))).toContain('2/3')
     await press($, 'nav-latest')
-    expect(text(await draw($))).toContain('turn 3/3 (live)')
+    expect(text(await draw($))).toContain('3/3 live')
 
     await press($, 'nav-turns')
     expect(text(await draw($))).toContain('Turns (3)')
     await press($, 'nav-detail')
     await press($, 'nav-turns')
     await press($, 'turn-0')
-    expect(text(await draw($))).toContain('turn 1/3')
+    expect(text(await draw($))).toContain('1/3')
 
     await press($, 'a1')
     expect(text(await draw($))).toContain('Execution Trace')
