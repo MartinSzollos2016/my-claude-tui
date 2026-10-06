@@ -2084,3 +2084,73 @@ describe('engine round trips', () => {
     expect(writes(world, 'tick') + writes(world, 'timings')).toBe(2)
   })
 })
+
+describe('wave 1 correctness', () => {
+  test('expand all on a trace that names its own agent, or a cycle of two, draws and collapses', async () => {
+    for (const loop of [{ A: 'A' }, { A: 'B', B: 'A' }] as Record<string, string>[]) {
+      const agentMessages = Object.fromEntries(
+        Object.entries(loop).map(([id, child]) => [
+          id,
+          [
+            { role: 'user' as const, text: 'Go', toolUses: [] },
+            {
+              role: 'assistant' as const,
+              text: '',
+              toolUses: [
+                { tool_use_id: `${id}-x`, tool: 'Agent', input: { description: 'again' }, agentId: child, text: 'ok' },
+              ],
+            },
+          ],
+        ]),
+      )
+      const { $ } = fakeEngine({
+        messages: [
+          { role: 'user', text: 'Go', toolUses: [] },
+          {
+            role: 'assistant',
+            text: '',
+            toolUses: [{ tool_use_id: 't-A', tool: 'Agent', input: { description: 'Job' }, agentId: 'A', text: 'ok' }],
+          },
+        ],
+        agentMessages,
+        agents: Object.keys(loop).map(id => ({
+          id,
+          description: 'Job',
+          type: 'Explore',
+          status: 'completed' as const,
+        })),
+      })
+      await draw($)
+      await press($, 'nav-expand')
+      await expect(draw($)).resolves.toBeDefined()
+      await press($, 'nav-down')
+      await press($, 'nav-collapse')
+      await expect(draw($)).resolves.toBeDefined()
+    }
+  })
+
+  test('expand all never closes a row this turn opens that an earlier expansion holds', async () => {
+    const bash = (id: string, out: string) => ({
+      tool_use_id: id,
+      tool: 'Bash',
+      input: { command: `echo ${id}` },
+      text: out,
+    })
+    const { $ } = fakeEngine({
+      messages: [
+        { role: 'user', text: 'first', toolUses: [] },
+        { role: 'assistant', text: '', toolUses: [bash('r0', 'zero-output'), bash('r1', 'one-output')] },
+        { role: 'user', text: 'second', toolUses: [] },
+        { role: 'assistant', text: '', toolUses: Array.from({ length: 299 }, (_, n) => bash(`s${n}`, `out ${n}`)) },
+      ],
+    })
+    await draw($)
+    await press($, 'nav-prev')
+    await press($, 'r0')
+    await press($, 'nav-next')
+    await press($, 'nav-expand')
+    await press($, 'nav-prev')
+    await press($, 'nav-expand')
+    expect(text(await draw($))).toContain('zero-output')
+  })
+})

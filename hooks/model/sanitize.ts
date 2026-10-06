@@ -6,6 +6,7 @@
 // OSC 8 spoofs links, CSI moves the cursor over other rows) or bidi controls
 // that make code read differently than it runs (Trojan Source). Everything
 // from the transcript passes through sanitizeText before it is drawn.
+import { expandTabs } from './width'
 
 // CSI, OSC (BEL or ST terminated), DCS/SOS/PM/APC strings, two-byte escapes.
 const ESCAPE_SEQUENCES =
@@ -64,6 +65,10 @@ export function stripBlocks(text: string, open: string, close: string): string {
 
 // Turns XML-ish wrappers the engine injects into a readable one-liner.
 export function sanitizePrompt(text: string): string {
+  return expandTabs(promptOf(text))
+}
+
+function promptOf(text: string): string {
   // An agent's hand-back: the engine's frame around its report.
   if (text.includes('<agent-message')) return 'Message from agent'
   const command = between(text, '<command-name>', '</command-name>')

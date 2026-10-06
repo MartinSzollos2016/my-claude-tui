@@ -329,3 +329,19 @@ describe('expandTabs', () => {
     expect(expandTabs('')).toBe('')
   })
 })
+
+describe('fitPath and a quoted pattern', () => {
+  test('a Grep pattern that names the path stays the pattern', () => {
+    const input = { pattern: 'hooks', glob: '*.ts', path: '/repo/hooks' }
+    const item: ToolItem = {
+      kind: 'tool',
+      id: 'g',
+      tool: 'Grep',
+      input,
+      summary: toolSummary('Grep', input),
+      isError: false,
+      isPending: false,
+    }
+    expect(fitPath(item, item.summary, 80, '…')).toBe('"hooks" in *.ts')
+  })
+})

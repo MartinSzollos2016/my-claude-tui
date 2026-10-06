@@ -741,6 +741,10 @@ describe('row columns', () => {
     expect(text(byKey(tree, 'item-r1'))).not.toContain(ICON_SETS.nerd.dot)
   })
 
+  test('a tab in the thinking text never reaches its row', () => {
+    expect(label(draw({ thinking: { count: 1, text: 'a\tb' } }), 't0:thinking')).not.toContain('\t')
+  })
+
   test('the thinking row follows the name width of its turn', () => {
     const tree = draw({ thinking: { count: 1, text: 'pondering' } })
     expect(label(tree, 't0:thinking')).toMatch(/^Thinking {2}pondering/)
@@ -820,6 +824,29 @@ describe('failed children', () => {
       timings: { ...timed, b9: { start: 0, end: 2_000 } },
     })
     expect(text(byKey(tree, 'bar-b9'))).toBe('████████')
+  })
+
+  test('interrupted calls are not counted as failed', () => {
+    const interrupted = buildTurns(
+      [
+        {
+          role: 'assistant',
+          text: '',
+          toolUses: [
+            {
+              tool_use_id: 'i1',
+              tool: 'Bash',
+              input: { command: 'x' },
+              text: '[Request interrupted by user]',
+              isError: true as const,
+              result: { interrupted: true },
+            },
+          ],
+        },
+      ],
+      'A/',
+    )[0]!.items
+    expect(byKey(draw('completed', { traces: new Map([['A', { items: interrupted }]]) }), 'badge-ag1')).toBeUndefined()
   })
 
   test('the mark takes its room from the label, the row keeps its width', () => {

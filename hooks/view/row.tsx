@@ -4,7 +4,7 @@ import type { RenderChildren } from 'claude-code'
 import { hoverCard } from '../model/card'
 import { formatDuration, shortModel, treePrefix } from '../model/format'
 import type { Item, Turn } from '../model/types'
-import { displayWidth, durationBar, padEndDisplay } from '../model/width'
+import { displayWidth, durationBar, expandTabs, padEndDisplay } from '../model/width'
 import { C, modelColor, type ThemeKey } from '../theme'
 import { CARD_INDENT, CARD_SLACK, EXPANDED_INDENT, LINE, type Ctx, type PaneActions, type TreePlace } from './context'
 import { renderFrame, renderLong } from './frames'
@@ -32,7 +32,7 @@ export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions, 
   const isOpen = data.expanded.has(id)
   // The label fills the row after its chevron and glyph columns (6 cells).
   const label = padEndDisplay(
-    trunc(`${padEndDisplay('Thinking', nameWidth)}  ${thinking.text}`, Math.max(8, data.columns - 8)),
+    trunc(`${padEndDisplay('Thinking', nameWidth)}  ${expandTabs(thinking.text)}`, Math.max(8, data.columns - 8)),
     Math.max(8, data.columns - 6),
   )
   data.layout.push({ kind: 'line', id })
