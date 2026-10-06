@@ -1075,8 +1075,9 @@ describe('own scroll', () => {
     expect(frames).toBe(4 + 3 + 30 * 3)
   })
 
-  // Measured at a 49-column pane: the title of a Bash frame with a long
-  // description wrapped under it, a row the estimate missed.
+  // First measured at a 49-column pane with a long Bash description, which
+  // the frame now leaves to the row; a Read's long `lines` meta at 24 columns
+  // wraps the same way.
   test('a frame title never shrinks; the ascii set counts the rows its uncut meta wraps to', () => {
     const bash = buildTurns([
       { role: 'user', text: 'go', toolUses: [] },
@@ -1086,23 +1087,23 @@ describe('own scroll', () => {
         toolUses: [
           {
             tool_use_id: 'c1',
-            tool: 'Bash',
-            input: { command: 'find .', description: `Search ${'for the probe file '.repeat(6)}` },
+            tool: 'Read',
+            input: { file_path: '/p.ts', offset: 1_000_000_000, limit: 1_000_000_000 },
             text: 'ok',
           },
         ],
       },
     ])
-    const tree = pane({ turns: bash, stats: [undefined], columns: 49, expanded: new Set(['c1']) })
+    const tree = pane({ turns: bash, stats: [undefined], columns: 24, expanded: new Set(['c1']) })
     const titles = nodes(tree).filter(
       n => n.type === 'Box' && n.props['flexShrink'] === 0 && nodes(n.children).some(t => t.props['bold'] === true),
     )
     expect(titles.length).toBeGreaterThanOrEqual(2)
     measured.length = 0
-    pane({ turns: bash, stats: [undefined], columns: 49, expanded: new Set(['c1']) })
+    pane({ turns: bash, stats: [undefined], columns: 24, expanded: new Set(['c1']) })
     const unicode = measured[0]!.total
     measured.length = 0
-    pane({ turns: bash, stats: [undefined], columns: 49, expanded: new Set(['c1']), icons: ICON_SETS.ascii })
+    pane({ turns: bash, stats: [undefined], columns: 24, expanded: new Set(['c1']), icons: ICON_SETS.ascii })
     expect(measured[0]!.total).toBeGreaterThan(unicode)
   })
 

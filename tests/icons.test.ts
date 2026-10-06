@@ -45,6 +45,11 @@ describe('icon sets', () => {
     expect([ICON_SETS.ascii.pageUp, ICON_SETS.ascii.pageDown]).toEqual(['^', 'v'])
     expect([ICON_SETS.ascii.moreAbove, ICON_SETS.ascii.moreBelow]).toEqual(['^', 'v'])
   })
+
+  test('the thinking glyph never doubles as the ellipsis; unicode thinks in ∴', () => {
+    for (const set of Object.values(ICON_SETS)) expect(set.thinking).not.toBe(set.ellipsis)
+    expect(ICON_SETS.unicode.thinking).toBe('∴')
+  })
 })
 
 const MULTI = [
