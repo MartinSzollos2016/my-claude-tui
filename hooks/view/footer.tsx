@@ -189,10 +189,13 @@ export function footerPlan(groups: FooterGroups, layout: FooterLayout, columns: 
   const groupWidth = (group: readonly FooterKey[]) => displayWidth(group.map(k => footerText(k, layout)).join('  '))
   const inner = columns - STATUS_INSET
   const leftWidth = Math.max(groupWidth(move), groupWidth(views))
-  const isTwo = layout.columns === 'two'
+  const help = groups.help
+  // Two columns only while both rows fit: the left column padded to its gap,
+  // the separator with its gap, then the right keys.
+  const sideBySide = (right: readonly FooterKey[]) => leftWidth + KEY_GAP + 1 + KEY_GAP + groupWidth(right)
+  const isTwo = layout.columns === 'two' && sideBySide(cursor) <= inner && sideBySide([...expand, ...help]) <= inner
   // The views row with the page keys at its end: the left column and the
   // separator (two gaps around it), then the expand keys.
-  const help = groups.help
   const isPageInRow = (isTwo ? leftWidth + 5 : 0) + groupWidth([...expand, ...help]) + 2 + groupWidth(page) <= inner
   const expandKeys = isPageInRow ? [...expand, ...page, ...help] : [...expand, ...help]
   const rows: FooterRow[] = isTwo

@@ -617,3 +617,30 @@ describe('team key', () => {
     expect(nodes(byKey(f, 'footer-hidden')).some(n => n.props['key'] === 'nav-team')).toBe(false)
   })
 })
+
+describe('full footer rows fit', () => {
+  // The cells a row takes as the engine draws it: a button is `key: label`.
+  const drawnWidth = (n: Node | string | undefined): number => {
+    if (n === undefined || n === null) return 0
+    if (typeof n === 'string') return displayWidth(n)
+    if (n.type === 'Button') return displayWidth(`${String(n.props['hotkey'])}: ${String(n.props['label'])}`)
+    return ((n.children as (Node | string)[]) ?? []).reduce((sum, c) => sum + drawnWidth(c), 0)
+  }
+
+  test('no row of the open footer is wider than the pane, 60 to 80 columns', () => {
+    for (let columns = 60; columns <= 80; columns++)
+      for (const isFocused of [true, false]) {
+        const tree = renderPane(el, { ...base, isFooterOpen: true, isFocused, columns, rows: 40 }, act)
+        const footer = byKey(tree, 'footer')!
+        for (const row of (footer.children as Node[]).filter(
+          n => n && String(n.props['key']).startsWith('footer-row'),
+        )) {
+          const width = drawnWidth(row)
+          expect(width, `${columns} ${String(row.props['key'])}`).toBeLessThanOrEqual(columns - 2)
+        }
+        const header = Number(byKey(tree, 'pane-header')?.props['height'] ?? 0)
+        const drawn = (footer.children as Node[]).filter(n => n && n.props['key'] !== 'footer-hidden').length
+        expect(byKey(tree, 'pane-window')?.props['height'], `${columns}`).toBe(40 - header - drawn)
+      }
+  })
+})

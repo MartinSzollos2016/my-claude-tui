@@ -924,17 +924,8 @@ describe('own scroll', () => {
         // Every drawn child of the footer is one row; the hidden keys take none.
         const footerRows = kids(byKey(tree, 'footer')).filter(n => n.props['key'] !== 'footer-hidden').length
         expect(footerRows, JSON.stringify(extra)).toBe(
-          extra.view === undefined
-            ? columns >= 64
-              ? 4
-              : 6
-            : extra.view === 'team'
-              ? columns >= 64
-                ? 3
-                : 4
-              : columns >= 64
-                ? 4
-                : 5,
+          // The detail view's two columns need more than 64 cells: stacked there.
+          extra.view === undefined ? 6 : extra.view === 'team' ? (columns >= 64 ? 3 : 4) : columns >= 64 ? 4 : 5,
         )
         expect(byKey(tree, 'pane-window')?.props['height']).toBe(30 - rows - footerRows)
       }
