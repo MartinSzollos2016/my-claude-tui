@@ -41,8 +41,19 @@ const MAX_WRAP_CACHE = 2000
 // The rows `text` takes wrapped at `width` cells: each of its lines at least
 // one, a long one a row per `width`; a trailing newline adds none. The view
 // expands tabs before it draws (expandTabs), so the text measured has none.
+// A text's key: its width, length and a hash of all of it (FNV-1a), so the
+// cache holds no copy of the text.
+function wrapKey(text: string, width: number): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193)
+  return `${width}:${text.length}:${(hash >>> 0).toString(36)}`
+}
+
+export const resetWrapCache = (): void => wrapCache.clear()
+export const wrapCacheKeyChars = (): number => [...wrapCache.keys()].reduce((sum, key) => sum + key.length, 0)
+
 function wrappedRows(text: string, width: number): number {
-  const key = `${width}\u0000${text}`
+  const key = wrapKey(text, width)
   const cached = wrapCache.get(key)
   if (cached !== undefined) return cached
   const lines = text.split('\n')
