@@ -66,9 +66,10 @@ In VS Code and `claude -p`, where no pane is drawn, `/tail` and `/tail-turns` an
 | `j` / `k` / `o` / `y`  | cursor down / up a row, open or close it, copy it         |
 | `e` / `c`              | expand all / collapse all                                 |
 | `f` / `b`              | page the pane's content down / up                         |
+| `h`                    | show every key in the footer, or only those that act now  |
 | Esc                    | back to the prompt                                        |
 
-The keys are pinned to the bottom of the pane in a footer: moving, cursor, views and expand, then the position of the turn and whether the pane has the keyboard. Every key keeps its hotkey: one that cannot act right now (`p` on the first turn, `o`/`y` without a cursor, `f` at the end, `d` in the detail view, `t` in the turn list) does nothing, so the pane keeps the keyboard. Under 64 columns each group takes its own row, under 40 only the keys and arrows stay.
+The keys are pinned to the bottom of the pane in a footer. It shows one row of the keys that act now, the most wanted first and `h: keys` last, with the position of the turn (`41/64`, `64/64 live`) and whether the pane has the keyboard on the right; when both do not fit, the status takes a second row. `h` expands the footer to every key in groups (moving, cursor, views and expand) and `h: less` collapses it again, for the rest of the session. Every key keeps its hotkey, shown or not: one that cannot act right now (`p` on the first turn, `o`/`y` without a cursor, `f` at the end, `d` in the detail view, `t` in the turn list) does nothing, so the pane keeps the keyboard. Expanded, under 64 columns each group takes its own row; under 40 columns only the keys and arrows stay.
 
 The pane is exactly as tall as its window and scrolls its content itself: the header (metrics and prompt) stays on top, the footer at the bottom, and the rows between them move with `f` / `b` (a page each) or follow the `j` / `k` cursor; the mouse wheel and PgUp / PgDn scroll the same rows, so the header and footer never move. `▲ N more above` and `▼ N more below` say how much is out of view, and the status row says `top` or `end` while the content is longer than the window. Each view starts at the top again when the turn or the view changes.
 
