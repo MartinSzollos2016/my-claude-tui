@@ -4,6 +4,7 @@
 import type { RenderSurface, TurnUsage } from 'claude-code'
 
 import type { ToolTiming, TurnStat } from '../types'
+import { promptKey } from './model/sanitize'
 import type { Turn } from './model/types'
 
 export const MAX_TIMINGS = 500
@@ -78,7 +79,7 @@ export function statFor(
 ): TurnStat | undefined {
   if (!turn) return undefined
   const isOwn = (stat: TurnStat, at: Turn | undefined) =>
-    at !== undefined && (stat.prompt === at.prompt || at.prompt === '')
+    at !== undefined && (stat.prompt === promptKey(at) || at.prompt === '')
   for (let i = stats.length - 1; i >= 0; i--) {
     const stat = stats[i]!
     if (stat.turnIndex === turn.index && isOwn(stat, turn)) return stat
@@ -86,7 +87,7 @@ export function statFor(
   for (let i = stats.length - 1; i >= 0; i--) {
     const stat = stats[i]!
     const claimed = stat.turnIndex !== undefined && isOwn(stat, turns[stat.turnIndex])
-    if (stat.prompt === turn.prompt && !claimed) return stat
+    if (stat.prompt === promptKey(turn) && !claimed) return stat
   }
   return undefined
 }
@@ -106,7 +107,7 @@ export function statOfDuration(stats: readonly TurnStat[], durationMs: number): 
 // its prompt (see statFor); undefined once the rows moved on.
 export function turnOfStat(stat: TurnStat, turns: readonly Turn[]): Turn | undefined {
   const turn = turns.find(t => t.index === stat.turnIndex)
-  return turn !== undefined && (turn.prompt === stat.prompt || turn.prompt === '') ? turn : undefined
+  return turn !== undefined && (promptKey(turn) === stat.prompt || turn.prompt === '') ? turn : undefined
 }
 
 // The index buildTurns gives the turn starting with `prompt`: the last turn
@@ -115,7 +116,7 @@ export function turnOfStat(stat: TurnStat, turns: readonly Turn[]): Turn | undef
 export function turnIndexAtStart(turns: readonly Turn[], prompt: string): number {
   const last = turns.at(-1)
   if (!last) return 0
-  return prompt === '' || last.prompt === prompt ? last.index : turns.length
+  return prompt === '' || promptKey(last) === prompt ? last.index : turns.length
 }
 
 const MAX_PENDING_TURNS = 50

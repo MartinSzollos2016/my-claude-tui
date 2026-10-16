@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
 import {
-  agentDirectory,
+  agentLabel,
   apiTurnStarts,
   buildTurns,
   handBackTitle,
@@ -15,6 +15,7 @@ import {
   turnsKey,
 } from '../hooks/model/turns'
 import type { ToolItem } from '../hooks/model/types'
+import { displayWidth } from '../hooks/model/width'
 import { main, prompt, read, transcript } from './fixtures/model'
 
 describe('buildTurns', () => {
@@ -505,7 +506,7 @@ describe('hand-back senders', () => {
     expect(handBackTitle(['zz', 'yy'], agents)).toBe('Messages from agent')
   })
 
-  test('agentDirectory maps each subagent call to its type and description', () => {
+  test('agentLabel names a subagent call by its type and description', () => {
     const rows: SessionMessage[] = [
       prompt('go'),
       {
@@ -514,15 +515,14 @@ describe('hand-back senders', () => {
         toolUses: [
           agentCall('u1', 'a1', { subagent_type: 'Explore', description: 'Find callers' }),
           { ...agentCall('u2', 'b2', { subagent_type: 'Plan' }), tool: 'Task' },
-          { ...read, text: 'ok' },
+          agentCall('u3', 'c3', { subagent_type: 'Explore', description: 'x'.repeat(100) }),
         ],
       },
     ]
-    const agents = agentDirectory(buildTurns(rows))
-    expect([...agents]).toEqual([
-      ['a1', 'Explore · Find callers'],
-      ['b2', 'Plan'],
-    ])
+    const labels = buildTurns(rows)[0]!.items.map(item => agentLabel(item as ToolItem))
+    expect(labels.slice(0, 2)).toEqual(['Explore · Find callers', 'Plan'])
+    expect(displayWidth(labels[2]!)).toBe(60)
+    expect(labels[2]!.endsWith('…')).toBe(true)
   })
 
   const handBackSession = (from: string) => {
@@ -555,6 +555,20 @@ describe('hand-back senders', () => {
     expect(buildTurns(unknown.rows, '', unknown.starts).at(-1)!.prompt).toBe('Message from agent')
   })
 
+  test('a hand-back keeps the name of the call before it when a later call reuses the id', () => {
+    const { rows, starts } = handBackSession('a1')
+    const later: SessionMessage[] = [
+      ...rows,
+      prompt('again'),
+      {
+        role: 'assistant',
+        text: 'respawned',
+        toolUses: [agentCall('u9', 'a1', { subagent_type: 'Explore', description: 'Check tests' })],
+      },
+    ]
+    expect(buildTurns(later, '', starts)[1]!.prompt).toBe('Message from Explore · Find callers')
+  })
+
   test('naming hand-backs adds no work to an unchanged rebuild', () => {
     const { rows, starts } = handBackSession('a1')
     const turns = incrementalTurns()
@@ -564,23 +578,5 @@ describe('hand-back senders', () => {
     expect(turns.work).toEqual(before)
     expect(first.at(-1)!.prompt).toBe('Message from Explore · Find callers')
     expect(second.at(-1)!.prompt).toBe(first.at(-1)!.prompt)
-  })
-
-  test('agentDirectory is linear in the calls', () => {
-    const rows: SessionMessage[] = []
-    for (let t = 0; t < 2_000; t++) {
-      rows.push(prompt(`p${t}`))
-      rows.push({
-        role: 'assistant',
-        text: '',
-        toolUses: Array.from({ length: 5 }, (_, k) =>
-          agentCall(`u${t}-${k}`, `a${t}-${k}`, { subagent_type: 'Explore', description: `d${k}` }),
-        ),
-      })
-    }
-    const turns = buildTurns(rows)
-    const started = performance.now()
-    expect(agentDirectory(turns).size).toBe(10_000)
-    expect(performance.now() - started).toBeLessThan(200)
   })
 })
