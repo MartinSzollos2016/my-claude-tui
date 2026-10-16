@@ -62,13 +62,22 @@ describe('handBackSenders', () => {
     expect(handBackSenders(`${block('a1')}\n${block('a1')}`)).toEqual(['a1'])
     expect(handBackSenders('plain text')).toEqual([])
     expect(handBackSenders(block('a\u001b[31m1'))).toEqual(['a1'])
-    expect(handBackSenders(`${'x'.repeat(512)}${block('late')}`)).toEqual([])
   })
 
-  test('handBackSenders reads only the start of a long text', () => {
-    const long = 'x'.repeat(600) + block('x1').repeat(10_000) + 'y'.repeat(1_000_000)
+  test('handBackSenders finds the second block after a long report', () => {
+    const report = (from: string) => `<agent-message from="${from}">\n${'report line\n'.repeat(200)}</agent-message>`
+    expect(handBackSenders(`sent while you were working:\n${report('a1')}\n${report('b2')}`)).toEqual(['a1', 'b2'])
+  })
+
+  test('a long reminder before the block does not hide its sender', () => {
+    const reminder = `<system-reminder>${'r'.repeat(600)}</system-reminder>\n`
+    expect(handBackSenders(`${reminder}Another Claude session sent a message:\n${block('a1')}`)).toEqual(['a1'])
+  })
+
+  test('handBackSenders names at most eight senders, in linear time', () => {
+    const long = Array.from({ length: 10_000 }, (_, i) => block(`x${i}`)).join('') + 'y'.repeat(1_000_000)
     const started = performance.now()
-    expect(handBackSenders(long)).toEqual([])
+    expect(handBackSenders(long)).toEqual(['x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7'])
     expect(performance.now() - started).toBeLessThan(50)
   })
 })

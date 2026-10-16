@@ -356,6 +356,9 @@ export function incrementalTurns(): {
 function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces: Pieces, starts?: TurnStarts): Turn[] {
   const turns: Turn[] = []
   let current: Turn | undefined
+  // The subagent calls so far by agent id: a hand-back is named by the
+  // calls before it, so its name does not change as later rows arrive.
+  const agents = new Map<string, string>()
 
   const open = (prompt: string, raw: string): Turn => {
     const turn: Turn = {
@@ -366,7 +369,10 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
       outputCount: 0,
       subagentCount: 0,
     }
-    if (isHandBack(raw)) turn.senders = handBackSenders(raw)
+    if (isHandBack(raw)) {
+      turn.senders = handBackSenders(raw)
+      turn.prompt = handBackTitle(turn.senders, agents)
+    }
     turns.push(turn)
     return turn
   }
@@ -421,15 +427,13 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
       const item: ToolItem = { kind: 'tool', id: idPrefix + use.tool_use_id, ...pieces.tool(use) }
       current.items.push(item)
       current.toolCount += 1
-      if (isSubagent(item)) current.subagentCount += 1
+      if (isSubagent(item)) {
+        current.subagentCount += 1
+        agents.set(item.agentId, agentLabel(item))
+      }
     }
   }
 
-  // A hand-back's turn is named after its senders, once every call is known.
-  if (turns.some(turn => turn.senders !== undefined)) {
-    const agents = agentDirectory(turns)
-    for (const turn of turns) if (turn.senders !== undefined) turn.prompt = handBackTitle(turn.senders, agents)
-  }
   return turns
 }
 
@@ -469,21 +473,14 @@ export const isAgentRunning = (status: AgentStatus | undefined): boolean =>
 export const isAgentFinished = (status: AgentStatus | undefined): boolean =>
   status === 'completed' || status === 'failed' || status === 'killed'
 
-// What a hand-back's turn is called after: each subagent call of the
-// session by its agent id, as "type · description" (the type alone when the
-// call has no description). A later call with the same id wins.
+// What a hand-back's turn is called after: a subagent call as
+// "type · description", the type alone when the call has no description.
 const AGENT_LABEL = 60
 
-export function agentDirectory(turns: readonly Turn[]): ReadonlyMap<string, string> {
-  const agents = new Map<string, string>()
-  for (const turn of turns)
-    for (const item of turn.items) {
-      if (!isSubagent(item)) continue
-      const description = str(item.input, 'description').trim()
-      const label = description === '' ? itemName(item) : `${itemName(item)} · ${description}`
-      agents.set(item.agentId, truncateDisplay(label, AGENT_LABEL))
-    }
-  return agents
+export function agentLabel(item: ToolItem): string {
+  const description = str(item.input, 'description').trim()
+  const label = description === '' ? itemName(item) : `${itemName(item)} · ${description}`
+  return truncateDisplay(label, AGENT_LABEL)
 }
 
 // A hand-back turn's prompt: who sent it, "agent" for a sender the session
@@ -492,10 +489,4 @@ export function handBackTitle(senders: readonly string[], agents: ReadonlyMap<st
   const names = [...new Set(senders.map(id => agents.get(id) ?? 'agent'))]
   if (names.length === 0) return 'Message from agent'
   return `${senders.length > 1 ? 'Messages' : 'Message'} from ${names.join(', ')}`
-}
-
-// The prompt the turn a hand-back opens will have, for a text not yet in the
-// rows (turn.start, prompt.submit); undefined for any other text.
-export function handBackPrompt(text: string, turns: readonly Turn[]): string | undefined {
-  return isHandBack(text) ? handBackTitle(handBackSenders(text), agentDirectory(turns)) : undefined
 }
