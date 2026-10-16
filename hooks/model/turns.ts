@@ -1,7 +1,7 @@
 // Engine session rows -> turns: the items a reply produced, their status,
 // a subagent's trace, and whether agents still run.
 import type { AgentStatus, SessionMessage } from 'claude-code'
-import { sanitizePrompt, sanitizeText, sanitizeValue, stripBlocks } from './sanitize'
+import { handBackSenders, sanitizePrompt, sanitizeText, sanitizeValue, stripBlocks } from './sanitize'
 import { itemName, toolSummary } from './summaries'
 import type { ApiLike } from './thinking'
 import { SUBAGENT_TOOLS, type Item, type ToolItem, type Turn } from './types'
@@ -357,7 +357,7 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
   const turns: Turn[] = []
   let current: Turn | undefined
 
-  const open = (prompt: string): Turn => {
+  const open = (prompt: string, raw: string): Turn => {
     const turn: Turn = {
       index: turns.length,
       prompt,
@@ -366,6 +366,7 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
       outputCount: 0,
       subagentCount: 0,
     }
+    if (isHandBack(raw)) turn.senders = handBackSenders(raw)
     turns.push(turn)
     return turn
   }
@@ -389,20 +390,20 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
       if (task !== undefined && !starts?.tasks.has(task)) continue
       const prompt = pieces.prompt(m.text, (m.toolResults?.length ?? 0) > 0)
       if (prompt !== undefined) {
-        current = open(prompt)
+        current = open(prompt, m.text)
         isOpenedByReply = false
       }
       continue
     }
 
-    current ??= open('')
+    current ??= open('', '')
     const raw = texts[i] ?? ''
     const key = keys[i]
     const started = key === undefined ? undefined : starts?.prompts.get(key)
     // The rows lack this turn's prompt (an agent's hand-back): its reply
     // opens it.
     if (started !== undefined && openers.has(i) && current.items.length > 0) {
-      current = open(pieces.prompt(started, false) ?? '')
+      current = open(pieces.prompt(started, false) ?? '', started)
       isOpenedByReply = true
     }
     // A turn's first reply names it for its thinking (thinkingByStart).
@@ -424,6 +425,11 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
     }
   }
 
+  // A hand-back's turn is named after its senders, once every call is known.
+  if (turns.some(turn => turn.senders !== undefined)) {
+    const agents = agentDirectory(turns)
+    for (const turn of turns) if (turn.senders !== undefined) turn.prompt = handBackTitle(turn.senders, agents)
+  }
   return turns
 }
 
@@ -486,4 +492,10 @@ export function handBackTitle(senders: readonly string[], agents: ReadonlyMap<st
   const names = [...new Set(senders.map(id => agents.get(id) ?? 'agent'))]
   if (names.length === 0) return 'Message from agent'
   return `${senders.length > 1 ? 'Messages' : 'Message'} from ${names.join(', ')}`
+}
+
+// The prompt the turn a hand-back opens will have, for a text not yet in the
+// rows (turn.start, prompt.submit); undefined for any other text.
+export function handBackPrompt(text: string, turns: readonly Turn[]): string | undefined {
+  return isHandBack(text) ? handBackTitle(handBackSenders(text), agentDirectory(turns)) : undefined
 }

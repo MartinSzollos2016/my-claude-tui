@@ -64,6 +64,7 @@ import { thinkingByStart, thinkingOf, type ApiLike, type TurnThinking } from './
 import { durationSuffix, inlineRows, paneColumns, paneRows, resultLine, terminalWidth } from './model/transcript'
 import {
   apiTurnStarts,
+  handBackPrompt,
   incrementalTurns,
   isAgentFinished,
   isAgentRunning,
@@ -444,7 +445,8 @@ const startNotes = new Map<string, Promise<void>>()
 async function noteTurnStart($: EngineInterface, turnId: string, text: string): Promise<void> {
   try {
     const turns = (await currentTurns($)).value
-    const prompt = sanitizePrompt(sanitizeText(text).trim())
+    // A hand-back's prompt names its sender, as the turn built from it will.
+    const prompt = handBackPrompt(text, turns) ?? sanitizePrompt(sanitizeText(text).trim())
     const queue = discardStale(pendingTurns, lastDoneIndex)
     // An agent's hand-back never shows in the rows, so its turn is always the
     // next one, even after another hand-back with the same prompt.
@@ -911,7 +913,10 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     // In the form a turn's prompt takes, so the fallback stat finds its turn.
-    lastPrompt = sanitizePrompt(sanitizeText(e.text).trim())
+    const handBack = e.text.includes('<agent-message')
+      ? handBackPrompt(e.text, (await currentTurns($)).value)
+      : undefined
+    lastPrompt = handBack ?? sanitizePrompt(sanitizeText(e.text).trim())
     const pushed = e.turnId === undefined ? await notePrompt($) : undefined
     const wasWorking = await read($, isWorking)
     await update($, isWorking, () => true)

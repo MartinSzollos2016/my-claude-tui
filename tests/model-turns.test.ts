@@ -525,6 +525,47 @@ describe('hand-back senders', () => {
     ])
   })
 
+  const handBackSession = (from: string) => {
+    const handBack = `Another Claude session sent a message:\n<agent-message from="${from}">done</agent-message>`
+    const rows: SessionMessage[] = [
+      prompt('go'),
+      {
+        role: 'assistant',
+        text: 'spawned',
+        toolUses: [agentCall('u1', 'a1', { subagent_type: 'Explore', description: 'Find callers' })],
+      },
+      { role: 'assistant', text: 'Both commands failed', toolUses: [] },
+    ]
+    const api = [
+      { role: 'user' as const, content: [{ type: 'text', text: 'go' }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'spawned' }] },
+      { role: 'user' as const, content: [{ type: 'text', text: handBack }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'Both commands failed' }] },
+    ]
+    return { rows, starts: apiTurnStarts(api) }
+  }
+
+  test('a hand-back turn is named after the agent that sent it', () => {
+    const known = handBackSession('a1')
+    expect(buildTurns(known.rows, '', known.starts).map(t => t.prompt)).toEqual([
+      'go',
+      'Message from Explore · Find callers',
+    ])
+    const unknown = handBackSession('zz')
+    expect(buildTurns(unknown.rows, '', unknown.starts).at(-1)!.prompt).toBe('Message from agent')
+  })
+
+  test('naming hand-backs adds no work to an unchanged rebuild', () => {
+    const { rows, starts } = handBackSession('a1')
+    const turns = incrementalTurns()
+    const first = turns.build(rows, '', starts)
+    const before = { ...turns.work }
+    const second = turns.build(rows, '', starts)
+    expect(turns.work).toEqual(before)
+    expect(first.at(-1)!.prompt).toBe('Message from Explore · Find callers')
+    expect(second.at(-1)!.prompt).toBe(first.at(-1)!.prompt)
+  })
+
   test('agentDirectory is linear in the calls', () => {
     const rows: SessionMessage[] = []
     for (let t = 0; t < 2_000; t++) {
