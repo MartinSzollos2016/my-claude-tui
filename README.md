@@ -20,8 +20,8 @@ Colors are Claude Code theme keys, so the plugin follows `/theme`.
 
 Requires Claude Code 2.1.289 or newer. The default icons need a [Nerd Font](https://www.nerdfonts.com/) v3.2 or newer;
 without one, `/tail-icons unicode` or `/tail-icons ascii` switches to plain symbols. The Nerd icons sit below U+10000,
-so the terminals of JetBrains IDEs draw them one cell wide, as Claude Code counts them. A Nerd Font Mono keeps every icon
-inside its cell; with other variants an icon may overflow into the next cell, and rows leave a cell of room for that.
+so the terminals of JetBrains IDEs draw them one cell wide, as Claude Code counts them. A Nerd Font Mono keeps every
+Nerd icon inside its cell. Other variants may draw one into the next cell, and each row leaves a cell free for it.
 
 ```bash
 claude plugin marketplace add MartinSzollos2016/my-claude-tui
@@ -85,16 +85,16 @@ Claude Code paints the pane's frame grey and a plugin cannot change it.
 
 ## What the plugin does on your machine
 
-- **Reads** the current session through Claude Code's plugin API: the conversation and its tool
+- The plugin reads the current session through Claude Code's plugin API: the conversation and its tool
   calls and results, the session's agents, context usage and cost, and the permission mode from
   the prompt hook. It keeps its own UI state (expanded rows, timings) in the session and five
   preferences (pane width, compact transcript, icon set, status line, notifications) in Claude
   Code's plugin store.
-- **Runs no programs.** The branch in the info bar is read from the repository's `.git/HEAD`
+- No programs run. The branch in the info bar comes from the repository's `.git/HEAD`
   (through a worktree's `.git` file when there is one).
-- **Sends nothing out**: no network requests, no telemetry. Everything it reads is drawn in the
+- Nothing goes over the network and there is no telemetry. Everything the plugin reads is drawn in the
   pane, the info bar and the transcript of the same session.
-- **Hooks**: its own slash commands (`command.run`, registered per command, so it never sees
+- The plugin uses these hooks: its own slash commands (`command.run`, registered per command, so it never sees
   others); `session.start` to set up the session and open the pane; `ui.focus` and `ui.scroll`
   for the pane's own keys, cursor and scrolling; `tool.call`, `turn.start` and `turn.complete` to time calls and turns and match each
   turn to its prompt, passing each on unchanged; `prompt.submit` and the `UserPromptSubmit`
@@ -102,10 +102,11 @@ Claude Code paints the pane's frame grey and a plugin cannot change it.
   to draw the pane, the info bar and the compact tool rows in the transcript, to name the running
   tool in the transcript's spinner and to add the tool and agent counts to a turn's "Baked for
   3s" line (both left to Claude Code with `/tail-status off`).
-- **Shows** the running tool and its elapsed time in the status line under the prompt
-  (`$.ui.status`, only after `/tail-status on`; Claude Code draws it with a warning mark and the plugin's name), and a toast when a subagent or a Workflow
-  finishes (`$.ui.toast`, only after `/tail-notify on`), plus "Copied" after a copy. It makes no
-  permission decisions and changes no settings.
+- The status line under the prompt shows the running tool and its elapsed time (`$.ui.status`,
+  only after `/tail-status on`; Claude Code draws it with a warning mark and the plugin's name). A
+  toast says when a subagent or a Workflow finishes (`$.ui.toast`, only after `/tail-notify on`),
+  and "Copied" appears after a copy. The plugin makes no permission decisions and changes no
+  settings.
 
 ## Security
 
