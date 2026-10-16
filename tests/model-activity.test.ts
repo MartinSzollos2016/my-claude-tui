@@ -72,6 +72,16 @@ describe('statusText', () => {
     expect(line).toContain('Bash echo hi')
     expect(line.endsWith(' . 3s')).toBe(true)
   })
+
+  // The unicode set draws a different glyph for each category, so a swap shows.
+  test("the status line starts with the icon of the running tool's category", () => {
+    const glyphs = CATEGORY_ICON.map(([, key]) => ICON_SETS.unicode[key])
+    expect(new Set(glyphs).size, 'one unicode glyph per category').toBe(new Set(CATEGORY_ICON.map(([, k]) => k)).size)
+    for (const [tool, key] of CATEGORY_ICON)
+      expect(statusText([runningTool('r', tool, {}, 0)], 0, ICON_SETS.unicode)!.split(' ')[0], tool).toBe(
+        ICON_SETS.unicode[key],
+      )
+  })
 })
 
 describe('finishedSince', () => {
@@ -197,16 +207,6 @@ describe('workflowState', () => {
     expect(workflowState(wf('done'), 2, true)).toEqual({ isRunning: false })
     expect(workflowState(buildTurns([prompt('hi')])[0], 0, true)).toEqual({ isRunning: false })
     expect(workflowState(undefined, 0, true)).toEqual({ isRunning: false })
-  })
-})
-
-describe('statusText icons', () => {
-  // The unicode set draws a different glyph for each category, so a swap shows.
-  test("the status line starts with the icon of the running tool's category", () => {
-    for (const [tool, key] of CATEGORY_ICON)
-      expect(statusText([runningTool('r', tool, {}, 0)], 0, ICON_SETS.unicode)!.split(' ')[0], tool).toBe(
-        ICON_SETS.unicode[key],
-      )
   })
 })
 

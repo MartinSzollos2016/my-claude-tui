@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS, type Icons } from '../hooks/icons'
+import { C } from '../hooks/theme'
 import { truncateDisplay } from '../hooks/model/width'
 import type { ToolItem } from '../hooks/model/types'
 import { cutter, endWrap, isUnicodeCut, itemIcon, middleWrap, scopeOf } from '../hooks/view/kit'
@@ -33,12 +34,35 @@ describe('cutting by icon set', () => {
 })
 
 describe('itemIcon', () => {
+  const call = (tool: string, extra: Partial<ToolItem> = {}): ToolItem => ({
+    kind: 'tool',
+    id: 't',
+    tool,
+    input: {},
+    summary: '',
+    isError: false,
+    isPending: false,
+    ...extra,
+  })
+
   // The unicode set draws a different glyph for each category, so a swap shows.
-  test('each tool category draws its own icon', () => {
-    for (const [tool, key] of CATEGORY_ICON) {
-      const item: ToolItem = { kind: 'tool', id: 't', tool, input: {}, summary: '', isError: false, isPending: false }
-      expect(itemIcon(item, ICON_SETS.unicode).glyph, tool).toBe(ICON_SETS.unicode[key])
-    }
+  test('each tool category draws its own icon, in the default colour', () => {
+    const glyphs = CATEGORY_ICON.map(([, key]) => ICON_SETS.unicode[key])
+    expect(new Set(glyphs).size, 'one unicode glyph per category').toBe(new Set(CATEGORY_ICON.map(([, k]) => k)).size)
+    for (const [tool, key] of CATEGORY_ICON)
+      expect(itemIcon(call(tool), ICON_SETS.unicode), tool).toEqual({ glyph: ICON_SETS.unicode[key] })
+  })
+
+  test('a subagent and an output are accented, a failed call is a red wrench whatever its tool', () => {
+    const { robot, wrench, output } = ICON_SETS.unicode
+    expect(itemIcon(call('Agent', { agentId: 'a1' }), ICON_SETS.unicode)).toEqual({ glyph: robot, color: C.accent })
+    expect(itemIcon(call('Task', { agentId: 'a1' }), ICON_SETS.unicode)).toEqual({ glyph: robot, color: C.accent })
+    expect(itemIcon(call('Bash', { isError: true }), ICON_SETS.unicode)).toEqual({ glyph: wrench, color: C.error })
+    expect(itemIcon(call('Read', { isError: true }), ICON_SETS.unicode)).toEqual({ glyph: wrench, color: C.error })
+    expect(itemIcon({ kind: 'output', id: 'o', text: 'done' }, ICON_SETS.unicode)).toEqual({
+      glyph: output,
+      color: C.accent,
+    })
   })
 })
 
