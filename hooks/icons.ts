@@ -1,6 +1,7 @@
 // The glyphs the views draw, in three sets with the same keys: Nerd Font
 // (the default), plain Unicode symbols and ASCII. Every glyph is one cell
-// wide in the last two, so rows line up on any terminal font.
+// wide in the last two, so rows line up on any terminal font; the Nerd
+// glyphs stay below U+10000 (see below).
 
 import type { IconSetName } from '../types'
 
