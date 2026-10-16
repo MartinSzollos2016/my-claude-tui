@@ -29,7 +29,7 @@ describe('icon sets', () => {
     expect(ICON_SETS.nerd.interrupted).toBe('\u23f8')
   })
 
-  test('each glyph is one code point that Claude Code counts one cell wide, in every set; the spinner has frames', () => {
+  test('each glyph is one code point that displayWidth counts one cell wide, in every set; the spinner has frames', () => {
     for (const set of Object.values(ICON_SETS))
       for (const [key, value] of Object.entries(set).filter(([k]) => !MULTI.includes(k)))
         for (const glyph of [value].flat()) {
