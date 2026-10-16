@@ -459,6 +459,63 @@ describe('live data', () => {
     expect(text(byKey(list, 'turn-2'))).toContain('5.0s')
   })
 
+  // One hand-back of agent a1, launched by the first turn's Agent call; `start`
+  // is the text turn.start carries.
+  const handBackRun = async (start: (handBack: string) => string) => {
+    const handBack = 'Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>'
+    const spawn = {
+      tool_use_id: 'u1',
+      tool: 'Agent',
+      input: { subagent_type: 'Explore', description: 'Scan' },
+      agentId: 'a1',
+      text: 'launched',
+    }
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'go' }, async e => e)
+    world.messages = [
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: 'spawned', toolUses: [spawn] },
+      { role: 'assistant', text: 'waiting', toolUses: [] },
+    ]
+    world.api = [
+      { role: 'user', content: [{ type: 'text', text: 'go' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'spawned' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'waiting' }] },
+    ]
+    await run('turn.start', $, { text: 'go', turnId: 'g' }, async e => e)
+    await settle()
+    await finish('g', 2_000, $)
+    await run('turn.start', $, { text: start(handBack), turnId: 'h' }, async e => e)
+    await settle()
+    world.messages = [...world.messages, { role: 'assistant', text: 'Result', toolUses: [] }]
+    world.api = [
+      ...world.api,
+      { role: 'user', content: [{ type: 'text', text: start(handBack) }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Result' }] },
+    ]
+    await finish('h', 3_000, $)
+    return { $, world }
+  }
+
+  test('a hand-back keeps its time when its agent call leaves the rows', async () => {
+    const { $, world } = await handBackRun(text => text)
+    // The window of the newest rows moved on: the prompt and the Agent call left.
+    world.messages = world.messages.slice(2)
+    world.api = world.api.slice(2)
+    await press($, 'nav-turns')
+    const row = text(byKey(await draw($), 'turn-1'))
+    expect(row).toContain('Message from agent')
+    expect(row).toContain('3.0s')
+  })
+
+  test('a reminder before a hand-back in turn.start keeps its name and time', async () => {
+    const { $ } = await handBackRun(text => `<system-reminder>${'r'.repeat(600)}</system-reminder>\n${text}`)
+    await press($, 'nav-turns')
+    const row = text(byKey(await draw($), 'turn-1'))
+    expect(row).toContain('Message from Explore · Scan')
+    expect(row).toContain('3.0s')
+  })
+
   test('a prompt with a carriage return or an escape still finds its stat', async () => {
     const { $, world } = fakeEngine()
     await run('prompt.submit', $, { text: 'fix\r\n\u001b[31mbug' }, async e => e)

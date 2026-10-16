@@ -64,17 +64,38 @@ export function stripBlocks(text: string, open: string, close: string): string {
 }
 
 // The agents a hand-back comes from: the `from` of each `<agent-message>`
-// block at the start of the text, once each. Only the start is read, so a
-// long text that quotes many blocks costs no more than a short one.
-const SENDERS_HEAD = 512
+// block outside the reminders, once each. A text that quotes many blocks
+// names at most MAX_SENDERS and is read only up to MAX_BLOCKS blocks.
+const HAND_BACK = '<agent-message'
+const MAX_SENDERS = 8
+const MAX_BLOCKS = 64
 
 export function handBackSenders(text: string): string[] {
+  const own = stripBlocks(text, '<system-reminder>', '</system-reminder>')
   const senders = new Set<string>()
-  for (const match of text.slice(0, SENDERS_HEAD).matchAll(/<agent-message\s+from="([^"]*)"/g)) {
-    const from = sanitizeText(match[1] ?? '').trim()
-    if (from !== '') senders.add(from)
+  let blocks = 0
+  for (let at = own.indexOf(HAND_BACK); at >= 0; at = own.indexOf(HAND_BACK, at + HAND_BACK.length)) {
+    if (senders.size >= MAX_SENDERS || blocks >= MAX_BLOCKS) break
+    blocks += 1
+    const from = /^<agent-message\s+from="([^"]{0,200})"/.exec(own.slice(at, at + 240))?.[1] ?? ''
+    const clean = sanitizeText(from).trim()
+    if (clean !== '') senders.add(clean)
   }
   return [...senders]
+}
+
+// What a turn's stat is matched by: the prompt, or for a hand-back its
+// senders, since its shown name follows the calls in the rows and changes as
+// they leave the window.
+const handBackKey = (senders: readonly string[]) => `\u0000hand-back:${senders.join(',')}`
+
+export const promptKey = (turn: { prompt: string; senders?: readonly string[] }): string =>
+  turn.senders === undefined ? turn.prompt : handBackKey(turn.senders)
+
+// The key of the turn a prompt text opens, before the turn is in the rows
+// (turn.start, prompt.submit).
+export function statPrompt(text: string): string {
+  return text.includes(HAND_BACK) ? handBackKey(handBackSenders(text)) : sanitizePrompt(sanitizeText(text).trim())
 }
 
 // Turns XML-ish wrappers the engine injects into a readable one-liner.
