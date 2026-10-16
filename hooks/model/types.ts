@@ -29,6 +29,8 @@ export type Turn = {
   // The row key of the turn's first reply when the API form names it as a
   // turn's start (apiTurnStarts); thinking is found by it.
   startKey?: string
+  // The agents whose hand-back opened the turn (handBackSenders), by id.
+  senders?: readonly string[]
 }
 
 export const SUBAGENT_TOOLS = new Set(['Agent', 'Task'])

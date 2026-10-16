@@ -2,9 +2,11 @@
 // a subagent's trace, and whether agents still run.
 import type { AgentStatus, SessionMessage } from 'claude-code'
 import { sanitizePrompt, sanitizeText, sanitizeValue, stripBlocks } from './sanitize'
-import { toolSummary } from './summaries'
+import { itemName, toolSummary } from './summaries'
 import type { ApiLike } from './thinking'
 import { SUBAGENT_TOOLS, type Item, type ToolItem, type Turn } from './types'
+import { str } from './values'
+import { truncateDisplay } from './width'
 
 export const isSubagent = (item: Item): item is ToolItem & { agentId: string } =>
   item.kind === 'tool' && SUBAGENT_TOOLS.has(item.tool) && item.agentId !== undefined
@@ -460,3 +462,28 @@ export const isAgentRunning = (status: AgentStatus | undefined): boolean =>
 // A finished agent's transcript no longer changes, so its trace is final.
 export const isAgentFinished = (status: AgentStatus | undefined): boolean =>
   status === 'completed' || status === 'failed' || status === 'killed'
+
+// What a hand-back's turn is called after: each subagent call of the
+// session by its agent id, as "type · description" (the type alone when the
+// call has no description). A later call with the same id wins.
+const AGENT_LABEL = 60
+
+export function agentDirectory(turns: readonly Turn[]): ReadonlyMap<string, string> {
+  const agents = new Map<string, string>()
+  for (const turn of turns)
+    for (const item of turn.items) {
+      if (!isSubagent(item)) continue
+      const description = str(item.input, 'description').trim()
+      const label = description === '' ? itemName(item) : `${itemName(item)} · ${description}`
+      agents.set(item.agentId, truncateDisplay(label, AGENT_LABEL))
+    }
+  return agents
+}
+
+// A hand-back turn's prompt: who sent it, "agent" for a sender the session
+// does not know (launched before a compaction, or a teammate).
+export function handBackTitle(senders: readonly string[], agents: ReadonlyMap<string, string>): string {
+  const names = [...new Set(senders.map(id => agents.get(id) ?? 'agent'))]
+  if (names.length === 0) return 'Message from agent'
+  return `${senders.length > 1 ? 'Messages' : 'Message'} from ${names.join(', ')}`
+}

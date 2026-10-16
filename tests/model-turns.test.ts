@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
 import {
+  agentDirectory,
   apiTurnStarts,
   buildTurns,
+  handBackTitle,
   incrementalTurns,
   isAgentFinished,
   isAgentRunning,
@@ -479,5 +481,65 @@ describe('incremental tool pieces', () => {
     expect(first[0]!.items.find(i => i.id === 'b0')).toMatchObject({ isPending: true })
     const done = turns.build(rows('x'))
     expect(done[0]!.items.find(i => i.id === 'b0')).toMatchObject({ isPending: false, resultText: 'ok' })
+  })
+})
+
+describe('hand-back senders', () => {
+  const agentCall = (id: string, agentId: string, input: Record<string, unknown>) => ({
+    tool_use_id: id,
+    tool: 'Agent',
+    input,
+    agentId,
+    text: 'launched',
+  })
+
+  test('handBackTitle names the senders by type and description', () => {
+    const agents = new Map([
+      ['a1', 'Explore · Find callers'],
+      ['b2', 'general-purpose · Review'],
+    ])
+    expect(handBackTitle([], agents)).toBe('Message from agent')
+    expect(handBackTitle(['a1'], agents)).toBe('Message from Explore · Find callers')
+    expect(handBackTitle(['zz'], agents)).toBe('Message from agent')
+    expect(handBackTitle(['a1', 'b2'], agents)).toBe('Messages from Explore · Find callers, general-purpose · Review')
+    expect(handBackTitle(['zz', 'yy'], agents)).toBe('Messages from agent')
+  })
+
+  test('agentDirectory maps each subagent call to its type and description', () => {
+    const rows: SessionMessage[] = [
+      prompt('go'),
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: [
+          agentCall('u1', 'a1', { subagent_type: 'Explore', description: 'Find callers' }),
+          { ...agentCall('u2', 'b2', { subagent_type: 'Plan' }), tool: 'Task' },
+          { ...read, text: 'ok' },
+        ],
+      },
+    ]
+    const agents = agentDirectory(buildTurns(rows))
+    expect([...agents]).toEqual([
+      ['a1', 'Explore · Find callers'],
+      ['b2', 'Plan'],
+    ])
+  })
+
+  test('agentDirectory is linear in the calls', () => {
+    const rows: SessionMessage[] = []
+    for (let t = 0; t < 2_000; t++) {
+      rows.push(prompt(`p${t}`))
+      rows.push({
+        role: 'assistant',
+        text: '',
+        toolUses: Array.from({ length: 5 }, (_, k) =>
+          agentCall(`u${t}-${k}`, `a${t}-${k}`, { subagent_type: 'Explore', description: `d${k}` }),
+        ),
+      })
+    }
+    const turns = buildTurns(rows)
+    const started = performance.now()
+    expect(agentDirectory(turns).size).toBe(10_000)
+    expect(performance.now() - started).toBeLessThan(200)
   })
 })
