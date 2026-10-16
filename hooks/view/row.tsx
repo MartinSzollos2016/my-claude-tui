@@ -174,9 +174,9 @@ export function renderLine(
   // The mark, with a space before it and one before a model after it.
   const badgeText = line.badge === undefined ? '' : ` ${line.badge}${modelText !== '' ? ' ' : ''}`
   // The fixed columns as drawn: chevron, status and icon, each with its
-  // space; a Nerd Font icon (private use) may draw two cells, so it keeps one
-  // cell of slack.
-  const isWideIcon = /[\ue000-\uf8ff\u{f0000}-\u{ffffd}]/u.test(icon.glyph)
+  // space; a Nerd Font icon (private use) may overflow into the next cell in
+  // a font that is not Mono, so it keeps one cell of slack.
+  const isWideIcon = /[\ue000-\uf8ff]/.test(icon.glyph)
   const fixed = displayWidth(`${line.chevron} `) + 2 + displayWidth(`${icon.glyph} `) + (isWideIcon ? 1 : 0)
   const room =
     width -
