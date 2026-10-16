@@ -20,7 +20,8 @@ Colors are Claude Code theme keys, so the plugin follows `/theme`.
 
 Requires Claude Code 2.1.289 or newer. The default icons need a [Nerd Font](https://www.nerdfonts.com/) v3.2 or newer;
 without one, `/tail-icons unicode` or `/tail-icons ascii` switches to plain symbols. The Nerd icons sit below U+10000,
-so the terminals of JetBrains IDEs draw them one cell wide, as Claude Code counts them.
+so the terminals of JetBrains IDEs draw them one cell wide, as Claude Code counts them. A Nerd Font Mono keeps every icon
+inside its cell; with other variants an icon may overflow into the next cell, and rows leave a cell of room for that.
 
 ```bash
 claude plugin marketplace add MartinSzollos2016/my-claude-tui

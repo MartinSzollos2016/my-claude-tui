@@ -29,10 +29,13 @@ describe('icon sets', () => {
     expect(ICON_SETS.nerd.interrupted).toBe('\u23f8')
   })
 
-  test('each glyph is one cell wide in every set, the spinner has frames', () => {
+  test('each glyph is one code point that Claude Code counts one cell wide, in every set; the spinner has frames', () => {
     for (const set of Object.values(ICON_SETS))
       for (const [key, value] of Object.entries(set).filter(([k]) => !MULTI.includes(k)))
-        for (const glyph of [value].flat()) expect([...glyph].length, key).toBe(1)
+        for (const glyph of [value].flat()) {
+          expect([...glyph].length, key).toBe(1)
+          expect(displayWidth(glyph), key).toBe(1)
+        }
     for (const set of Object.values(ICON_SETS))
       for (const key of ['treeBranch', 'treeLast', 'treeGuide'] as const) expect([...set[key]].length, key).toBe(3)
     expect(ICON_SETS.ascii.spinner).toEqual(['|', '/', '-', '\\'])
