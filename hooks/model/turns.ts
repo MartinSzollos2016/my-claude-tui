@@ -6,7 +6,7 @@ import { itemName, toolSummary } from './summaries'
 import type { ApiLike } from './thinking'
 import { SUBAGENT_TOOLS, type Item, type ToolItem, type Turn } from './types'
 import { str } from './values'
-import { truncateDisplay } from './width'
+import { expandTabs, truncateDisplay } from './width'
 
 export const isSubagent = (item: Item): item is ToolItem & { agentId: string } =>
   item.kind === 'tool' && SUBAGENT_TOOLS.has(item.tool) && item.agentId !== undefined
@@ -480,7 +480,7 @@ const AGENT_LABEL = 60
 export function agentLabel(item: ToolItem): string {
   const description = str(item.input, 'description').trim()
   const label = description === '' ? itemName(item) : `${itemName(item)} · ${description}`
-  return truncateDisplay(label, AGENT_LABEL)
+  return truncateDisplay(expandTabs(label), AGENT_LABEL)
 }
 
 // A hand-back turn's prompt: who sent it, "agent" for a sender the session

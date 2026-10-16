@@ -121,6 +121,24 @@ describe('statOfDuration and turnOfStat', () => {
 })
 
 describe('statFor', () => {
+  test('a stat recorded before hand-backs were named still finds its turn', () => {
+    const turn = (index: number, prompt: string, senders?: string[]) => ({
+      index,
+      prompt,
+      items: [],
+      toolCount: 0,
+      outputCount: 0,
+      subagentCount: 0,
+      ...(senders === undefined ? {} : { senders }),
+    })
+    const all = [turn(0, 'go'), turn(1, 'Message from Explore · Scan', ['a1'])]
+    const old = { prompt: 'Message from agent', turnIndex: 1, durationMs: 7, endedAt: 0 }
+    expect(statFor([old], all[1], all)?.durationMs).toBe(7)
+    expect(statFor([{ ...old, turnIndex: undefined }], all[1], all)?.durationMs).toBe(7)
+    expect(turnOfStat(old, all)).toBe(all[1])
+    expect(statFor([old], all[0], all)).toBe(undefined)
+  })
+
   test('picks the latest stat for the turn prompt', () => {
     const all = buildTurns([prompt('Fix the bug'), prompt('Thanks')])
     const turn = all[1]!
