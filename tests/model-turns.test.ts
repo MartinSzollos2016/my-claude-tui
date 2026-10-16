@@ -516,6 +516,7 @@ describe('hand-back senders', () => {
           agentCall('u1', 'a1', { subagent_type: 'Explore', description: 'Find callers' }),
           { ...agentCall('u2', 'b2', { subagent_type: 'Plan' }), tool: 'Task' },
           agentCall('u3', 'c3', { subagent_type: 'Explore', description: 'x'.repeat(100) }),
+          agentCall('u4', 'd4', { subagent_type: 'Explore', description: 'a\tb' }),
         ],
       },
     ]
@@ -523,6 +524,9 @@ describe('hand-back senders', () => {
     expect(labels.slice(0, 2)).toEqual(['Explore · Find callers', 'Plan'])
     expect(displayWidth(labels[2]!)).toBe(60)
     expect(labels[2]!.endsWith('…')).toBe(true)
+    // A tab would draw wider than its width is counted.
+    expect(labels[3]).not.toContain('\t')
+    expect(labels[3]).toMatch(/^Explore · a +b$/)
   })
 
   const handBackSession = (from: string) => {

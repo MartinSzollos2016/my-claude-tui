@@ -72,6 +72,13 @@ export function toggleId(ids: readonly string[], id: string, max: number): strin
 // the newest rows only, so indexes shift as old rows leave the window. Else
 // the newest stat with the turn's prompt that no other turn's index claims;
 // the latest turn of a fresh session may have none yet.
+// Whether `stat` was recorded with `turn`'s prompt. A stat kept from before
+// hand-backs were matched by their senders holds the old fixed prompt.
+const LEGACY_HAND_BACK = 'Message from agent'
+
+const hasPromptOf = (stat: TurnStat, turn: Turn): boolean =>
+  stat.prompt === promptKey(turn) || (turn.senders !== undefined && stat.prompt === LEGACY_HAND_BACK)
+
 export function statFor(
   stats: readonly TurnStat[],
   turn: Turn | undefined,
@@ -79,7 +86,7 @@ export function statFor(
 ): TurnStat | undefined {
   if (!turn) return undefined
   const isOwn = (stat: TurnStat, at: Turn | undefined) =>
-    at !== undefined && (stat.prompt === promptKey(at) || at.prompt === '')
+    at !== undefined && (hasPromptOf(stat, at) || at.prompt === '')
   for (let i = stats.length - 1; i >= 0; i--) {
     const stat = stats[i]!
     if (stat.turnIndex === turn.index && isOwn(stat, turn)) return stat
@@ -87,7 +94,7 @@ export function statFor(
   for (let i = stats.length - 1; i >= 0; i--) {
     const stat = stats[i]!
     const claimed = stat.turnIndex !== undefined && isOwn(stat, turns[stat.turnIndex])
-    if (stat.prompt === promptKey(turn) && !claimed) return stat
+    if (hasPromptOf(stat, turn) && !claimed) return stat
   }
   return undefined
 }
@@ -107,7 +114,7 @@ export function statOfDuration(stats: readonly TurnStat[], durationMs: number): 
 // its prompt (see statFor); undefined once the rows moved on.
 export function turnOfStat(stat: TurnStat, turns: readonly Turn[]): Turn | undefined {
   const turn = turns.find(t => t.index === stat.turnIndex)
-  return turn !== undefined && (promptKey(turn) === stat.prompt || turn.prompt === '') ? turn : undefined
+  return turn !== undefined && (hasPromptOf(stat, turn) || turn.prompt === '') ? turn : undefined
 }
 
 // The index buildTurns gives the turn starting with `prompt`: the last turn
