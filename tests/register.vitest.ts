@@ -410,6 +410,55 @@ describe('live data', () => {
     expect(text(byKey(list, 'turn-2'))).toContain('5.0s')
   })
 
+  test('the turn list names the agent of a hand-back and keeps its time', async () => {
+    const handBack = (from: string) =>
+      `Another Claude session sent a message:\n<agent-message from="${from}">x</agent-message>`
+    const agent = (id: string, agentId: string, type: string, description: string) => ({
+      tool_use_id: id,
+      tool: 'Agent',
+      input: { subagent_type: type, description },
+      agentId,
+      text: 'launched',
+    })
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'go' }, async e => e)
+    world.messages = [
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: 'spawned',
+        toolUses: [agent('u1', 'a1', 'Explore', 'Scan'), agent('u2', 'b2', 'Plan', 'Draft')],
+      },
+    ]
+    world.api = [
+      { role: 'user', content: [{ type: 'text', text: 'go' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'spawned' }] },
+    ]
+    await run('turn.start', $, { text: 'go', turnId: 'g' }, async e => e)
+    await settle()
+    await finish('g', 2_000, $)
+    for (const [from, reply, ms, id] of [
+      ['a1', 'First result', 3_000, 'h1'],
+      ['b2', 'Second result', 5_000, 'h2'],
+    ] as const) {
+      await run('turn.start', $, { text: handBack(from), turnId: id }, async e => e)
+      await settle()
+      world.messages = [...world.messages, { role: 'assistant', text: reply, toolUses: [] }]
+      world.api = [
+        ...world.api,
+        { role: 'user', content: [{ type: 'text', text: handBack(from) }] },
+        { role: 'assistant', content: [{ type: 'text', text: reply }] },
+      ]
+      await finish(id, ms, $)
+    }
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(text(byKey(list, 'turn-1'))).toContain('Message from Explore · Scan')
+    expect(text(byKey(list, 'turn-1'))).toContain('3.0s')
+    expect(text(byKey(list, 'turn-2'))).toContain('Message from Plan · Draft')
+    expect(text(byKey(list, 'turn-2'))).toContain('5.0s')
+  })
+
   test('a prompt with a carriage return or an escape still finds its stat', async () => {
     const { $, world } = fakeEngine()
     await run('prompt.submit', $, { text: 'fix\r\n\u001b[31mbug' }, async e => e)
