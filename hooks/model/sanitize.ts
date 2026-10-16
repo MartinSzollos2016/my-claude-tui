@@ -63,6 +63,20 @@ export function stripBlocks(text: string, open: string, close: string): string {
   }
 }
 
+// The agents a hand-back comes from: the `from` of each `<agent-message>`
+// block at the start of the text, once each. Only the start is read, so a
+// long text that quotes many blocks costs no more than a short one.
+const SENDERS_HEAD = 512
+
+export function handBackSenders(text: string): string[] {
+  const senders = new Set<string>()
+  for (const match of text.slice(0, SENDERS_HEAD).matchAll(/<agent-message\s+from="([^"]*)"/g)) {
+    const from = sanitizeText(match[1] ?? '').trim()
+    if (from !== '') senders.add(from)
+  }
+  return [...senders]
+}
+
 // Turns XML-ish wrappers the engine injects into a readable one-liner.
 export function sanitizePrompt(text: string): string {
   return expandTabs(promptOf(text))
