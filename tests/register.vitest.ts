@@ -284,7 +284,7 @@ describe('commands', () => {
     expect(world.store.get('tail-view.icons')).toBe('ascii')
     expect(await say($, 'tail', 'icons')).toContain('ascii')
     const drawn = text(await draw($))
-    expect(drawn).not.toContain('\u{F167A}')
+    expect(drawn).not.toContain(ICON_SETS.nerd.robot)
     expect(drawn).toContain('+ ')
     expect(text(await run('ui.render', $, BAR_EVENT))).not.toContain('\uF418')
   })
@@ -695,7 +695,7 @@ describe('detail pane', () => {
     }
     const drawn = text(await draw($))
     expect(drawn).toContain('Failing read one')
-    expect(drawn).not.toContain('\u{F09D1}')
+    expect(drawn).not.toContain(ICON_SETS.nerd.thinking)
   })
 
   test('finds thinking by its reply when the API form is shorter, refetches on a new fingerprint, expand all opens it', async () => {
@@ -718,12 +718,12 @@ describe('detail pane', () => {
       ],
       api,
     })
-    expect(text(await draw($))).toContain('\u{F09D1} 1')
+    expect(text(await draw($))).toContain(`${ICON_SETS.nerd.thinking} 1`)
     await press($, 'nav-expand')
     expect(text(await draw($))).toContain('Only late thought')
     world.messages.push({ role: 'user', text: 'Third misaligned', toolUses: [] })
     api.push({ role: 'user', content: [{ type: 'text', text: 'Third misaligned' }] })
-    expect(text(await draw($))).not.toContain('\u{F09D1} 1')
+    expect(text(await draw($))).not.toContain(`${ICON_SETS.nerd.thinking} 1`)
     expect(world.calls.filter(call => call === 'messages:api').length).toBe(2)
   })
 
@@ -777,11 +777,11 @@ describe('detail pane', () => {
     const latest = text(await draw($))
     expect(latest).toContain('Message from agent')
     expect(latest).toContain('Both failed')
-    expect(latest).toContain('\u{F09D1} 2')
+    expect(latest).toContain(`${ICON_SETS.nerd.thinking} 2`)
     expect(latest).not.toContain('No tool calls or output in this turn')
     await press($, 'nav-prev')
     const first = text(await draw($))
-    expect(first).toContain('\u{F09D1} 1')
+    expect(first).toContain(`${ICON_SETS.nerd.thinking} 1`)
     expect(first).not.toContain('Both failed')
   })
 
@@ -804,7 +804,7 @@ describe('detail pane', () => {
         },
       ],
     })
-    expect(text(await draw($))).toContain('\u{F09D1} 1')
+    expect(text(await draw($))).toContain(`${ICON_SETS.nerd.thinking} 1`)
     await draw($)
     expect(world.calls.filter(call => call === 'messages:api').length).toBe(1)
     await press($, 't0:thinking')
@@ -1715,7 +1715,7 @@ describe('status line', () => {
     const gate = hold()
     const running = run('tool.call', $, call, gate.next)
     await settle()
-    expect(last(world)).toBe('\u{F0BE0} Bash go test ./... · 0s')
+    expect(last(world)).toBe(`${ICON_SETS.nerd.wrench} Bash go test ./... · 0s`)
     gate.release()
     await running
     await settle()
@@ -1737,7 +1737,7 @@ describe('status line', () => {
     world.now += 12_000
     tick()
     await settle()
-    expect(last(world)).toBe('\u{F0BE0} Bash go test ./... · 12s')
+    expect(last(world)).toBe(`${ICON_SETS.nerd.wrench} Bash go test ./... · 12s`)
     expect(world.statuses).toHaveLength(2)
     gate.release()
     await running

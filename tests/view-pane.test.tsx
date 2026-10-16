@@ -41,7 +41,7 @@ describe('renderPane', () => {
 
   test('the header counts thinking blocks and the Thinking row opens its text', () => {
     const quiet = renderPane(el, { ...base, thinking: { count: 3, text: '' } }, act)
-    expect(text(quiet)).toContain('\u{F09D1} 3')
+    expect(text(quiet)).toContain(`${ICON_SETS.nerd.thinking} 3`)
     expect(byKey(quiet, 't0:thinking')).toBeUndefined()
 
     const thinking = { count: 1, text: 'Plan the fix' }
