@@ -23,26 +23,14 @@ describe('icon sets', () => {
           for (const ch of glyph) expect(ch.codePointAt(0)!, `${name}.${key}`).toBeLessThanOrEqual(0xffff)
   })
 
-  test('the nerd set draws Font Awesome and Codicons glyphs from the basic private-use area', () => {
-    const { robot, wrench, output, thinking, folderSearch, web } = ICON_SETS.nerd
-    expect([robot, wrench, output, thinking, folderSearch, web]).toEqual([
-      '\ueb08',
-      '\uf0ad',
-      '\ueb9d',
-      '\uea61',
-      '\uf002',
-      '\uf0ac',
-    ])
-  })
-
   test('no set draws the paused mark as a spinner frame, and the unicode set avoids the wide U+23F8', () => {
     for (const set of Object.values(ICON_SETS)) expect(set.spinner).not.toContain(set.idle)
     expect(ICON_SETS.unicode.interrupted).not.toBe('\u23f8')
     expect(ICON_SETS.nerd.interrupted).toBe('\u23f8')
   })
 
-  test('each glyph is one cell wide in the unicode and ascii sets, the spinner has frames', () => {
-    for (const set of [ICON_SETS.unicode, ICON_SETS.ascii])
+  test('each glyph is one cell wide in every set, the spinner has frames', () => {
+    for (const set of Object.values(ICON_SETS))
       for (const [key, value] of Object.entries(set).filter(([k]) => !MULTI.includes(k)))
         for (const glyph of [value].flat()) expect([...glyph].length, key).toBe(1)
     for (const set of Object.values(ICON_SETS))

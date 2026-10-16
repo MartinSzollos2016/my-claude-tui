@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { AgentStatus } from 'claude-code'
-import { ICON_SETS } from '../hooks/icons'
+import { ICON_SETS, type Icons } from '../hooks/icons'
 import {
   callInput,
   compactCall,
@@ -199,3 +199,31 @@ describe('workflowState', () => {
     expect(workflowState(undefined, 0, true)).toEqual({ isRunning: false })
   })
 })
+
+describe('statusText icons', () => {
+  // The unicode set draws a different glyph for each category, so a swap shows.
+  test("the status line starts with the icon of the running tool's category", () => {
+    for (const [tool, key] of CATEGORY_ICON)
+      expect(statusText([runningTool('r', tool, {}, 0)], 0, ICON_SETS.unicode)!.split(' ')[0], tool).toBe(
+        ICON_SETS.unicode[key],
+      )
+  })
+})
+
+const CATEGORY_ICON: readonly (readonly [string, keyof Icons])[] = [
+  ['Read', 'book'],
+  ['Edit', 'penNib'],
+  ['MultiEdit', 'penNib'],
+  ['Write', 'penNib'],
+  ['NotebookEdit', 'penNib'],
+  ['Grep', 'folderSearch'],
+  ['Glob', 'folderSearch'],
+  ['Task', 'robot'],
+  ['Agent', 'robot'],
+  ['Skill', 'robot'],
+  ['Workflow', 'robot'],
+  ['WebFetch', 'web'],
+  ['WebSearch', 'web'],
+  ['Bash', 'wrench'],
+  ['SomethingNew', 'wrench'],
+]
