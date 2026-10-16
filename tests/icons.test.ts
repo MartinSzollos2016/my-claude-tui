@@ -16,6 +16,25 @@ describe('icon sets', () => {
     expect(all(ICON_SETS.nerd)).toMatch(/[\ue000-\uf8ff\u{f0000}-\u{ffffd}]/u)
   })
 
+  test('no set draws a character above U+FFFF, which terminals such as JediTerm draw two cells wide', () => {
+    for (const [name, set] of Object.entries(ICON_SETS))
+      for (const [key, value] of Object.entries(set))
+        for (const glyph of [value].flat())
+          for (const ch of glyph) expect(ch.codePointAt(0)!, `${name}.${key}`).toBeLessThanOrEqual(0xffff)
+  })
+
+  test('the nerd set draws Font Awesome and Codicons glyphs from the basic private-use area', () => {
+    const { robot, wrench, output, thinking, folderSearch, web } = ICON_SETS.nerd
+    expect([robot, wrench, output, thinking, folderSearch, web]).toEqual([
+      '\ueb08',
+      '\uf0ad',
+      '\ueb9d',
+      '\uea61',
+      '\uf002',
+      '\uf0ac',
+    ])
+  })
+
   test('no set draws the paused mark as a spinner frame, and the unicode set avoids the wide U+23F8', () => {
     for (const set of Object.values(ICON_SETS)) expect(set.spinner).not.toContain(set.idle)
     expect(ICON_SETS.unicode.interrupted).not.toBe('\u23f8')

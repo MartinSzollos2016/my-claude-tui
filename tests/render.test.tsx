@@ -1,6 +1,7 @@
 import type { CommandRunInput, RenderSurface, SessionMessage } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 
+import { ICON_SETS } from '../hooks/icons'
 import { THEME_KEYS } from '../hooks/theme'
 
 const themeKeys = new Set<string>(THEME_KEYS)
@@ -833,7 +834,7 @@ describe('commands', () => {
     const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
     const rows = textsOf(await ui.drawn()).join('')
     expect(rows).toContain('+ ')
-    expect(rows).not.toContain('\u{F167A}')
+    expect(rows).not.toContain(ICON_SETS.nerd.robot)
     expect(rows).not.toContain('✓')
     expect(rows).toMatch(/^[\x20-\x7e\n]*$/)
     await ui.unmount()

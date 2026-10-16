@@ -87,15 +87,18 @@ export type Icons = {
 
 const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
+// Nerd glyphs stay below U+10000: Claude Code counts the supplementary
+// private-use area (Material Design icons) one cell wide, but terminals such
+// as JetBrains' draw it two, and then a redraw leaves stale text behind.
 const nerd: Icons = {
-  robot: '\u{F167A}',
-  wrench: '\u{F0BE0}',
-  folderSearch: '\u{F0968}',
+  robot: '\uEB08',
+  wrench: '\uF0AD',
+  folderSearch: '\uF002',
   penNib: '',
   book: '',
-  web: '\u{F059F}',
-  output: '\u{F0182}',
-  thinking: '\u{F09D1}',
+  web: '\uF0AC',
+  output: '\uEB9D',
+  thinking: '\uEA61',
   clock: '',
   token: '',
   collapsed: '',
