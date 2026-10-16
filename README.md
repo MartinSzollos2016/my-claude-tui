@@ -18,8 +18,9 @@ Colors are Claude Code theme keys, so the plugin follows `/theme`.
 
 ## Install
 
-Requires Claude Code 2.1.289 or newer. The default icons need a [Nerd Font](https://www.nerdfonts.com/);
-without one, `/tail-icons unicode` or `/tail-icons ascii` switches to plain symbols.
+Requires Claude Code 2.1.289 or newer. The default icons need a [Nerd Font](https://www.nerdfonts.com/) v3;
+without one, `/tail-icons unicode` or `/tail-icons ascii` switches to plain symbols. Every icon is one cell
+wide, also in the terminals of JetBrains IDEs.
 
 ```bash
 claude plugin marketplace add MartinSzollos2016/my-claude-tui
