@@ -41,8 +41,11 @@ type ToolPiece = Omit<ToolItem, 'kind' | 'id'>
 // row's prompt (undefined when it opens no turn), an assistant row's text,
 // a tool use's fields. Turn indexes and output ids depend on position, so
 // they are not part of a piece.
+// What opens a turn: its prompt and, for an agent's hand-back, who sent it.
+type Opener = { prompt: string; senders?: readonly string[] }
+
 type Pieces = {
-  prompt: (text: string, hasResults: boolean) => string | undefined
+  prompt: (text: string, hasResults: boolean) => Opener | undefined
   output: (text: string) => string
   tool: (use: ToolUse) => ToolPiece
 }
@@ -50,7 +53,9 @@ type Pieces = {
 const fresh: Pieces = {
   prompt: (text, hasResults) => {
     const clean = sanitizeText(text).trim()
-    return clean === '' || hasResults ? undefined : sanitizePrompt(clean)
+    if (clean === '' || hasResults) return undefined
+    const prompt = sanitizePrompt(clean)
+    return isHandBack(text) ? { prompt, senders: handBackSenders(text) } : { prompt }
   },
   output: text => sanitizeText(text).trim(),
   tool: use => {
@@ -277,11 +282,11 @@ const sameSource = (a: ToolSource, b: ToolSource): boolean =>
 // `work` counts the pieces built, for tests.
 export function incrementalTurns(): {
   build: (messages: readonly SessionMessage[], idPrefix?: string, starts?: TurnStarts) => Turn[]
-  work: { messages: number; tools: number; serialized: number }
+  work: { messages: number; tools: number; serialized: number; senders: number }
 } {
-  type Row = { source: string; value: string | undefined }
+  type Row = { source: string; value: unknown }
   type Tool = { source: ToolSource; value: ToolPiece; raw: unknown }
-  const work = { messages: 0, tools: 0, serialized: 0 }
+  const work = { messages: 0, tools: 0, serialized: 0, senders: 0 }
   let rows = new Map<string, Row>()
   let tools = new Map<string, Tool>()
   let nextRows = new Map<string, Row>()
@@ -291,7 +296,7 @@ export function incrementalTurns(): {
   let byId = new Map<string, Tool>()
   let nextById = new Map<string, Tool>()
 
-  const row = (kind: string, text: string, make: () => string | undefined): string | undefined => {
+  const row = <T>(kind: string, text: string, make: () => T): T => {
     const key = kind + textPrint(text)
     let entry = nextRows.get(key) ?? rows.get(key)
     if (entry?.source !== text) {
@@ -299,12 +304,18 @@ export function incrementalTurns(): {
       work.messages += 1
     }
     nextRows.set(key, entry)
-    return entry.value
+    return entry.value as T
   }
 
   const pieces: Pieces = {
-    prompt: (text, hasResults) => row(hasResults ? 'ur' : 'u', text, () => fresh.prompt(text, hasResults)),
+    prompt: (text, hasResults) =>
+      row(hasResults ? 'ur' : 'u', text, () => {
+        const opener = fresh.prompt(text, hasResults)
+        if (opener?.senders !== undefined) work.senders += 1
+        return opener
+      }),
     output: text => row('a', text, () => fresh.output(text)) ?? '',
+
     tool: use => {
       const known = nextById.get(use.tool_use_id) ?? byId.get(use.tool_use_id)
       if (
@@ -360,7 +371,7 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
   // calls before it, so its name does not change as later rows arrive.
   const agents = new Map<string, string>()
 
-  const open = (prompt: string, raw: string): Turn => {
+  const open = ({ prompt, senders }: Opener): Turn => {
     const turn: Turn = {
       index: turns.length,
       prompt,
@@ -369,9 +380,9 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
       outputCount: 0,
       subagentCount: 0,
     }
-    if (isHandBack(raw)) {
-      turn.senders = handBackSenders(raw)
-      turn.prompt = handBackTitle(turn.senders, agents)
+    if (senders !== undefined) {
+      turn.senders = senders
+      turn.prompt = handBackTitle(senders, agents)
     }
     turns.push(turn)
     return turn
@@ -394,22 +405,22 @@ function assemble(messages: readonly SessionMessage[], idPrefix: string, pieces:
       // turn of its own; an older one, outside the API window, still does.
       const task = isOpenedByReply ? taskIdOf(m.text) : undefined
       if (task !== undefined && !starts?.tasks.has(task)) continue
-      const prompt = pieces.prompt(m.text, (m.toolResults?.length ?? 0) > 0)
-      if (prompt !== undefined) {
-        current = open(prompt, m.text)
+      const opener = pieces.prompt(m.text, (m.toolResults?.length ?? 0) > 0)
+      if (opener !== undefined) {
+        current = open(opener)
         isOpenedByReply = false
       }
       continue
     }
 
-    current ??= open('', '')
+    current ??= open({ prompt: '' })
     const raw = texts[i] ?? ''
     const key = keys[i]
     const started = key === undefined ? undefined : starts?.prompts.get(key)
     // The rows lack this turn's prompt (an agent's hand-back): its reply
     // opens it.
     if (started !== undefined && openers.has(i) && current.items.length > 0) {
-      current = open(pieces.prompt(started, false) ?? '', started)
+      current = open(pieces.prompt(started, false) ?? { prompt: '' })
       isOpenedByReply = true
     }
     // A turn's first reply names it for its thinking (thinkingByStart).
@@ -477,10 +488,17 @@ export const isAgentFinished = (status: AgentStatus | undefined): boolean =>
 // "type · description", the type alone when the call has no description.
 const AGENT_LABEL = 60
 
+// By the call's input, which a rebuild reuses while the call is unchanged.
+const labels = new WeakMap<object, string>()
+
 export function agentLabel(item: ToolItem): string {
+  const known = labels.get(item.input)
+  if (known !== undefined) return known
   const description = str(item.input, 'description').trim()
   const label = description === '' ? itemName(item) : `${itemName(item)} · ${description}`
-  return truncateDisplay(expandTabs(label), AGENT_LABEL)
+  const cut = truncateDisplay(expandTabs(label), AGENT_LABEL)
+  labels.set(item.input, cut)
+  return cut
 }
 
 // A hand-back turn's prompt: who sent it, "agent" for a sender the session

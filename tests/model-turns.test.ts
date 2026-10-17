@@ -573,6 +573,15 @@ describe('hand-back senders', () => {
     expect(buildTurns(later, '', starts)[1]!.prompt).toBe('Message from Explore · Find callers')
   })
 
+  test('an unchanged rebuild reads no hand-back again', () => {
+    const { rows, starts } = handBackSession('a1')
+    const turns = incrementalTurns()
+    turns.build(rows, '', starts)
+    expect(turns.work.senders).toBe(1)
+    turns.build(rows, '', starts)
+    expect(turns.work.senders).toBe(1)
+  })
+
   test('naming hand-backs adds no work to an unchanged rebuild', () => {
     const { rows, starts } = handBackSession('a1')
     const turns = incrementalTurns()

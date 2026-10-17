@@ -64,9 +64,11 @@ export function stripBlocks(text: string, open: string, close: string): string {
 }
 
 // The agents a hand-back comes from: the `from` of each `<agent-message>`
-// block outside the reminders, once each. A text that quotes many blocks
+// block outside the reminders, once each. The scan goes on after a block's
+// end, so a block a report quotes names no one; a text with many blocks
 // names at most MAX_SENDERS and is read only up to MAX_BLOCKS blocks.
 const HAND_BACK = '<agent-message'
+const HAND_BACK_END = '</agent-message>'
 const MAX_SENDERS = 8
 const MAX_BLOCKS = 64
 
@@ -74,12 +76,14 @@ export function handBackSenders(text: string): string[] {
   const own = stripBlocks(text, '<system-reminder>', '</system-reminder>')
   const senders = new Set<string>()
   let blocks = 0
-  for (let at = own.indexOf(HAND_BACK); at >= 0; at = own.indexOf(HAND_BACK, at + HAND_BACK.length)) {
-    if (senders.size >= MAX_SENDERS || blocks >= MAX_BLOCKS) break
+  let at = own.indexOf(HAND_BACK)
+  while (at >= 0 && senders.size < MAX_SENDERS && blocks < MAX_BLOCKS) {
     blocks += 1
     const from = /^<agent-message\s+from="([^"]{0,200})"/.exec(own.slice(at, at + 240))?.[1] ?? ''
     const clean = sanitizeText(from).trim()
     if (clean !== '') senders.add(clean)
+    const end = own.indexOf(HAND_BACK_END, at + HAND_BACK.length)
+    at = end < 0 ? -1 : own.indexOf(HAND_BACK, end + HAND_BACK_END.length)
   }
   return [...senders]
 }

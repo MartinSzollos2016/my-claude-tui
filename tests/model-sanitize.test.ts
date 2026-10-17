@@ -69,6 +69,16 @@ describe('handBackSenders', () => {
     expect(handBackSenders(`sent while you were working:\n${report('a1')}\n${report('b2')}`)).toEqual(['a1', 'b2'])
   })
 
+  test('a block quoted inside a report adds no sender', () => {
+    const report = `<agent-message from="a1">\nThe fixture reads <agent-message from="zz">x</agent-message> as before.\n</agent-message>`
+    expect(handBackSenders(`Another Claude session sent a message:\n${report}`)).toEqual(['a1'])
+    expect(handBackSenders(`${report}\n${block('b2')}`)).toEqual(['a1', 'b2'])
+  })
+
+  test('a block inside a reminder is not a sender', () => {
+    expect(handBackSenders(`<system-reminder>${block('r1')}</system-reminder>\n${block('a1')}`)).toEqual(['a1'])
+  })
+
   test('a long reminder before the block does not hide its sender', () => {
     const reminder = `<system-reminder>${'r'.repeat(600)}</system-reminder>\n`
     expect(handBackSenders(`${reminder}Another Claude session sent a message:\n${block('a1')}`)).toEqual(['a1'])
