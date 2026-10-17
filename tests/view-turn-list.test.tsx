@@ -123,12 +123,6 @@ describe('the desktop flow', () => {
   ]
   const flow = (extra: Record<string, unknown> = {}) =>
     renderPane(el, { ...base, turns, stats, view: 'turns', columns: 100, isFlow: true, ...extra }, act)
-  const widths = (row: unknown) =>
-    ((row as { props: { children: unknown[] } }).props.children ?? [])
-      .flat()
-      .filter((n): n is { type: string; props: Record<string, unknown> } => (n as { type?: string })?.type === 'Box')
-      .map(n => (n.props['flexGrow'] === 1 ? 'grow' : n.props['width']))
-
   test('hover never changes a glyph width on the desktop', () => {
     const trees = [
       flow(),
@@ -142,32 +136,24 @@ describe('the desktop flow', () => {
       }
   })
 
-  test('the turn table lines up by boxes: the header and every row share the cells', () => {
-    const tree = flow()
-    const header = byKey(tree, 'turn-header')
-    expect(header?.type).toBe('Box')
-    expect(widths(header)).toContain('grow')
-    for (const index of [0, 1]) expect(widths(byKey(tree, `turn-cells-${index}`))).toEqual(widths(header))
-  })
-
-  test('the prompt is the button that picks the turn; the prompt is cut, not wrapped', () => {
-    const tree = flow({ icons: ICON_SETS.ascii })
-    const prompt = byKey(tree, 'turn-1')
-    const number = byKey(tree, 'turn-num-1')
-    expect([prompt?.type, number?.type]).toEqual(['Button', 'Text'])
-    expect(String(prompt?.props['label']).length).toBeLessThanOrEqual(100)
-    expect(String(prompt?.props['label'])).toContain('a long question')
-    const cell = nodes(tree).find(n => n.type === 'Box' && nodes(n).includes(prompt!) && n.props['flexGrow'] === 1)
-    expect([cell?.props['flexShrink'], cell?.props['overflow']]).toEqual([1, 'hidden'])
-    for (const button of [prompt]) {
-      const calls = [] as string[]
-      const pick = { ...act, pickTurn: (i: number) => calls.push(`pick:${i}`) }
-      const fresh = byKey(
-        renderPane(el, { ...base, turns, stats, view: 'turns', isFlow: true }, pick),
-        String(button?.props['key']),
-      )
-      ;(fresh?.props['onPress'] as () => void)()
-      expect(calls).toEqual(['pick:1'])
+  test('every turn is a card: its prompt opens it, its time on the right, its tools and tokens under it', () => {
+    const tree = flow({ turnCursor: undefined })
+    expect(byKey(tree, 'turn-header')?.type).toBe('Text')
+    for (const index of [0, 1]) {
+      const card = byKey(tree, `turn-card-${index}`)
+      expect(typeof card?.props['borderStyle']).toBe('string')
+      expect(nodes(card)).toContain(byKey(tree, `turn-${index}`))
     }
+    expect(text(byKey(tree, 'turn-card-0'))).toContain('1m 5s')
+    expect(text(byKey(tree, 'turn-card-0'))).toMatch(/0 tools .*1\.5k tokens/)
+    const prompt = byKey(tree, 'turn-1')
+    expect(prompt?.type).toBe('Button')
+    expect(String(prompt?.props['label'])).toContain('a long question')
+    expect(String(prompt?.props['label']).length).toBeLessThanOrEqual(100)
+    const calls = [] as string[]
+    const pick = { ...act, pickTurn: (i: number) => calls.push(`pick:${i}`) }
+    const fresh = byKey(renderPane(el, { ...base, turns, stats, view: 'turns', isFlow: true }, pick), 'turn-1')
+    ;(fresh?.props['onPress'] as () => void)()
+    expect(calls).toEqual(['pick:1'])
   })
 })

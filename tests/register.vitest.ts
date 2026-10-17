@@ -3068,7 +3068,7 @@ describe('the desktop surface', () => {
     expect(await say($, 'tail-icons')).toContain('Icon set: nerd.')
     await say($, 'tail-icons', 'ascii')
     const tree = await run('ui.render', $, desktop(100, 48))
-    expect(text(byKey(tree, 'brand-mark'))).toBe(ICON_SETS.ascii.robot)
+    expect(text(byKey(tree, 'flow-turn-card')).startsWith(`${ICON_SETS.ascii.prompt} `)).toBe(true)
   })
 
   test('/tail-help draws its legend in the icons of a session drawn only on the desktop', async () => {

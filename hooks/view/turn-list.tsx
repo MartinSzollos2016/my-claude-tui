@@ -1,8 +1,7 @@
 // The turn list: a table of the session's turns with search, its snippets, and
 // the row ids its cursor walks.
-import type { RenderChildren } from 'claude-code'
-
 import { C } from '../theme'
+import { formatTokens, shortModel } from '../model/format'
 import { sanitizeText } from '../model/sanitize'
 import type { RowBlock } from '../model/scroll'
 import { splitMatch } from '../model/search'
@@ -17,8 +16,7 @@ import {
   type PaneActions,
   type PaneParts,
 } from './context'
-import { flowBar } from './bars'
-import { buttonHoverOf, cutter, endWrap, hoverText, isUnicodeCut, type El } from './kit'
+import { buttonHoverOf, cutter, endWrap, FLOW_CARD, hoverText, isUnicodeCut, type El } from './kit'
 
 // Every turn of the session, newest first: one button per turn that opens
 // it in the detail view. A search narrows the list to the matching turns
@@ -34,8 +32,6 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
   const isFiltered = query.trim() !== ''
   const snippets = new Map((data.matches ?? []).map(match => [match.index, match.snippet] as const))
   const table = turnTable(data.turns, data.stats, data.columns, data.icons)
-  // The longest turn: what the desktop app's bars are relative to.
-  const longest = data.isFlow === true ? Math.max(0, ...data.stats.map(stat => stat?.durationMs ?? 0)) : 0
   const rows = table.rows
     .filter(row => !isFiltered || snippets.has(row.index))
     .map(row => ({
@@ -44,7 +40,11 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
       label: `${row.index === data.selected ? data.icons.marker : ' '} ${row.label}`,
       // The desktop app's row: its cells and the whole prompt cut to the pane.
       ...(data.isFlow === true
-        ? { cells: row.cells, prompt: trunc(data.turns[row.index]?.prompt || '(no prompt)', data.columns) }
+        ? {
+            cells: row.cells,
+            prompt: trunc(`#${row.index + 1}  ${data.turns[row.index]?.prompt || '(no prompt)'}`, data.columns),
+            meta: flowMeta(data, row.index),
+          }
         : {}),
     }))
 
@@ -56,7 +56,7 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
     const cost =
       row.cells === undefined
         ? row.label.length + row.snippet.length
-        : 1 + (row.prompt?.length ?? 0) + flowCellsLength(row.cells) + row.snippet.length
+        : (row.prompt?.length ?? 0) + row.cells.time.length + (row.meta?.length ?? 0) + FLOW_SLACK + row.snippet.length
     if (cost > data.budget.left) break
     data.budget.left -= cost
     shown.push(row)
@@ -124,15 +124,9 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
       <Box flexDirection="column" marginTop={1}>
         {rows.length > 0 &&
           (data.isFlow === true ? (
-            flowCells(el, 'turn-header', table.columns, {
-              marker: '',
-              number: <Text color={C.muted}>#</Text>,
-              prompt: <Text color={C.muted}>prompt</Text>,
-              tools: <Text color={C.muted}>tools</Text>,
-              time: <Text color={C.muted}>time</Text>,
-              tokens: <Text color={C.muted}>tokens</Text>,
-              bar: '',
-            })
+            <Text key="turn-header" color={C.muted}>
+              Newest first
+            </Text>
           ) : (
             <Text key="turn-header" color={C.muted}>
               {`  ${table.header}`}
@@ -147,7 +141,7 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
           </Box>
         )}
         {data.isFlow === true
-          ? shown.map(row => renderFlowRow(el, row, table, data, act, query, longest))
+          ? shown.map(row => renderFlowRow(el, row, data, act, query))
           : shown.map(row => {
               // The cursor takes the row's first cell, in the accent.
               const isCursor = row.index === data.turnCursor
@@ -193,124 +187,72 @@ export const searchFieldKey = (gen: number) => (gen === 0 ? 'turn-search' : `tur
 
 const NO_MATCH_HINT = 'Clear the search or try fewer words.'
 
-type FlowCells = {
-  marker: RenderChildren
-  number: RenderChildren
-  prompt: RenderChildren
-  tools: RenderChildren
-  time: RenderChildren
-  tokens: RenderChildren
-  bar: RenderChildren
-}
+// What a desktop turn's card draws beyond its prompt, time and meta line:
+// `running` at most.
+const FLOW_SLACK = 8
 
-// A row of the desktop app's table: a box per column at the text table's
-// widths, the prompt taking what is left, so the header and every row line
-// up in the app's proportional font.
-function flowCells(el: El, key: string, columns: TurnTable['columns'], cells: FlowCells, isCursor = false) {
-  const { Box } = el
-  const right = (width: number, child: RenderChildren) => (
-    <Box width={width} flexShrink={0} justifyContent="flex-end">
-      {child}
-    </Box>
-  )
-  return (
-    <Box key={key} flexDirection="row" columnGap={1} {...(isCursor ? { backgroundColor: C.rowHover } : {})}>
-      <Box width={1} flexShrink={0}>
-        {cells.marker}
-      </Box>
-      <Box width={columns.number} flexShrink={0}>
-        {cells.number}
-      </Box>
-      <Box flexGrow={1} flexShrink={1} overflow="hidden">
-        {cells.prompt}
-      </Box>
-      {columns.tools !== undefined && right(columns.tools, cells.tools)}
-      {right(columns.time, cells.time)}
-      {columns.tokens !== undefined && right(columns.tokens, cells.tokens)}
-      {columns.bar !== undefined && (
-        <Box width={columns.bar} flexShrink={0}>
-          {cells.bar}
-        </Box>
-      )}
-    </Box>
-  )
-}
-
-// The characters a desktop row draws besides its prompt: every cell but the
-// text table's cut prompt.
-const flowCellsLength = (cells: TurnTable['rows'][number]['cells']) =>
-  cells.number.length + cells.tools.length + cells.time.length + cells.tokens.length + cells.bar.length
-
-// A turn of the desktop app's table: the number and the prompt are buttons
-// that open it (a button holds one label, not a row); the prompt is the
-// whole one, cut to the pane, and the box clips what the app's font spills.
+// A turn in the desktop app: a card, as the app draws a background task. Its
+// number and prompt open it, its time stands on the right (running while it
+// works), its tools and tokens under it; the open turn's card is framed in
+// the accent, the cursor's filled.
 function renderFlowRow(
   el: El,
-  row: { index: number; snippet: string; cells?: TurnTable['rows'][number]['cells']; prompt?: string },
-  table: TurnTable,
+  row: { index: number; snippet: string; cells?: TurnTable['rows'][number]['cells']; prompt?: string; meta?: string },
   data: Ctx,
   act: PaneActions,
   query: string,
-  longest: number,
 ) {
   const { Box, Button, Text } = el
-  const { cells } = row
   const isSelected = row.index === data.selected
   const isCursor = row.index === data.turnCursor
-  // One row is bright: the cursor's, else (no cursor yet) the open turn's,
-  // which otherwise keeps only its marker.
+  // One card is bright: the cursor's, else (no cursor yet) the open turn's.
   const hasCursor = data.turnCursor !== undefined && data.turnCursor !== null
   const isBright = hasCursor ? isCursor : isSelected
+  const isRunning = data.isWorking && row.index === data.turns.length - 1
   const hover = { scope: `turn:${row.index}`, backgroundColor: C.rowHover }
-  const button = (key: string, label: string) => (
-    <Button
-      key={key}
-      plain
-      dimColor={!isBright}
-      label={label}
-      hover={{ ...hover, ...hoverText(data) }}
-      onPress={() => act.pickTurn(row.index)}
-    />
-  )
-  const muted = (text: string | undefined) => (
-    <Text color={C.muted} hover={hover}>
-      {text ?? ''}
-    </Text>
-  )
   return (
     <Box key={`turn-row-${row.index}`} flexDirection="column">
-      {flowCells(
-        el,
-        `turn-cells-${row.index}`,
-        table.columns,
-        {
-          marker: (
-            <Text key={`turn-cursor-${row.index}`} color={isCursor ? C.accent : C.text}>
-              {isCursor ? data.icons.cursor : isSelected ? data.icons.marker : ' '}
-            </Text>
-          ),
-          // Text: a native button's own padding does not fit the number's box.
-          number: (
-            <Text key={`turn-num-${row.index}`} color={isBright ? C.text : C.muted} hover={hover}>
-              {cells?.number ?? `#${row.index + 1}`}
-            </Text>
-          ),
-          prompt: button(`turn-${row.index}`, row.prompt ?? ''),
-          tools: muted(cells?.tools),
-          time: muted(cells?.time),
-          tokens: muted(cells?.tokens),
-          bar: (() => {
-            const ms = data.stats[row.index]?.durationMs
-            return ms === undefined || longest <= 0
-              ? undefined
-              : flowBar(el, `turn-${row.index}`, ms / longest, table.columns.bar ?? 8, ms >= longest)
-          })(),
-        },
-        isCursor,
-      )}
+      <Box
+        key={`turn-card-${row.index}`}
+        {...FLOW_CARD}
+        borderStyle={data.icons.border}
+        borderColor={isSelected ? C.accent : C.muted}
+        {...(isCursor ? { backgroundColor: C.rowHover } : {})}
+      >
+        <Box flexDirection="row" columnGap={1}>
+          <Box flexGrow={1} flexShrink={1} overflow="hidden">
+            <Button
+              key={`turn-${row.index}`}
+              plain
+              dimColor={!isBright}
+              label={row.prompt ?? ''}
+              hover={{ ...hover, ...hoverText(data) }}
+              onPress={() => act.pickTurn(row.index)}
+            />
+          </Box>
+          <Text key={`turn-time-${row.index}`} color={isRunning ? C.brand : C.muted}>
+            {isRunning ? 'running' : (row.cells?.time ?? '')}
+          </Text>
+        </Box>
+        <Text key={`turn-meta-${row.index}`} color={C.muted}>
+          {row.meta ?? ''}
+        </Text>
+      </Box>
       {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
     </Box>
   )
+}
+
+// What a turn's card says under its prompt: its tools, its tokens and model.
+function flowMeta(data: Ctx, index: number): string {
+  const turn = data.turns[index]
+  const stat = data.stats[index]
+  const tools = turn?.toolCount ?? 0
+  const parts = [`${tools} tool${tools === 1 ? '' : 's'}`]
+  if (stat?.outputTokens !== undefined)
+    parts.push(`${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)} tokens`)
+  if (stat?.model !== undefined) parts.push(shortModel(stat.model))
+  return parts.join(` ${data.icons.dot} `)
 }
 
 // The line a search hit gets under its turn: the matched part underlined and

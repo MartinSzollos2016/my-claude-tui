@@ -648,9 +648,8 @@ describe('detail pane', () => {
         expect(labels[2]).toContain('#1')
         expect(labels[2]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
       } else {
-        // The desktop app's table: the number is a cell of its own.
-        expect(labels[0]).toBe('Thanks')
-        for (const number of ['#3', '#2', '#1']) expect(await ui.find({ text: number })).toBeDefined()
+        // The desktop app's cards: the number leads the prompt's label.
+        expect(labels).toEqual(['#3  Thanks', '#2  Now add tests', expect.stringContaining('#1  Fix the bug')])
       }
 
       await ui.press({ key: 'turn-0' })

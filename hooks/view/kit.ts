@@ -2,7 +2,7 @@
 // styles, cutting by icon set, meter sizes, and the glyph of a call's state.
 import { ICON_SETS, type Icons } from '../icons'
 import { C, type ThemeKey } from '../theme'
-import type { BoxProps, ElementConstructor, Elements, SvgProps, TextProps } from 'claude-code'
+import type { BoxProps, ElementConstructor, Elements, TextProps } from 'claude-code'
 import { toolCategory } from '../model/summaries'
 import { isSubagent, type ItemStatus } from '../model/turns'
 import type { Item } from '../model/types'
@@ -22,8 +22,6 @@ export type El = Pick<Elements['terminal'], 'Button' | 'Code'> & {
   Text: ElementConstructor<ThemedTextProps>
   // Optional: the mobile surface draws no field.
   Input?: Elements['terminal']['Input']
-  // Only the remote surfaces (the desktop app) draw images.
-  Svg?: ElementConstructor<SvgProps>
 }
 
 // A hovered button reads at full contrast: its idle label is the theme grey.

@@ -156,12 +156,6 @@ describe('the desktop flow pane', () => {
     }
   })
 
-  test('a turn number is plain text in its box: a native button does not fit a cell width', () => {
-    const tree = flow({ view: 'turns', stats: [undefined, undefined] })
-    expect(byKey(tree, 'turn-num-1')?.type).toBe('Text')
-    expect(text(byKey(tree, 'turn-num-1'))).toBe('#2')
-  })
-
   test('the header, the keys and the content are cards: rounded frames apart from each other', () => {
     for (const tree of [flow(), flow({ view: 'turns', stats: [undefined, undefined] }), flow(team)]) {
       const root = tree as Node
@@ -171,26 +165,6 @@ describe('the desktop flow pane', () => {
         expect(card.props['borderStyle']).toBe(ICON_SETS.unicode.border)
         expect(card.props['marginBottom']).toBe(1)
       }
-    }
-  })
-
-  test('bars are boxes of their own width filled in theme colours, never glyphs or images', () => {
-    const stats = [{ key: 'k', turnIndex: 0, durationMs: 4_000, endedAt: 1, inputTokens: 9, outputTokens: 1 }]
-    const turns = flow({ view: 'turns', stats, columns: 100 })
-    const detail = flow({ contextPercent: 62, isLatest: true, columns: 100 })
-    for (const tree of [turns, detail]) {
-      expect(nodes(tree).filter(n => n.type === 'Svg')).toEqual([])
-      const bars = nodes(tree).filter(n => /^flow-bar-(?!fill-)/.test(String(n.props['key'] ?? '')))
-      expect(bars.length).toBeGreaterThan(0)
-      for (const bar of bars) {
-        expect(typeof bar.props['width']).toBe('number')
-        expect(bar.props['overflow']).toBe('hidden')
-        const fill = nodes(bar).find(n => n !== bar && n.type === 'Box')
-        expect(typeof fill?.props['backgroundColor']).toBe('string')
-        expect(Number(fill?.props['width'])).toBeLessThanOrEqual(Number(bar.props['width']))
-      }
-      const glyphs = new RegExp(`[${ICON_SETS.unicode.bar.join('')}▰▱]`)
-      for (const s of strings(tree)) expect(glyphs.test(s), s).toBe(false)
     }
   })
 
@@ -221,8 +195,8 @@ describe('the desktop flow pane', () => {
     const other = nodes(byKey(detail, 'item-p1')).find(n => n.type === 'Box' && n.props['flexDirection'] === 'row')
     expect(other?.props['backgroundColor']).toBeUndefined()
     const turns = flow({ view: 'turns', stats: [undefined, undefined], turnCursor: 1 })
-    expect(byKey(turns, 'turn-cells-1')?.props['backgroundColor']).toBe(C.rowHover)
-    expect(byKey(turns, 'turn-cells-0')?.props['backgroundColor']).toBeUndefined()
+    expect(byKey(turns, 'turn-card-1')?.props['backgroundColor']).toBe(C.rowHover)
+    expect(byKey(turns, 'turn-card-0')?.props['backgroundColor']).toBeUndefined()
   })
 
   test('one row of the turn list is bright: the cursor, else the open turn', () => {
@@ -232,6 +206,44 @@ describe('the desktop flow pane', () => {
     expect([dim(withCursor, 0), dim(withCursor, 1)]).toEqual([true, false])
     const without = flow({ view: 'turns', stats, selected: 0 })
     expect([dim(without, 0), dim(without, 1)]).toEqual([false, true])
+  })
+
+  test("the turn's card on top: its prompt, its time on the right, model, tokens and context under it", () => {
+    const card = byKey(flow({ isLatest: true }), 'flow-turn-card')
+    expect(text(card)).toContain('Fix the bug')
+    expect(text(card)).toContain('1m 5s')
+    expect(text(card)).toMatch(/opus.*1\.5k tokens.*62% context/)
+  })
+
+  test('the rows are cards under Running and Finished, a trace keeps its rows inside its card', () => {
+    const tree = flow({
+      isWorking: true,
+      isLatest: true,
+      expanded: new Set(['a1']),
+      traces: new Map([
+        [
+          'ag',
+          {
+            items: buildTurns(
+              [
+                {
+                  role: 'assistant',
+                  text: '',
+                  toolUses: [{ tool_use_id: 'g', tool: 'Grep', input: { pattern: 'x' }, text: 'm' }],
+                },
+              ],
+              'ag/',
+            )[0]!.items,
+          },
+        ],
+      ]),
+    })
+    expect(text(byKey(tree, 'flow-section-running'))).toBe('Running 2')
+    expect(text(byKey(tree, 'flow-section-finished'))).toBe('Finished 3')
+    for (const id of ['b1', 'e1', 'a1', 'p1'])
+      expect(typeof byKey(tree, `item-${id}`)?.props['borderStyle'], id).toBe('string')
+    expect(byKey(tree, 'item-ag/g')?.props['borderStyle']).toBeUndefined()
+    expect(nodes(tree).some(n => /^flow-bar/.test(String(n.props['key'])))).toBe(false)
   })
 
   test('a very long turn stays under the text budget and says what it left out', () => {

@@ -2,7 +2,6 @@
 // (chevron, status, icon, label, model, duration, bar), with its hover card.
 import type { RenderChildren } from 'claude-code'
 import { hoverCard } from '../model/card'
-import { flowBar } from './bars'
 import { formatDuration, shortModel, treePrefix } from '../model/format'
 import { blockRows } from '../model/scroll'
 import type { Item, Turn } from '../model/types'
@@ -16,6 +15,7 @@ import {
   buttonHoverOf,
   cutter,
   endWrap,
+  FLOW_CARD,
   hoverText,
   scopeOf,
   TRACE_INDENT,
@@ -126,6 +126,9 @@ function rowsSoFar(data: Ctx): number {
   return counted.rows
 }
 
+// A card's frame, the row keeping its own column direction.
+const { flexDirection: _column, ...CARD_FRAME } = FLOW_CARD
+
 // The cells the time of a timed row takes, right-aligned.
 const DURATION_CELLS = 7
 
@@ -201,7 +204,14 @@ export function renderLine(
   const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
 
   return (
-    <Box key={`item-${id}`} flexDirection="column" marginLeft={indent}>
+    <Box
+      key={`item-${id}`}
+      flexDirection="column"
+      marginLeft={indent}
+      // In the desktop app a row of the turn is a card, as a background task
+      // is in the app; a trace's rows stay inside their agent's card.
+      {...(isFlow && place === undefined ? { ...CARD_FRAME, borderStyle: data.icons.border } : {})}
+    >
       <Box
         flexDirection="row"
         width={isFlow ? undefined : width}
@@ -319,17 +329,7 @@ export function renderLine(
               ))}
             {hasBar &&
               duration !== undefined &&
-              (isFlow ? (
-                <Box key={`bar-${id}`} width={BAR_CELLS + 1} paddingLeft={1} alignItems="center">
-                  {flowBar(
-                    el,
-                    id,
-                    data.maxMs > 0 ? duration / data.maxMs : 0,
-                    BAR_CELLS,
-                    duration > 0 && duration >= data.maxMs,
-                  )}
-                </Box>
-              ) : (
+              (isFlow ? undefined : (
                 <Text
                   key={`bar-${id}`}
                   color={duration > 0 && duration >= data.maxMs ? C.accent : C.muted}

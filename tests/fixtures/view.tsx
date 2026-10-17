@@ -64,7 +64,6 @@ export const el = {
   Markdown: make('Markdown'),
   Code: make('Code'),
   Input: make('Input'),
-  Svg: make('Svg'),
 } as unknown as El
 
 export function nodes(tree: unknown, found: Node[] = []): Node[] {

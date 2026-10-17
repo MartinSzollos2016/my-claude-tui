@@ -6,8 +6,8 @@ import { contextMeter, formatClock, formatDuration, formatTokens, shortModel } f
 import { clampScroll, contentRows, overflowRows, type ScrollFrame } from '../model/scroll'
 import { reserveSections } from '../model/sections'
 import { EMPTY_TURN_TEXT } from '../model/turn-table'
-import { isAgentRunning, isSubagent } from '../model/turns'
-import type { Turn } from '../model/types'
+import { isAgentRunning, isSubagent, itemStatus } from '../model/turns'
+import type { Item, Turn } from '../model/types'
 import { displayWidth } from '../model/width'
 import {
   CARD_BUDGET,
@@ -27,7 +27,6 @@ import {
 import { focusChord, footerRowsOf, renderFlowFooter, renderFooter, STATUS_INSET, type FooterMode } from './footer'
 import { nameWidthOf, renderRows } from './items'
 import { cutter, endWrap, FLOW_CARD, HEADER_METER_COLUMNS, METER_CELLS, scopeOf, type El } from './kit'
-import { flowBar } from './bars'
 import { renderThinking } from './row'
 import { renderTeam } from './team'
 import { renderTurnList } from './turn-list'
@@ -89,6 +88,8 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   data.layout.push(LINE)
   // Thinking shares the name column of the turn's rows.
   const nameWidth = nameWidthOf(turn.items, (data.thinking?.text ?? '') === '' ? [] : ['Thinking'])
+  if (data.isFlow === true)
+    return paneBody(el, data, act, flowDetail(el, turn, data, act, nameWidth, isEmpty, emptyText))
   return paneBody(el, data, act, {
     // The metrics row is clipped to its one row where its parts would wrap.
     header: [
@@ -97,9 +98,9 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
         ? [
             {
               node: (
-                <Text key="prompt" color={C.muted} wrap={data.isFlow === true ? 'truncate-end' : endWrap(data.icons)}>
+                <Text key="prompt" color={C.muted} wrap={endWrap(data.icons)}>
                   {`${data.icons.prompt} `}
-                  {trunc(turn.prompt, data.isFlow === true ? data.columns : promptRoom)}
+                  {trunc(turn.prompt, promptRoom)}
                 </Text>
               ),
               rows: 1,
@@ -115,6 +116,76 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
       </Box>
     ),
   })
+}
+
+// The detail in the desktop app, as the app lists its background tasks: the
+// turn's card on top (prompt, time, model, tokens, context), then its rows as
+// cards under Running and Finished.
+function flowDetail(
+  el: El,
+  turn: Turn,
+  data: Ctx,
+  act: PaneActions,
+  nameWidth: number,
+  isEmpty: boolean,
+  emptyText: string,
+): PaneParts {
+  const { Box, Text } = el
+  const isRunning = (item: Item) =>
+    item.kind === 'tool' &&
+    itemStatus(item, { ...data, isAgentRunning: isAgentRunning(data.agents.get(item.agentId ?? '')) }) === 'running'
+  const running = turn.items.filter(isRunning)
+  const finished = turn.items.filter(item => !isRunning(item))
+  const section = (key: string, label: string) =>
+    drawn(
+      data,
+      <Text key={key} color={C.muted}>
+        {label}
+      </Text>,
+      textLine(data, label, 0),
+    )
+  return {
+    header: [{ node: renderFlowHeader(el, turn, data), rows: 2 }],
+    content: (
+      <Box flexDirection="column">
+        {renderThinking(el, turn, data, act, nameWidth)}
+        {isEmpty && drawn(data, <Text color={C.muted}>{emptyText}</Text>, textLine(data, emptyText, 0))}
+        {running.length > 0 && section('flow-section-running', `Running ${running.length}`)}
+        {running.length > 0 && renderRows(el, running, data, act, undefined, nameWidth)}
+        {finished.length > 0 && section('flow-section-finished', `Finished ${finished.length}`)}
+        {finished.length > 0 && renderRows(el, finished, data, act, undefined, nameWidth)}
+      </Box>
+    ),
+  }
+}
+
+// The turn's card in the desktop app: its prompt, its time on the right
+// (running while it works), its model, tokens and context under it.
+function renderFlowHeader(el: El, turn: Turn, data: Ctx) {
+  const { Box, Text } = el
+  const stat = data.turnStat
+  const isRunning = data.isLatest && data.isWorking
+  const time = isRunning ? 'running' : stat ? formatDuration(stat.durationMs) : ''
+  const meta = [
+    shortModel(stat?.model ?? data.sessionModel),
+    ...(stat?.outputTokens === undefined
+      ? []
+      : [`${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)} tokens`]),
+    ...(data.isLatest && data.contextPercent !== undefined ? [`${Math.round(data.contextPercent)}% context`] : []),
+  ].join(` ${data.icons.dot} `)
+  return (
+    <Box key="flow-turn-card" flexDirection="column">
+      <Box flexDirection="row" columnGap={1}>
+        <Box flexGrow={1} flexShrink={1} overflow="hidden">
+          <Text color={C.text} wrap="truncate-end">
+            {`${data.icons.prompt} ${cutter(data.icons)(turn.prompt || '(no prompt)', data.columns)}`}
+          </Text>
+        </Box>
+        <Text color={isRunning ? C.brand : C.muted}>{time}</Text>
+      </Box>
+      <Text color={C.muted}>{meta}</Text>
+    </Box>
+  )
 }
 
 // The fewest content rows an inline pane keeps before it goes compact.
@@ -312,18 +383,11 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
         {stat?.outputTokens !== undefined && (
           <Text color={C.muted}>{`${icons.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}`}</Text>
         )}
-        {data.isLatest &&
-          data.contextPercent !== undefined &&
-          (data.isFlow === true ? (
-            <Box flexDirection="row" columnGap={1} alignItems="center">
-              {flowBar(el, 'context', data.contextPercent / 100, METER_CELLS)}
-              <Text color={contextColor(data.contextPercent)}>{`${Math.round(data.contextPercent)}%`}</Text>
-            </Box>
-          ) : (
-            <Text color={contextColor(data.contextPercent)}>
-              {`${data.columns >= HEADER_METER_COLUMNS ? `${contextMeter(data.contextPercent, METER_CELLS, icons)} ` : ''}${Math.round(data.contextPercent)}%`}
-            </Text>
-          ))}
+        {data.isLatest && data.contextPercent !== undefined && (
+          <Text color={contextColor(data.contextPercent)}>
+            {`${data.columns >= HEADER_METER_COLUMNS ? `${contextMeter(data.contextPercent, METER_CELLS, icons)} ` : ''}${Math.round(data.contextPercent)}%`}
+          </Text>
+        )}
         {stat && <Text color={C.muted}>{`${icons.clock} ${formatDuration(stat.durationMs)}`}</Text>}
         {data.isLatest && data.isWorking && (
           <Text color={C.ongoing}>{icons.spinner[data.frame % icons.spinner.length]}</Text>
