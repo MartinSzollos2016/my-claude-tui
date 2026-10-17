@@ -13,6 +13,7 @@ import {
   statFor,
   statOfDuration,
   turnOfStat,
+  turnScrollKey,
   noteNotified,
   noteWorkflowAgent,
   takeTurnIndex,
@@ -293,5 +294,26 @@ describe('noteNotified', () => {
     expect(ids).toHaveLength(500)
     expect(ids[0]).toBe('id-100')
     expect(ids.at(-1)).toBe('id-599')
+  })
+})
+
+describe('turnScrollKey', () => {
+  const turn = (index: number, prompt: string, senders?: string[]) => ({
+    index,
+    prompt,
+    items: [],
+    toolCount: 0,
+    outputCount: 0,
+    subagentCount: 0,
+    ...(senders === undefined ? {} : { senders }),
+  })
+
+  test('a hand-back keeps its scroll key when its shown name changes', () => {
+    expect(turnScrollKey(turn(1, 'Message from Explore · Scan', ['a1']))).toBe(
+      turnScrollKey(turn(1, 'Message from agent', ['a1'])),
+    )
+    expect(turnScrollKey(turn(1, 'Fix it'))).not.toBe(turnScrollKey(turn(1, 'Fix that')))
+    expect(turnScrollKey(turn(1, 'Fix it'))).not.toBe(turnScrollKey(turn(2, 'Fix it')))
+    expect(turnScrollKey(undefined)).toBe('')
   })
 })

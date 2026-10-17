@@ -1,7 +1,7 @@
 // Engine session rows -> turns: the items a reply produced, their status,
 // a subagent's trace, and whether agents still run.
 import type { AgentStatus, SessionMessage } from 'claude-code'
-import { handBackSenders, sanitizePrompt, sanitizeText, sanitizeValue, stripBlocks } from './sanitize'
+import { handBackSenders, isHandBack, sanitizePrompt, sanitizeText, sanitizeValue, stripBlocks } from './sanitize'
 import { itemName, toolSummary } from './summaries'
 import type { ApiLike } from './thinking'
 import { SUBAGENT_TOOLS, type Item, type ToolItem, type Turn } from './types'
@@ -131,8 +131,6 @@ export type TurnStarts = {
   prompts: ReadonlyMap<string, string>
   tasks: ReadonlySet<string>
 }
-
-const isHandBack = (prompt: string) => prompt.includes('<agent-message')
 
 // The prompt an API user message carries, reminders left out; undefined for
 // a tool result or a message with nothing to read (reminders only).
