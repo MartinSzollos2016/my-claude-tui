@@ -98,6 +98,7 @@ type World = {
   api: unknown[]
   // Ring keys $.ui.focus refuses, as for an element drawn as Text.
   focusDenied: string[]
+  scrolls: unknown[]
   agents: AgentInfo[]
   surfaces: RenderSurface[]
   config: ConfigRow[]
@@ -153,6 +154,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     files: {},
     isGitDir: true,
     focusDenied: [],
+    scrolls: [],
     hasRepo: true,
     now: 1_700_000_000_000,
     copyResult: { isCopied: true },
@@ -244,6 +246,10 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       },
       status: (message: string | undefined) => {
         world.statuses.push(message)
+      },
+      scroll: async (args: unknown) => {
+        world.scrolls.push(args)
+        return {}
       },
       focus: async (args: { key: string }) => {
         if (world.focusDenied.includes(args.key)) return { deny: 'not drawn' }

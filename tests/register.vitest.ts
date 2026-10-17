@@ -1705,6 +1705,54 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(0)
   })
 
+  const engineScroll = ($: Parameters<typeof run>[1], move: Record<string, unknown>, nexts: unknown[]) =>
+    run(
+      'ui.scroll',
+      $,
+      {
+        component: 'Pane',
+        requestId: 'tail',
+        offset: 0,
+        by: 3,
+        bodyRows: 10,
+        contentRows: 10,
+        origin: { kind: 'person' },
+        ...move,
+      },
+      async e => (nexts.push(e), {}),
+    )
+
+  test("a window over a taller tree is the engine's to move: the desktop app's pane", async () => {
+    const { $ } = fakeEngine({ messages: long })
+    await drawSmall($)
+    const nexts: unknown[] = []
+    await engineScroll($, { contentRows: 300, bodyRows: 40 }, nexts)
+    expect(nexts).toHaveLength(1)
+    expect(await topOf($)).toBe(0)
+  })
+
+  test("a plugin's move never moves the terminal's own window", async () => {
+    const { $ } = fakeEngine({ messages: long })
+    await drawSmall($)
+    const nexts: unknown[] = []
+    await engineScroll($, { by: 7, origin: { kind: 'plugin', name: 'tail-view' } }, nexts)
+    expect(nexts).toEqual([])
+    expect(await topOf($)).toBe(0)
+  })
+
+  test("a view change and the turn cursor ask the desktop app to scroll; the terminal's are its own", async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    await pressSmall($, 'nav-turns')
+    await pressSmall($, 'nav-down')
+    expect(world.scrolls).toEqual([])
+    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    await pressSmall($, 'nav-detail')
+    expect(world.scrolls).toContainEqual({ to: 'start', in: 'tail' })
+    await pressSmall($, 'nav-turns')
+    await pressSmall($, 'nav-down')
+    expect(world.scrolls.some(s => typeof (s as { to: unknown }).to === 'object')).toBe(true)
+  })
+
   test('after paging down, the first j or k lands inside the window and the view stays', async () => {
     const { $ } = fakeEngine({ messages: long })
     await pressSmall($, 'nav-pagedown')

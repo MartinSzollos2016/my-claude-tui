@@ -597,7 +597,14 @@ async function ringTo($: EngineInterface, key: string | null): Promise<void> {
   if (key === null) return
   isRingOnSearch = false
   await $.ui.focus({ requestId: PANE, key }).catch(ignore)
+  // The desktop app scrolls its pane itself: it brings the row into view.
+  if (isFlowDrawn) await $.ui.scroll({ to: { key }, in: PANE }).catch(ignore)
 }
+
+// Set once the flowing pane (the desktop app) was drawn: the app scrolls it,
+// so the plugin's own moves (a view's top, a cursor's row) ask it to. On the
+// terminal such a move fits its window and moves nothing (scrollPane).
+let isFlowDrawn = false
 
 // Moves the keyboard cursor one row along `ids`, and the focus ring with it.
 // The detail view's content scrolls so the row the cursor lands on stays in
@@ -636,7 +643,17 @@ const drawnFrames: Partial<Record<'detail' | 'turns' | 'team', ScrollFrame>> = {
 // instead (engineScroll: a wheel step, a page, the top or the end), clamped
 // like f and b, and the engine's window stays (no `next`); the state change
 // draws the pane again.
-async function scrollPane($: EngineInterface, move: EngineScroll): Promise<UiScrollResult> {
+async function scrollPane(
+  $: EngineInterface,
+  move: EngineScroll,
+  next: () => Promise<UiScrollResult>,
+): Promise<UiScrollResult> {
+  // A tree taller than its window is the desktop app's flowing pane: the
+  // engine moves its window, as the app asks.
+  if (move.contentRows > move.bodyRows) return next()
+  // The plugin's own asks (a view's top, a cursor's row) are for that pane;
+  // they never move the terminal's own scroll.
+  if (move.origin?.kind === 'plugin') return {}
   const view = await read($, paneView)
   const frame = drawnFrames[view]
   await update($, paneScroll, all => ({
@@ -665,6 +682,7 @@ async function detailScroll($: EngineInterface, turnKey: string, stored: number)
 // Every view's content back to the top: the shown turn or the view changed.
 async function scrollToTop($: EngineInterface): Promise<void> {
   await update($, paneScroll, () => TOP)
+  if (isFlowDrawn) await $.ui.scroll({ to: 'start', in: PANE }).catch(ignore)
 }
 
 // Switches what the pane shows, from the top of its content.
@@ -1227,6 +1245,7 @@ export const register: Register = on => {
     // The desktop app (any surface but the terminal) gets the flowing pane;
     // its sizes are its own and never stand in for the terminal's.
     const isFlow = e.surface !== 'terminal'
+    if (isFlow) isFlowDrawn = true
     const terminal =
       isFlow || viewport === undefined
         ? undefined
@@ -1436,7 +1455,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('ui.scroll', { requestId: PANE }, ($, e) => scrollPane($, e))
+  on('ui.scroll', { requestId: PANE }, ($, e, next) => scrollPane($, e, () => next(e)))
 
   // The transcript stays a conversation; tool detail lives in the pane.
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
