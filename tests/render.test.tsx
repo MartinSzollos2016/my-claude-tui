@@ -49,6 +49,27 @@ function framesOf(node: unknown, found: { color: string; text: string }[] = []):
   return found
 }
 
+// The desktop app's pane: no height in cells, the footer framed, no Nerd Font
+// glyph and no hover that makes text bold (wider in the app's font).
+function expectFlowShape(tree: unknown) {
+  expect((tree as Node).props?.['height']).toBeUndefined()
+  expect(typeof findKey(tree, 'footer')?.props?.['borderStyle']).toBe('string')
+  expect(
+    textsOf(tree)
+      .join('')
+      .match(/[\u{E000}-\u{F8FF}\u{F0000}-\u{10FFFF}]/u)?.[0],
+  ).toBeUndefined()
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) node.forEach(walk)
+    else if (node !== null && typeof node === 'object') {
+      const n = node as Node & { hover?: Record<string, unknown> }
+      expect(n.hover?.['bold'] ?? n.props?.['hover']?.['bold' as never]).toBeUndefined()
+      walk(n.children)
+    }
+  }
+  walk(tree)
+}
+
 function findKey(node: unknown, key: string): Node | undefined {
   if (Array.isArray(node)) {
     for (const child of node) {
@@ -306,6 +327,7 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      if (surface === 'desktop') expectFlowShape(await ui.drawn())
 
       expect(await ui.find({ text: /1\/1/ })).toBeDefined()
       expect(await ui.find({ text: /Explore/ })).toBeDefined()
@@ -394,6 +416,7 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      if (surface === 'desktop') expectFlowShape(await ui.drawn())
       await ui.press({ key: 'nav-expand' })
       expect(await ui.find({ text: /chars hidden|lines hidden/ })).toBeDefined()
       const longest = Math.max(...textsOf(await ui.drawn()).map(t => t.length))
@@ -501,6 +524,7 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      if (surface === 'desktop') expectFlowShape(await ui.drawn())
       await ui.press({ key: 'nav-expand' })
       const frames = framesOf(await ui.drawn())
       const command = frames.find(f => f.text.includes('go test ./...'))
@@ -607,6 +631,7 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      if (surface === 'desktop') expectFlowShape(await ui.drawn())
       expect(await ui.find({ text: /3\/3/ })).toBeDefined()
 
       await ui.press({ key: 'nav-turns' })
