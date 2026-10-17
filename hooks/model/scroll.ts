@@ -163,6 +163,8 @@ export type ScrollFrame = {
   windowRows: number
   total: number
   starts: Readonly<Record<string, number>>
+  // The desktop app's window (the engine's), not the plugin's own scroll.
+  isFlow?: true
 }
 
 // The scroll that keeps row `id` in view; unchanged for a row not drawn.

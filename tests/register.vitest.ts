@@ -1500,6 +1500,25 @@ describe('keyboard cursor', () => {
     expect(world.focusRequests).toBe(before + 1)
   })
 
+  test("a desktop drawing neither takes the keys back nor hides the terminal's Esc", async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    const focused = (isFocused: boolean, surface = 'terminal') => ({
+      ...PANE_EVENT,
+      surface,
+      props: { ...PANE_EVENT.props, isFocused },
+    })
+    await run('ui.render', $, focused(true))
+    await press($, 'nav-search')
+    await run('ui.render', $, focused(true))
+    const before = world.focusRequests
+    await run('ui.render', $, focused(false, 'desktop'))
+    await settle()
+    expect(world.focusRequests).toBe(before)
+    await run('ui.render', $, focused(false))
+    await settle()
+    expect(world.focusRequests).toBe(before + 1)
+  })
+
   test('a Tab or a click that moves the ring onto a row moves the cursor there', async () => {
     const { $ } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
     await draw($)
@@ -1738,6 +1757,34 @@ describe('own scroll', () => {
     await engineScroll($, { by: 7, origin: { kind: 'plugin', name: 'tail-view' } }, nexts)
     expect(nexts).toEqual([])
     expect(await topOf($)).toBe(0)
+  })
+
+  // Presses j on the desktop's drawing with the app's window at `offset`;
+  // the row its cursor lands on is the one the app is asked to bring up.
+  async function desktopDown($: Parameters<typeof run>[1], world: { scrolls: unknown[] }, offset: number) {
+    const tree = await run('ui.render', $, {
+      ...SMALL,
+      surface: 'desktop',
+      props: { ...SMALL.props, scroll: { offset, bodyRows: 10 } },
+    })
+    ;(byKey(tree, 'nav-down')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
+    await settle()
+    return (world.scrolls.at(-1) as { to: { key: string } }).to.key
+  }
+
+  test("the cursor on the desktop starts in the app's window", async () => {
+    const top = fakeEngine({ messages: long })
+    const middle = fakeEngine({ messages: long })
+    expect(await desktopDown(middle.$, middle.world, 12)).not.toBe(await desktopDown(top.$, top.world, 0))
+  })
+
+  test("the cursor on the desktop leaves the terminal's own scroll alone", async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    await pressSmall($, 'nav-pagedown')
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-8)
+    await desktopDown($, world, 12)
+    expect(await topOf($)).toBe(-8)
   })
 
   test("a view change and the turn cursor ask the desktop app to scroll; the terminal's are its own", async () => {

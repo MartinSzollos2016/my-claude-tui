@@ -100,12 +100,34 @@ describe('the desktop flow pane', () => {
     expect(String(label?.props['label'])).not.toMatch(/ {2}$/)
   })
 
-  test("a row's card sits on its row, revealed by the row's hover", () => {
+  test("a row's leading cells sit in boxes of their own width, never padded with spaces", () => {
+    const tree = flow({ cursor: 'b1' })
+    for (const id of ['b1', 'p1', 't0:o0']) {
+      const item = byKey(tree, `item-${id}`)
+      for (const key of [`cursor-${id}`, `status-${id}`, `icon-${id}`]) {
+        const cell = byKey(item, key)
+        const box = nodes(item).find(
+          n => n.type === 'Box' && (n.props['children'] === cell || [n.props['children']].flat().includes(cell)),
+        )
+        expect(typeof box?.props['width'], `${key} box`).toBe('number')
+        for (const s of strings(cell)) expect(s.endsWith(' '), `${key}: ${JSON.stringify(s)}`).toBe(false)
+      }
+    }
+  })
+
+  test("a row's card sits above its row, revealed by the row's hover", () => {
     const tree = flow()
     const card = byKey(tree, 'card-p1')
     expect(card).toBeDefined()
     expect(isInside(byKey(tree, 'item-p1'), card)).toBe(true)
-    expect([card?.props['position'], card?.props['top'], card?.props['display']]).toEqual(['absolute', 1, 'none'])
+    // Above its row, as the terminal places it where it fits: a pointer moving
+    // down the rows never lands on the card the row above revealed.
+    expect([card?.props['position'], card?.props['bottom'], card?.props['top'], card?.props['display']]).toEqual([
+      'absolute',
+      1,
+      undefined,
+      'none',
+    ])
     expect((card?.props['hover'] as Record<string, unknown>)['scope']).toBe('row:p1')
   })
 
@@ -140,8 +162,29 @@ describe('the desktop flow pane', () => {
       },
     ])
     const tree = flow({ turns: long, expanded: new Set(['big']), stats: [undefined] })
-    expect(strings(tree).join('').length).toBeLessThan(PANE_TEXT_BUDGET + 15_000)
+    expect(strings(tree).join('').length).toBeLessThan(PANE_TEXT_BUDGET + 5_000)
     expect(/more rows? .* pane text budget reached/.test(text(tree))).toBe(true)
+  })
+
+  test('a list of very many turns stays under the text budget, as the grid does', () => {
+    const many = buildTurns(
+      Array.from({ length: 1200 }, (_, i) => [
+        { role: 'user' as const, text: `question ${i} `.repeat(30), toolUses: [] },
+        { role: 'assistant' as const, text: 'ok', toolUses: [] },
+      ]).flat(),
+    )
+    const stats = many.map((_, i) => ({
+      key: 'k',
+      turnIndex: i,
+      durationMs: 4_000 + i,
+      endedAt: i,
+      inputTokens: 900,
+      outputTokens: 100,
+    }))
+    for (const columns of [60, 100, 160]) {
+      const tree = flow({ view: 'turns', turns: many, stats, columns })
+      expect(strings(tree).join('').length, `${columns}`).toBeLessThan(PANE_TEXT_BUDGET + 5_000)
+    }
   })
 
   test('two ticks while working draw the same tree but the spinner', () => {

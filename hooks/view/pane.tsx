@@ -197,11 +197,14 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
 function flowBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   const { Box } = el
   const rows = contentRows(data.layout)
+  // The app's window, where its scroll stands (the engine's offset): a
+  // cursor enters there, as it enters the terminal's window.
   const frame: ScrollFrame = {
-    scrollTop: 0,
-    windowRows: Math.max(1, rows.total),
+    scrollTop: data.scrollTop ?? 0,
+    windowRows: Math.max(1, data.rows),
     total: rows.total,
     starts: rows.starts,
+    isFlow: true,
   }
   return (
     <Box flexDirection="column" backgroundColor={C.paneBackground}>

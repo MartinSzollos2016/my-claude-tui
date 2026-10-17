@@ -39,13 +39,21 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
       index: row.index,
       snippet: snippets.get(row.index) ?? '',
       label: `${row.index === data.selected ? data.icons.marker : ' '} ${row.label}`,
+      // The desktop app's row: its cells and the whole prompt cut to the pane.
+      ...(data.isFlow === true
+        ? { cells: row.cells, prompt: trunc(data.turns[row.index]?.prompt || '(no prompt)', data.columns) }
+        : {}),
     }))
 
   data.budget.left -= table.header.length + 2
   // Every row draws from the pane's text budget; what does not fit is counted.
   const shown: typeof rows = []
   for (const row of rows.reverse()) {
-    const cost = row.label.length + row.snippet.length
+    // What the row draws: the text table's label, or the desktop app's cells.
+    const cost =
+      row.cells === undefined
+        ? row.label.length + row.snippet.length
+        : 1 + (row.prompt?.length ?? 0) + flowCellsLength(row.cells) + row.snippet.length
     if (cost > data.budget.left) break
     data.budget.left -= cost
     shown.push(row)
@@ -225,20 +233,24 @@ function flowCells(el: El, key: string, columns: TurnTable['columns'], cells: Fl
   )
 }
 
+// The characters a desktop row draws besides its prompt: every cell but the
+// text table's cut prompt.
+const flowCellsLength = (cells: TurnTable['rows'][number]['cells']) =>
+  cells.number.length + cells.tools.length + cells.time.length + cells.tokens.length + cells.bar.length
+
 // A turn of the desktop app's table: the number and the prompt are buttons
 // that open it (a button holds one label, not a row); the prompt is the
 // whole one, cut to the pane, and the box clips what the app's font spills.
 function renderFlowRow(
   el: El,
-  row: { index: number; snippet: string },
+  row: { index: number; snippet: string; cells?: TurnTable['rows'][number]['cells']; prompt?: string },
   table: TurnTable,
   data: Ctx,
   act: PaneActions,
   query: string,
 ) {
   const { Box, Button, Text } = el
-  const cells = table.rows.find(r => r.index === row.index)?.cells
-  const prompt = data.turns.find(turn => turn.index === row.index)?.prompt || '(no prompt)'
+  const { cells } = row
   const isSelected = row.index === data.selected
   const isCursor = row.index === data.turnCursor
   const hover = { scope: `turn:${row.index}`, backgroundColor: C.rowHover }
@@ -266,7 +278,7 @@ function renderFlowRow(
           </Text>
         ),
         number: button(`turn-num-${row.index}`, cells?.number ?? `#${row.index + 1}`),
-        prompt: button(`turn-${row.index}`, cutter(data.icons)(prompt, data.columns)),
+        prompt: button(`turn-${row.index}`, row.prompt ?? ''),
         tools: muted(cells?.tools),
         time: muted(cells?.time),
         tokens: muted(cells?.tokens),

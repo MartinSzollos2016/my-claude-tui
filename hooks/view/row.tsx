@@ -202,17 +202,43 @@ export function renderLine(
   return (
     <Box key={`item-${id}`} flexDirection="column" marginLeft={indent}>
       <Box flexDirection="row" width={isFlow ? undefined : width}>
-        {hasCursorColumn && (
-          <Text key={`cursor-${id}`} color={data.cursor === id ? C.accent : C.muted}>
-            {data.cursor === id ? icons.cursor : ' '}
-          </Text>
-        )}
+        {hasCursorColumn &&
+          (isFlow ? (
+            <Box width={2} flexShrink={0}>
+              <Text key={`cursor-${id}`} color={data.cursor === id ? C.accent : C.muted}>
+                {data.cursor === id ? icons.cursor : ''}
+              </Text>
+            </Box>
+          ) : (
+            <Text key={`cursor-${id}`} color={data.cursor === id ? C.accent : C.muted}>
+              {data.cursor === id ? icons.cursor : ' '}
+            </Text>
+          ))}
         {guide !== '' && (
           <Text key={`guide-${id}`} color={C.muted}>
             {guide}
           </Text>
         )}
-        {canOpen ? (
+        {/* On the desktop app every leading cell is a box of its own width:
+            spaces do not line up in its proportional font. */}
+        {isFlow ? (
+          <Box width={2} flexShrink={0}>
+            {canOpen ? (
+              <Button
+                key={`chevron-${id}`}
+                plain
+                dimColor
+                label={line.chevron}
+                hover={buttonHoverOf(data, scopeOf('chev:', id))}
+                onPress={line.onPress}
+              />
+            ) : (
+              <Text color={isOpen ? C.text : C.muted} hover={hover}>
+                {line.chevron}
+              </Text>
+            )}
+          </Box>
+        ) : canOpen ? (
           <Button
             key={`chevron-${id}`}
             plain
@@ -224,12 +250,28 @@ export function renderLine(
         ) : (
           <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${line.chevron} `}</Text>
         )}
-        <Text key={`status-${id}`} color={mark?.color ?? C.muted} hover={hover}>
-          {mark === undefined ? '  ' : `${mark.glyph} `}
-        </Text>
-        <Text color={icon.color ?? C.muted} hover={hover}>
-          {`${icon.glyph} `}
-        </Text>
+        {isFlow ? (
+          <Box width={2} flexShrink={0}>
+            <Text key={`status-${id}`} color={mark?.color ?? C.muted} hover={hover}>
+              {mark?.glyph ?? ''}
+            </Text>
+          </Box>
+        ) : (
+          <Text key={`status-${id}`} color={mark?.color ?? C.muted} hover={hover}>
+            {mark === undefined ? '  ' : `${mark.glyph} `}
+          </Text>
+        )}
+        {isFlow ? (
+          <Box width={2} flexShrink={0}>
+            <Text key={`icon-${id}`} color={icon.color ?? C.muted} hover={hover}>
+              {icon.glyph}
+            </Text>
+          </Box>
+        ) : (
+          <Text color={icon.color ?? C.muted} hover={hover}>
+            {`${icon.glyph} `}
+          </Text>
+        )}
         <Box flexGrow={1} flexShrink={1} {...(isFlow ? { overflow: 'hidden' as const } : {})}>
           {canOpen ? (
             <Button
@@ -299,7 +341,7 @@ export function renderLine(
   )
 }
 
-// A row's hover card on the desktop app: on the row itself, under it, shown
+// A row's hover card on the desktop app: on the row itself, above it, shown
 // while the row is hovered; absolute, so showing it moves nothing.
 function flowCard(el: El, line: Line, data: Ctx, place: TreePlace | undefined) {
   const { Box, Text } = el
@@ -310,7 +352,7 @@ function flowCard(el: El, line: Line, data: Ctx, place: TreePlace | undefined) {
       key={`card-${line.id}`}
       position="absolute"
       display="none"
-      top={1}
+      bottom={1}
       left={CARD_INDENT + (place === undefined ? 0 : TRACE_INDENT)}
       backgroundColor={C.paneBackground}
       flexDirection="column"

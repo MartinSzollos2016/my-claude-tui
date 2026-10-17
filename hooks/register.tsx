@@ -616,7 +616,8 @@ async function moveRowCursor(
   at: ScrollFrame,
 ): Promise<void> {
   const landed = await update($, cursor, cur => stepCursor(ids, cur, delta, at))
-  await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
+  // On the desktop app the app's window follows the ring (ringTo), not ours.
+  if (at.isFlow !== true) await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
   await ringTo($, landed)
 }
 
@@ -629,7 +630,8 @@ async function moveTurnCursor($: EngineInterface, delta: number, at: ScrollFrame
     const id = stepCursor(ids, cur === null ? null : turnRowId(cur), delta, at)
     return id === null ? null : Number(id.slice('turn:'.length))
   })
-  await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
+  if (at.isFlow !== true)
+    await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
   await ringTo($, landed === null ? null : `turn-${landed}`)
 }
 
@@ -1250,8 +1252,10 @@ export const register: Register = on => {
       isFlow || viewport === undefined
         ? undefined
         : terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)
-    keepKeysAfterSearchEsc($, e.props.isFocused, terminal)
     if (!isFlow) {
+      // The engine's Esc in a field is the terminal's: the desktop app keeps
+      // its own focus, and its drawings never stand for the terminal's.
+      keepKeysAfterSearchEsc($, e.props.isFocused, terminal)
       // Only a docked pane's width answers to /tail-width; inline it is the screen's.
       drawnColumns = e.props.placement === 'dock' ? e.props.bodyColumns : undefined
       drawnPlacement = e.props.placement
@@ -1385,7 +1389,8 @@ export const register: Register = on => {
             ? inlineRows(e.props.scroll.bodyRows, paneRows(terminalRows ?? 0))
             : e.props.scroll.bodyRows,
         placement: e.props.placement,
-        scrollTop: view === 'detail' ? detailTop : scrolled[view],
+        // The desktop app's pane scrolls in the engine's window, the terminal's in its own.
+        scrollTop: isFlow ? e.props.scroll.offset : view === 'detail' ? detailTop : scrolled[view],
         full: new Set(fullIds),
         view,
         query,
