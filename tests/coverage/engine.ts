@@ -99,6 +99,8 @@ type World = {
   // Ring keys $.ui.focus refuses, as for an element drawn as Text.
   focusDenied: string[]
   scrolls: unknown[]
+  // A $.ui.scroll that never answers, as the desktop app's may not while a press is in flight.
+  isScrollStuck: boolean
   agents: AgentInfo[]
   surfaces: RenderSurface[]
   config: ConfigRow[]
@@ -155,6 +157,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     isGitDir: true,
     focusDenied: [],
     scrolls: [],
+    isScrollStuck: false,
     hasRepo: true,
     now: 1_700_000_000_000,
     copyResult: { isCopied: true },
@@ -249,6 +252,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       },
       scroll: async (args: unknown) => {
         world.scrolls.push(args)
+        if (world.isScrollStuck) await new Promise(() => {})
         return {}
       },
       focus: async (args: { key: string }) => {

@@ -1761,7 +1761,7 @@ describe('own scroll', () => {
 
   // Presses j on the desktop's drawing with the app's window at `offset`;
   // the row its cursor lands on is the one the app is asked to bring up.
-  async function desktopDown($: Parameters<typeof run>[1], world: { scrolls: unknown[] }, offset: number) {
+  async function desktopDown($: Parameters<typeof run>[1], world: { focused: string[] }, offset: number) {
     const tree = await run('ui.render', $, {
       ...SMALL,
       surface: 'desktop',
@@ -1769,7 +1769,7 @@ describe('own scroll', () => {
     })
     ;(byKey(tree, 'nav-down')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
     await settle()
-    return (world.scrolls.at(-1) as { to: { key: string } }).to.key
+    return world.focused.at(-1)
   }
 
   test("the cursor on the desktop starts in the app's window", async () => {
@@ -1787,17 +1787,38 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(-8)
   })
 
-  test("a view change and the turn cursor ask the desktop app to scroll; the terminal's are its own", async () => {
+  test('a press on the desktop never waits on the app to scroll: views, turns and the cursor stay live', async () => {
     const { $, world } = fakeEngine({ messages: long })
-    await pressSmall($, 'nav-turns')
-    await pressSmall($, 'nav-down')
+    world.isScrollStuck = true
+    const DESKTOP = { ...SMALL, surface: 'desktop' }
+    const pressDesktop = async (key: string) => {
+      const button = byKey(await run('ui.render', $, DESKTOP), key)
+      if (!button) throw new Error(`no button ${key}`)
+      const pressed = (button.props['onPress'] as (e: unknown) => unknown)({ surface: 'desktop' })
+      const settled = await Promise.race([
+        Promise.resolve(pressed).then(() => 'done'),
+        new Promise(resolve =>
+          (globalThis as unknown as { setTimeout: (run: () => void, ms: number) => void }).setTimeout(
+            () => resolve('stuck'),
+            500,
+          ),
+        ),
+      ])
+      expect(settled, key).toBe('done')
+      await settle()
+    }
+    for (const key of [
+      'nav-turns',
+      'turn-0',
+      'nav-turns',
+      'nav-down',
+      'nav-detail',
+      'nav-down',
+      'nav-team',
+      'nav-detail',
+    ])
+      await pressDesktop(key)
     expect(world.scrolls).toEqual([])
-    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
-    await pressSmall($, 'nav-detail')
-    expect(world.scrolls).toContainEqual({ to: 'start', in: 'tail' })
-    await pressSmall($, 'nav-turns')
-    await pressSmall($, 'nav-down')
-    expect(world.scrolls.some(s => typeof (s as { to: unknown }).to === 'object')).toBe(true)
   })
 
   test('after paging down, the first j or k lands inside the window and the view stays', async () => {

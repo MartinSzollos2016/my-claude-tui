@@ -597,14 +597,11 @@ async function ringTo($: EngineInterface, key: string | null): Promise<void> {
   if (key === null) return
   isRingOnSearch = false
   await $.ui.focus({ requestId: PANE, key }).catch(ignore)
-  // The desktop app scrolls its pane itself: it brings the row into view.
-  if (isFlowDrawn) await $.ui.scroll({ to: { key }, in: PANE }).catch(ignore)
 }
 
-// Set once the flowing pane (the desktop app) was drawn: the app scrolls it,
-// so the plugin's own moves (a view's top, a cursor's row) ask it to. On the
-// terminal such a move fits its window and moves nothing (scrollPane).
-let isFlowDrawn = false
+// The desktop app's window is the person's alone: the plugin never asks it to
+// scroll ($.ui.scroll). A press awaiting the app's scroll while the app
+// awaits the press froze the pane (no hook budget runs during a $ call).
 
 // Moves the keyboard cursor one row along `ids`, and the focus ring with it.
 // The detail view's content scrolls so the row the cursor lands on stays in
@@ -684,7 +681,6 @@ async function detailScroll($: EngineInterface, turnKey: string, stored: number)
 // Every view's content back to the top: the shown turn or the view changed.
 async function scrollToTop($: EngineInterface): Promise<void> {
   await update($, paneScroll, () => TOP)
-  if (isFlowDrawn) await $.ui.scroll({ to: 'start', in: PANE }).catch(ignore)
 }
 
 // Switches what the pane shows, from the top of its content.
@@ -1247,7 +1243,6 @@ export const register: Register = on => {
     // The desktop app (any surface but the terminal) gets the flowing pane;
     // its sizes are its own and never stand in for the terminal's.
     const isFlow = e.surface !== 'terminal'
-    if (isFlow) isFlowDrawn = true
     const terminal =
       isFlow || viewport === undefined
         ? undefined
