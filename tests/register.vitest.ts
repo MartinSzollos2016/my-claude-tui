@@ -2868,6 +2868,14 @@ describe('the desktop surface', () => {
     expect(text(byKey(tree, 'brand-mark'))).toBe(ICON_SETS.ascii.robot)
   })
 
+  test('/tail-help draws its legend in the icons of a session drawn only on the desktop', async () => {
+    const { $, world } = fakeEngine()
+    world.surfaces = ['desktop']
+    expect(await say($, 'tail-help')).toContain(`${ICON_SETS.unicode.thinking} thinking blocks`)
+    world.surfaces = ['terminal', 'desktop']
+    expect(await say($, 'tail-help')).toContain(`${ICON_SETS.nerd.thinking} thinking blocks`)
+  })
+
   test("a desktop render never overwrites the terminal's sizes", async () => {
     const { $, world } = fakeEngine({ messages: main })
     await run('ui.render', $, { ...PANE_EVENT, props: { ...PANE_EVENT.props, bodyColumns: 80 } })

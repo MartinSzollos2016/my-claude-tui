@@ -515,8 +515,12 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       }
     case 'stats':
       return { text: await setStats($, parsed.arg) }
-    case 'help':
-      return { text: helpText(await currentIcons($)) }
+    case 'help': {
+      // Its legend in the glyphs the pane draws: a session no terminal draws
+      // (the desktop app alone) reads it in the desktop's set.
+      const isFlowOnly = !(await $.session.surfaces()).includes('terminal')
+      return { text: helpText(await currentIcons($, isFlowOnly)) }
+    }
     case 'unknown':
       return { text: unknownText(parsed.arg) }
     case 'turns': {
