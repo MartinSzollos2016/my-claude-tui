@@ -63,6 +63,13 @@ export function stripBlocks(text: string, open: string, close: string): string {
   }
 }
 
+const HAND_BACK = '<agent-message'
+
+// Whether a prompt text is an agent's hand-back. Every path (the turn, its
+// stat, its title) asks it of the cleaned text (sanitizeText), so a control
+// character inside the tag cannot make them disagree.
+export const isHandBack = (text: string): boolean => text.includes(HAND_BACK)
+
 // The agents a hand-back comes from: the `from` of each `<agent-message>`
 // block outside the reminders, once each. Only a block at the top counts:
 // the scan follows the open and end tags, so the blocks a report quotes are
@@ -72,11 +79,6 @@ export function stripBlocks(text: string, open: string, close: string): string {
 // meaning: an unclosed block holds the rest of the text, and a stray end tag
 // closes the block it sits in. A text with many blocks names at most
 // MAX_SENDERS and is read only up to MAX_BLOCKS top blocks.
-const HAND_BACK = '<agent-message'
-
-// Whether a prompt text is an agent's hand-back: the one test every path
-// (the turn, its stat, its title) shares, so they always agree.
-export const isHandBack = (text: string): boolean => text.includes(HAND_BACK)
 const HAND_BACK_TAGS = /<agent-message((?:\s+[\w-]+="[^"]{0,200}"){0,8})\s*>|<\/agent-message>/g
 const MAX_SENDERS = 8
 const MAX_BLOCKS = 64
@@ -123,7 +125,8 @@ export const promptKey = (turn: { prompt: string; senders?: readonly string[] })
 // The key of the turn a prompt text opens, before the turn is in the rows
 // (turn.start, prompt.submit).
 export function statPrompt(text: string): string {
-  return isHandBack(text) ? handBackKey(handBackSenders(text)) : sanitizePrompt(sanitizeText(text).trim())
+  const clean = sanitizeText(text)
+  return isHandBack(clean) ? handBackKey(handBackSenders(clean)) : sanitizePrompt(clean.trim())
 }
 
 // Turns XML-ish wrappers the engine injects into a readable one-liner.

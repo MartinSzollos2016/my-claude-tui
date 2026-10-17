@@ -55,7 +55,7 @@ const fresh: Pieces = {
     const clean = sanitizeText(text).trim()
     if (clean === '' || hasResults) return undefined
     const prompt = sanitizePrompt(clean)
-    return isHandBack(text) ? { prompt, senders: handBackSenders(text) } : { prompt }
+    return isHandBack(clean) ? { prompt, senders: handBackSenders(clean) } : { prompt }
   },
   output: text => sanitizeText(text).trim(),
   tool: use => {
@@ -135,13 +135,20 @@ export type TurnStarts = {
 // The prompt an API user message carries, reminders left out; undefined for
 // a tool result or a message with nothing to read (reminders only).
 export function apiPromptOf(blocks: readonly Block[]): string | undefined {
+  return apiPrompt(blocks)?.own
+}
+
+// The prompt as the message holds it (`own`) and cleaned (`clean`), which
+// the hand-back test reads.
+function apiPrompt(blocks: readonly Block[]): { own: string; clean: string } | undefined {
   if (blocks.some(block => block.type === 'tool_result')) return undefined
   const text = blocks
     .filter(block => block.type === 'text' && typeof block['text'] === 'string')
     .map(block => String(block['text']))
     .join('\n')
   const own = stripBlocks(text, '<system-reminder>', '</system-reminder>')
-  return sanitizePrompt(sanitizeText(own)).trim() === '' ? undefined : own
+  const clean = sanitizeText(own)
+  return sanitizePrompt(clean).trim() === '' ? undefined : { own, clean }
 }
 
 export function apiTurnStarts(api: readonly ApiLike[]): TurnStarts {
@@ -150,20 +157,22 @@ export function apiTurnStarts(api: readonly ApiLike[]): TurnStarts {
   const prompts = new Map<string, string>()
   const tasks = new Set<string>()
   let pending: string | undefined
+  let isPendingHandBack = false
   for (const m of api) {
     if (m === null || typeof m !== 'object') continue
     const blocks = blocksOf(m)
     if (m.role === 'user') {
-      const own = apiPromptOf(blocks)
-      if (own === undefined) continue
-      const task = taskIdOf(own)
+      const prompt = apiPrompt(blocks)
+      if (prompt === undefined) continue
+      const task = taskIdOf(prompt.own)
       if (task !== undefined) tasks.add(task)
-      pending = own
+      pending = prompt.own
+      isPendingHandBack = isHandBack(prompt.clean)
       continue
     }
     const key = apiKeyOf(blocks)
     if (key === undefined) continue
-    const isOpener = pending !== undefined && isHandBack(pending)
+    const isOpener = pending !== undefined && isPendingHandBack
     if (pending !== undefined) keys.add(key)
     if (isOpener && pending !== undefined) prompts.set(key, pending)
     replies.set(key, [...(replies.get(key) ?? []), isOpener])

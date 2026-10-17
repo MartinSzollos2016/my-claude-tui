@@ -14,6 +14,7 @@ import {
   traceItems,
   turnsKey,
 } from '../hooks/model/turns'
+import { promptKey, statPrompt } from '../hooks/model/sanitize'
 import type { ToolItem } from '../hooks/model/types'
 import { displayWidth } from '../hooks/model/width'
 import { main, prompt, read, transcript } from './fixtures/model'
@@ -560,6 +561,20 @@ describe('hand-back senders', () => {
     ])
     const unknown = handBackSession('zz')
     expect(buildTurns(unknown.rows, '', unknown.starts).at(-1)!.prompt).toBe('Message from agent')
+  })
+
+  test('a control character inside the tag is cleaned before a hand-back is told apart', () => {
+    const hostile = 'Another Claude session sent a message:\n<agent-\u0007message from="a1">done</agent-message>'
+    const { rows } = handBackSession('a1')
+    const api = [
+      { role: 'user' as const, content: [{ type: 'text', text: 'go' }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'spawned' }] },
+      { role: 'user' as const, content: [{ type: 'text', text: hostile }] },
+      { role: 'assistant' as const, content: [{ type: 'text', text: 'Both commands failed' }] },
+    ]
+    const turn = buildTurns(rows, '', apiTurnStarts(api)).at(-1)!
+    expect(turn.prompt).toBe('Message from Explore · Find callers')
+    expect(statPrompt(hostile)).toBe(promptKey(turn))
   })
 
   test('a hand-back keeps the name of the call before it when a later call reuses the id', () => {
