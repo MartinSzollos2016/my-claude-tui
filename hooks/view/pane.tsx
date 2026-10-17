@@ -279,7 +279,6 @@ function flowBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
     starts: rows.starts,
     isFlow: true,
   }
-  act.measureFlow?.(frame)
   return (
     <Box flexDirection="column" backgroundColor={C.paneBackground}>
       {parts.header.length > 0 && (

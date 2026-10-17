@@ -204,10 +204,8 @@ function renderFlowRow(
 ) {
   const { Box, Button, Text } = el
   const isSelected = row.index === data.selected
-  const isCursor = row.index === data.turnCursor
-  // One card is bright: the cursor's, else (no cursor yet) the open turn's.
-  const hasCursor = data.turnCursor !== undefined && data.turnCursor !== null
-  const isBright = hasCursor ? isCursor : isSelected
+  // The desktop app has no cursor: the open turn's card is the bright one.
+  const isBright = isSelected
   const isRunning = data.isWorking && row.index === data.turns.length - 1
   const hover = { scope: `turn:${row.index}`, backgroundColor: C.rowHover }
   return (
@@ -217,7 +215,6 @@ function renderFlowRow(
         {...FLOW_CARD}
         borderStyle={data.icons.border}
         borderColor={isSelected ? C.accent : C.muted}
-        {...(isCursor ? { backgroundColor: C.rowHover } : {})}
       >
         <Box flexDirection="row" columnGap={1}>
           <Box flexGrow={1} flexShrink={1} overflow="hidden">

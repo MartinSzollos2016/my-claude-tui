@@ -1776,8 +1776,8 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(0)
   })
 
-  // Presses j on the desktop's drawing with the app's window at `offset`;
-  // the row its cursor lands on is the one the app is asked to bring up.
+  // Presses j on the desktop's drawing: the desktop app has no cursor, so
+  // nothing moves, the focus ring included.
   async function desktopDown($: Parameters<typeof run>[1], world: { focused: string[] }, offset: number) {
     const tree = await run('ui.render', $, {
       ...SMALL,
@@ -1786,107 +1786,35 @@ describe('own scroll', () => {
     })
     ;(byKey(tree, 'nav-down')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
     await settle()
-    // The ring follows the cursor's row: the app scrolls it into view (a
-    // ring on the open key, at the top, scrolled the app back up) and Enter
-    // presses it.
-    expect(world.focused.at(-1)).not.toBe('nav-open')
-    expect(world.focused.length).toBeGreaterThan(0)
-    const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
-    const marked = nodes(drawn).find(
-      n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor,
-    )
-    return String(marked?.props['key'])
+    expect(world.focused).toEqual([])
   }
 
-  test('on the desktop an arrow moves the cursor, the wheel scrolls the app', async () => {
+  test('the desktop app has no cursor: j moves nothing, an arrow scrolls the app', async () => {
     const { $, world } = fakeEngine({ messages: long })
-    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    await desktopDown($, world, 12)
+    const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    expect(nodes(drawn).some(n => /^cursor-/.test(String(n.props['key'])))).toBe(false)
     const nexts: unknown[] = []
-    const scroll = (move: Record<string, unknown>) =>
-      run(
-        'ui.scroll',
-        $,
-        {
-          component: 'Pane',
-          requestId: 'tail',
-          offset: 0,
-          by: 1,
-          bodyRows: 10,
-          contentRows: 300,
-          origin: { kind: 'person' },
-          ...move,
-        },
-        async e => (nexts.push(e), {}),
-      )
-    const cursorAt = async () => {
-      const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
-      return nodes(drawn).find(n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor)
-        ?.props['key']
-    }
-    await scroll({})
-    await settle()
-    expect(nexts).toEqual([])
-    const first = await cursorAt()
-    expect(first).toBeDefined()
-    world.now += 1_000
-    await scroll({})
-    await settle()
-    expect(await cursorAt()).not.toBe(first)
-    await scroll({ pointer: { column: 3, row: 4 } })
+    await run(
+      'ui.scroll',
+      $,
+      {
+        component: 'Pane',
+        requestId: 'tail',
+        offset: 0,
+        by: 1,
+        bodyRows: 10,
+        contentRows: 300,
+        origin: { kind: 'person' },
+      },
+      async e => (nexts.push(e), {}),
+    )
     expect(nexts).toHaveLength(1)
-  })
-
-  test('on the desktop the arrows scroll the team view, a fitting tree and a move right after a ring', async () => {
-    const { $, world } = fakeEngine({
-      messages: long,
-      agents: [{ id: 'tm1', teammateId: 'alice@crew', description: 'help', type: 'teammate', status: 'running' }],
-    })
-    const nexts: unknown[] = []
-    const arrow = (move: Record<string, unknown> = {}) =>
-      run(
-        'ui.scroll',
-        $,
-        {
-          component: 'Pane',
-          requestId: 'tail',
-          offset: 0,
-          by: 1,
-          bodyRows: 10,
-          contentRows: 300,
-          origin: { kind: 'person' },
-          ...move,
-        },
-        async e => (nexts.push(e), {}),
-      )
-    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
-    // A tree that fits has nothing to scroll: no arrow of the app's moves the cursor.
-    await arrow({ contentRows: 10 })
-    await settle()
-    expect(world.focused).toEqual([])
-    // The first arrow moves the cursor and rings its row; a one-row move
-    // within the ring's settling time is the app scrolling to it.
-    await arrow()
-    await settle()
-    expect(nexts).toHaveLength(0)
-    expect(world.focused).toHaveLength(1)
-    await arrow()
-    expect(nexts).toHaveLength(1)
-    world.now += 1_000
-    await arrow()
-    expect(nexts).toHaveLength(1)
-    // The team view has no cursor: its arrows scroll.
-    const team = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
-    ;(byKey(team, 'nav-team')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
-    await settle()
-    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
-    world.now += 1_000
-    await arrow()
-    expect(nexts).toHaveLength(2)
   })
 
   test("a ring the plugin moved never moves the cursor: only the person's ring does", async () => {
     const { $ } = fakeEngine({ messages: long })
-    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    await drawSmall($)
     const focus = (element: string, kind: string) =>
       run(
         'ui.focus',
@@ -1895,21 +1823,13 @@ describe('own scroll', () => {
         async () => ({}),
       )
     await focus('t0:o0', 'plugin')
-    const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
-    expect(
-      nodes(drawn).some(n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor),
-    ).toBe(false)
+    const drawn = await drawSmall($)
+    expect(nodes(drawn).some(n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.nerd.cursor)).toBe(
+      false,
+    )
     await focus('t0:o0', 'person')
-    const after = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
-    expect(nodes(after).some(n => n.props['key'] === 'cursor-t0:o0' && text(n) === ICON_SETS.unicode.cursor)).toBe(true)
-  })
-
-  test('the cursor on the desktop steps on from where it stands, wherever the app has scrolled', async () => {
-    const top = fakeEngine({ messages: long })
-    const middle = fakeEngine({ messages: long })
-    const first = await desktopDown(top.$, top.world, 0)
-    expect(await desktopDown(middle.$, middle.world, 12)).toBe(first)
-    expect(await desktopDown(middle.$, middle.world, 12)).not.toBe(first)
+    const after = await drawSmall($)
+    expect(nodes(after).some(n => n.props['key'] === 'cursor-t0:o0' && text(n) === ICON_SETS.nerd.cursor)).toBe(true)
   })
 
   test("the cursor on the desktop leaves the terminal's own scroll alone", async () => {

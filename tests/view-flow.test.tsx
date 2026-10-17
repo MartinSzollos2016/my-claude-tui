@@ -2,7 +2,6 @@
 // framed on top, rows sized by boxes, cards on their rows, no cell sizes.
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
-import { C } from '../hooks/theme'
 import { buildTurns } from '../hooks/model/turns'
 import { PANE_TEXT_BUDGET } from '../hooks/view/context'
 import { renderPane } from '../hooks/view/pane'
@@ -107,7 +106,7 @@ describe('the desktop flow pane', () => {
     const tree = flow({ cursor: 'b1' })
     for (const id of ['b1', 'p1', 't0:o0']) {
       const item = byKey(tree, `item-${id}`)
-      for (const key of [`cursor-${id}`, `status-${id}`, `icon-${id}`]) {
+      for (const key of [`status-${id}`, `icon-${id}`]) {
         const cell = byKey(item, key)
         const box = nodes(item).find(
           n => n.type === 'Box' && (n.props['children'] === cell || [n.props['children']].flat().includes(cell)),
@@ -188,24 +187,17 @@ describe('the desktop flow pane', () => {
     expect(strings(tree).join('').length).toBeLessThan(PANE_TEXT_BUDGET + 5_000)
   })
 
-  test("the cursor's row is highlighted across its width, the app's way of showing a selection", () => {
+  test('the desktop app shows no cursor: no mark, no highlight, the open turn alone is bright', () => {
     const detail = flow({ cursor: 'b1' })
+    expect(nodes(detail).some(n => /^cursor-/.test(String(n.props['key'])))).toBe(false)
     const row = nodes(byKey(detail, 'item-b1')).find(n => n.type === 'Box' && n.props['flexDirection'] === 'row')
-    expect(row?.props['backgroundColor']).toBe(C.rowHover)
-    const other = nodes(byKey(detail, 'item-p1')).find(n => n.type === 'Box' && n.props['flexDirection'] === 'row')
-    expect(other?.props['backgroundColor']).toBeUndefined()
-    const turns = flow({ view: 'turns', stats: [undefined, undefined], turnCursor: 1 })
-    expect(byKey(turns, 'turn-card-1')?.props['backgroundColor']).toBe(C.rowHover)
-    expect(byKey(turns, 'turn-card-0')?.props['backgroundColor']).toBeUndefined()
-  })
-
-  test('one row of the turn list is bright: the cursor, else the open turn', () => {
-    const stats = [undefined, undefined]
-    const dim = (tree: unknown, i: number) => byKey(tree, `turn-${i}`)?.props['dimColor']
-    const withCursor = flow({ view: 'turns', stats, selected: 0, turnCursor: 1 })
-    expect([dim(withCursor, 0), dim(withCursor, 1)]).toEqual([true, false])
-    const without = flow({ view: 'turns', stats, selected: 0 })
-    expect([dim(without, 0), dim(without, 1)]).toEqual([false, true])
+    expect(row?.props['backgroundColor']).toBeUndefined()
+    const turns = flow({ view: 'turns', stats: [undefined, undefined], selected: 0, turnCursor: 1 })
+    expect(byKey(turns, 'turn-card-1')?.props['backgroundColor']).toBeUndefined()
+    expect([byKey(turns, 'turn-0')?.props['dimColor'], byKey(turns, 'turn-1')?.props['dimColor']]).toEqual([
+      false,
+      true,
+    ])
   })
 
   test("the turn's card on top: its prompt, its time on the right, model, tokens and context under it", () => {

@@ -599,11 +599,9 @@ async function ringTo($: EngineInterface, key: string | null): Promise<void> {
   await $.ui.focus({ requestId: PANE, key }).catch(ignore)
 }
 
-// Whether the pane was last drawn for the desktop app, the frames it drew
-// there by view, and the cursor step its arrows take (scrollPane).
+// Whether the pane was last drawn for the desktop app, which has no cursor:
+// its rows are cards the person clicks, and its window scrolls on its own.
 let isFlowShown = false
-const flowFrames: Partial<Record<'detail' | 'turns' | 'team', ScrollFrame>> = {}
-let flowStep: ((delta: number) => void) | undefined
 
 // The desktop app's window is the person's alone: the plugin never asks it to
 // scroll ($.ui.scroll). A press awaiting the app's scroll while the app
@@ -619,11 +617,8 @@ async function moveRowCursor(
   at: ScrollFrame,
 ): Promise<void> {
   const landed = await update($, cursor, cur => stepCursor(ids, cur, delta, at))
-  // On the desktop app the app's window follows the ring (ringTo), not ours,
-  // and the ring is not awaited: a press never waits on the app.
-  if (at.isFlow !== true) await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
-  if (at.isFlow !== true) await ringTo($, landed)
-  else await ringFlow($, landed)
+  await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
+  await ringTo($, landed)
 }
 
 // Moves the turn list's cursor one turn along the rows the list draws (newest
@@ -635,23 +630,8 @@ async function moveTurnCursor($: EngineInterface, delta: number, at: ScrollFrame
     const id = stepCursor(ids, cur === null ? null : turnRowId(cur), delta, at)
     return id === null ? null : Number(id.slice('turn:'.length))
   })
-  if (at.isFlow !== true)
-    await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
-  const key = landed === null ? null : `turn-${landed}`
-  // The ring on the cursor's row: the desktop app scrolls it into view and
-  // Enter presses it. Not awaited there: a press never waits on the app.
-  if (at.isFlow !== true) await ringTo($, key)
-  else await ringFlow($, key)
-}
-
-// The desktop app's ring on the cursor's row, unawaited: the app then
-// scrolls that row into view, and a one-row move it reports within
-// RING_SETTLE_MS is that scroll, not the person's arrow (scrollPane).
-let ringAt = -Infinity
-const RING_SETTLE_MS = 150
-async function ringFlow($: EngineInterface, key: string | null): Promise<void> {
-  ringAt = await $.clock.now()
-  ringTo($, key).catch(ignore)
+  await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
+  await ringTo($, landed === null ? null : `turn-${landed}`)
 }
 
 // Where each view's window stood at its last drawing; a reload starts over
@@ -669,23 +649,6 @@ async function scrollPane(
   move: EngineScroll,
   next: () => Promise<UiScrollResult>,
 ): Promise<UiScrollResult> {
-  // In the desktop app an arrow (a person's one-row move, no pointer) moves
-  // the cursor, which the app's window follows; the wheel scrolls.
-  // Only where the cursor moves (the detail and the turn list), over a tree
-  // that overflows (an arrow comes only with rows to scroll), and not as the
-  // app scrolls to a row the ring just moved to.
-  if (
-    isFlowShown &&
-    flowStep !== undefined &&
-    move.origin?.kind === 'person' &&
-    move.pointer === undefined &&
-    Math.abs(move.by) === 1 &&
-    move.contentRows > move.bodyRows
-  ) {
-    if ((await $.clock.now()) - ringAt < RING_SETTLE_MS) return next()
-    flowStep(move.by)
-    return {}
-  }
   // A tree taller than its window is the desktop app's flowing pane: the
   // engine moves its window, as the app asks.
   if (move.contentRows > move.bodyRows) return next()
@@ -1406,15 +1369,6 @@ export const register: Register = on => {
       return trace && 'items' in trace ? trace.items : undefined
     }
     const rowIds = cursorRows(turn?.items ?? [], open, childrenOf)
-    // The team view has no cursor: there the arrows scroll.
-    flowStep =
-      isFlow && view !== 'team'
-        ? delta => {
-            const at = flowFrames[view]
-            if (at !== undefined)
-              (view === 'turns' ? moveTurnCursor($, delta, at) : moveRowCursor($, rowIds, delta, at)).catch(ignore)
-          }
-        : undefined
     if (view === 'detail') drawnRowIds = new Set(rowIds)
     const cursorId = stored !== null && rowIds.includes(stored) ? stored : null
     const cursorText = cursorId === null ? undefined : rowText(turn?.items ?? [], cursorId, childrenOf, icons)
@@ -1497,14 +1451,18 @@ export const register: Register = on => {
         submitSearch: value => openMatch($, value, turns).catch(ignore),
         focusSearch: () => focusSearch($).catch(ignore),
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
-        cursorDown: at => (view === 'turns' ? moveTurnCursor($, 1, at) : moveRowCursor($, rowIds, 1, at)).catch(ignore),
-        cursorUp: at => (view === 'turns' ? moveTurnCursor($, -1, at) : moveRowCursor($, rowIds, -1, at)).catch(ignore),
+        // The desktop app has no cursor: its j and k move nothing.
+        cursorDown: at =>
+          isFlow
+            ? undefined
+            : (view === 'turns' ? moveTurnCursor($, 1, at) : moveRowCursor($, rowIds, 1, at)).catch(ignore),
+        cursorUp: at =>
+          isFlow
+            ? undefined
+            : (view === 'turns' ? moveTurnCursor($, -1, at) : moveRowCursor($, rowIds, -1, at)).catch(ignore),
         scroll: top => update($, paneScroll, all => ({ ...all, [view]: top })).catch(ignore),
         measure: at => {
           drawnFrames[view] = at
-        },
-        measureFlow: at => {
-          flowFrames[view] = at
         },
         cursorOpen: () =>
           view === 'turns'

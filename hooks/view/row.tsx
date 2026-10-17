@@ -179,7 +179,8 @@ export function renderLine(
   const hasBar = hasDuration && data.columns >= BAR_MIN_COLUMNS
   const timeRoom = hasDuration ? 1 + DURATION_CELLS + (hasBar ? 1 + BAR_CELLS : 0) : 0
   // Once a cursor exists every row keeps one cell for its marker.
-  const hasCursorColumn = data.cursor !== undefined && data.cursor !== null
+  // The desktop app has no cursor, so no column for its mark either.
+  const hasCursorColumn = !isFlow && data.cursor !== undefined && data.cursor !== null
   // The mark, with a space before it and one before a model after it.
   const badgeText = line.badge === undefined ? '' : ` ${line.badge}${modelText !== '' ? ' ' : ''}`
   // The fixed columns as drawn: chevron, status and icon, each with its
@@ -212,11 +213,7 @@ export function renderLine(
       // is in the app; a trace's rows stay inside their agent's card.
       {...(isFlow && place === undefined ? { ...CARD_FRAME, borderStyle: data.icons.border } : {})}
     >
-      <Box
-        flexDirection="row"
-        width={isFlow ? undefined : width}
-        {...(isFlow && data.cursor === id ? { backgroundColor: C.rowHover } : {})}
-      >
+      <Box flexDirection="row" width={isFlow ? undefined : width}>
         {hasCursorColumn &&
           (isFlow ? (
             <Box width={2} flexShrink={0}>
