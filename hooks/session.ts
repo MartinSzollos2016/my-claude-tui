@@ -43,6 +43,7 @@ export function turnStatFrom(
   const usage = input.usage
   return {
     prompt,
+    isKeyed: true,
     ...(index === undefined ? {} : { turnIndex: index }),
     durationMs: input.durationMs,
     endedAt: now,
@@ -67,18 +68,20 @@ export function toggleId(ids: readonly string[], id: string, max: number): strin
   return ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-max)
 }
 
+// Whether `stat` was recorded with `turn`'s prompt key. A stat kept from
+// before hand-backs were matched by their senders (no isKeyed) holds the old
+// fixed prompt, which any hand-back turn takes.
+const LEGACY_HAND_BACK = 'Message from agent'
+
+const hasPromptOf = (stat: TurnStat, turn: Turn): boolean =>
+  stat.prompt === promptKey(turn) ||
+  (stat.isKeyed !== true && turn.senders !== undefined && stat.prompt === LEGACY_HAND_BACK)
+
 // The stat recorded for this turn. An index match counts only while the
 // turn at that index still has the stat's prompt: $.session.messages() holds
 // the newest rows only, so indexes shift as old rows leave the window. Else
 // the newest stat with the turn's prompt that no other turn's index claims;
 // the latest turn of a fresh session may have none yet.
-// Whether `stat` was recorded with `turn`'s prompt. A stat kept from before
-// hand-backs were matched by their senders holds the old fixed prompt.
-const LEGACY_HAND_BACK = 'Message from agent'
-
-const hasPromptOf = (stat: TurnStat, turn: Turn): boolean =>
-  stat.prompt === promptKey(turn) || (turn.senders !== undefined && stat.prompt === LEGACY_HAND_BACK)
-
 export function statFor(
   stats: readonly TurnStat[],
   turn: Turn | undefined,

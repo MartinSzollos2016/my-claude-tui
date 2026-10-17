@@ -4,9 +4,13 @@ export type ToolTiming = { start: number; end?: number }
 
 // One finished main-loop turn. turnIndex is the turn's index in buildTurns,
 // noted when the turn was submitted or started; a stat recorded before it
-// existed matches by prompt.
+// existed matches by prompt. `prompt` is a match key, never shown: the
+// sanitized prompt, or for an agent's hand-back its sender ids (promptKey).
+// isKeyed marks a stat recorded that way; one kept from an older version
+// holds "Message from agent" for every hand-back.
 export type TurnStat = {
   prompt: string
+  isKeyed?: boolean
   turnIndex?: number
   durationMs: number
   endedAt: number
