@@ -109,3 +109,51 @@ describe('turn list cursor', () => {
     expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'turn-cursor-0')).toBeUndefined()
   })
 })
+
+describe('the desktop flow', () => {
+  const turns = buildTurns([
+    { role: 'user', text: 'Fix the bug', toolUses: [{ tool_use_id: 'a', tool: 'Bash', input: {}, text: 'x' }] },
+    { role: 'assistant', text: 'ok', toolUses: [] },
+    { role: 'user', text: 'a long question '.repeat(20), toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [] },
+  ])
+  const stats = [
+    { key: promptDigest('Fix the bug'), durationMs: 65_000, endedAt: 0, inputTokens: 1000, outputTokens: 500 },
+    { key: 'k', durationMs: 4_000, endedAt: 1, inputTokens: 10, outputTokens: 5 },
+  ]
+  const flow = (extra: Record<string, unknown> = {}) =>
+    renderPane(el, { ...base, turns, stats, view: 'turns', columns: 100, isFlow: true, ...extra }, act)
+  test('hover never changes a glyph width on the desktop', () => {
+    const trees = [
+      flow(),
+      renderPane(el, { ...base, isFlow: true, expanded: new Set(['b1', 'e1']) }, act),
+      renderPane(el, { ...base, isFlow: true, isFooterOpen: true }, act),
+    ]
+    for (const tree of trees)
+      for (const node of nodes(tree)) {
+        const hover = node.props['hover'] as Record<string, unknown> | undefined
+        expect([hover?.['bold'], hover?.['italic'], hover?.['inverse']]).toEqual([undefined, undefined, undefined])
+      }
+  })
+
+  test('every turn is a card: its prompt opens it, its time on the right, its tools and tokens under it', () => {
+    const tree = flow({ turnCursor: undefined })
+    expect(byKey(tree, 'turn-header')?.type).toBe('Text')
+    for (const index of [0, 1]) {
+      const card = byKey(tree, `turn-card-${index}`)
+      expect(typeof card?.props['borderStyle']).toBe('string')
+      expect(nodes(card)).toContain(byKey(tree, `turn-${index}`))
+    }
+    expect(text(byKey(tree, 'turn-card-0'))).toContain('1m 5s')
+    expect(text(byKey(tree, 'turn-card-0'))).toMatch(/0 tools .*1\.5k tokens/)
+    const prompt = byKey(tree, 'turn-1')
+    expect(prompt?.type).toBe('Button')
+    expect(String(prompt?.props['label'])).toContain('a long question')
+    expect(String(prompt?.props['label']).length).toBeLessThanOrEqual(100)
+    const calls = [] as string[]
+    const pick = { ...act, pickTurn: (i: number) => calls.push(`pick:${i}`) }
+    const fresh = byKey(renderPane(el, { ...base, turns, stats, view: 'turns', isFlow: true }, pick), 'turn-1')
+    ;(fresh?.props['onPress'] as () => void)()
+    expect(calls).toEqual(['pick:1'])
+  })
+})

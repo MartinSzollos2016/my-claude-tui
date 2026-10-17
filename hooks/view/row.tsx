@@ -12,10 +12,11 @@ import { renderFrame, renderLong } from './frames'
 import {
   BAR_CELLS,
   BAR_MIN_COLUMNS,
-  buttonHover,
+  buttonHoverOf,
   cutter,
   endWrap,
-  HOVER_TEXT,
+  FLOW_CARD,
+  hoverText,
   scopeOf,
   TRACE_INDENT,
   type El,
@@ -32,10 +33,13 @@ export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions, 
   const id = `t${turn.index}:thinking`
   const isOpen = data.expanded.has(id)
   // The label fills the row after its chevron and glyph columns (6 cells).
-  const label = padEndDisplay(
-    trunc(`${padEndDisplay('Thinking', nameWidth)}  ${expandTabs(thinking.text)}`, Math.max(8, data.columns - 8)),
-    Math.max(8, data.columns - 6),
-  )
+  const label =
+    data.isFlow === true
+      ? trunc(`Thinking  ${expandTabs(thinking.text)}`, Math.max(8, data.columns - 8))
+      : padEndDisplay(
+          trunc(`${padEndDisplay('Thinking', nameWidth)}  ${expandTabs(thinking.text)}`, Math.max(8, data.columns - 8)),
+          Math.max(8, data.columns - 6),
+        )
   data.layout.push({ kind: 'line', id })
   const frame =
     isOpen &&
@@ -61,7 +65,7 @@ export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions, 
           key={`chevron-${id}`}
           plain
           dimColor
-          hover={buttonHover(scopeOf('chev:', id))}
+          hover={buttonHoverOf(data, scopeOf('chev:', id))}
           label={`${isOpen ? icons.expanded : icons.collapsed} `}
           onPress={() => act.toggle(id)}
         />
@@ -71,7 +75,7 @@ export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions, 
           key={id}
           plain
           dimColor
-          hover={buttonHover(scopeOf('btn:', id))}
+          hover={buttonHoverOf(data, scopeOf('btn:', id))}
           label={label}
           onPress={() => act.toggle(id)}
         />
@@ -122,6 +126,9 @@ function rowsSoFar(data: Ctx): number {
   return counted.rows
 }
 
+// A card's frame, the row keeping its own column direction.
+const { flexDirection: _column, ...CARD_FRAME } = FLOW_CARD
+
 // The cells the time of a timed row takes, right-aligned.
 const DURATION_CELLS = 7
 
@@ -136,7 +143,8 @@ export function renderLine(
 ) {
   // The row's hover card goes to the pane's layer over the window, which
   // places it above the row or below it, where it fits.
-  if (line.card !== undefined && data.cards !== undefined) {
+  // The desktop app shows no previews.
+  if (line.card !== undefined && data.cards !== undefined && data.isFlow !== true) {
     const row = rowsSoFar(data)
     const top = data.scrollTop ?? 0
     const lines = row >= top && row < top + data.rows ? line.card() : undefined
@@ -150,6 +158,8 @@ export function renderLine(
     })
   }
   data.layout.push({ kind: 'line', id: line.id })
+  // The desktop app draws the row as a background task's card.
+  if (data.isFlow === true) return renderFlowLine(el, line, data, below)
   const { icons } = data
   const { Box, Button, Text } = el
   const { id, isOpen, canOpen, icon, mark, duration, model } = line
@@ -212,7 +222,7 @@ export function renderLine(
             plain
             dimColor
             label={`${line.chevron} `}
-            hover={buttonHover(scopeOf('chev:', id))}
+            hover={buttonHoverOf(data, scopeOf('chev:', id))}
             onPress={line.onPress}
           />
         ) : (
@@ -226,7 +236,14 @@ export function renderLine(
         </Text>
         <Box flexGrow={1} flexShrink={1}>
           {canOpen ? (
-            <Button key={id} plain dimColor label={label} hover={{ ...hover, ...HOVER_TEXT }} onPress={line.onPress} />
+            <Button
+              key={id}
+              plain
+              dimColor
+              label={label}
+              hover={{ ...hover, ...hoverText(data) }}
+              onPress={line.onPress}
+            />
           ) : (
             <Text color={C.muted} wrap={endWrap(data.icons)} hover={hover}>
               {label}
@@ -258,6 +275,66 @@ export function renderLine(
           </Box>
         )}
       </Box>
+      {under}
+    </Box>
+  )
+}
+
+// A row in the desktop app, as the app draws a background task: a card with
+// its title (the row's own button, which opens it), its state on the right
+// (Failed, Interrupted, running, or its time, and the chevron of a row that
+// opens), and under it the model and the failures of the calls below it. A
+// trace's rows are cards inside their agent's card. No previews.
+function renderFlowLine(el: El, line: Line, data: Ctx, below?: (shown: string) => RenderChildren) {
+  const { Box, Button, Text } = el
+  const { id, canOpen, isOpen, mark, duration, model } = line
+  const title = line.label(Math.max(20, data.columns))
+  const under = below?.(title)
+  const isRunning = mark?.color === C.ongoing && mark.glyph !== data.icons.done
+  const durationText =
+    duration === undefined ? '' : duration >= 1000 ? formatDuration(duration) : duration > 0 ? '<1s' : ''
+  const state =
+    mark?.color === C.error
+      ? { text: 'Failed', color: C.error }
+      : mark?.color === C.interrupted
+        ? { text: 'Interrupted', color: C.interrupted }
+        : isRunning
+          ? { text: 'running', color: C.brand }
+          : { text: durationText, color: C.muted }
+  const failed = line.badge === undefined ? '' : line.badge.replace(data.icons.error, '')
+  const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
+  return (
+    <Box
+      key={`item-${id}`}
+      flexDirection="column"
+      // As the app's background tasks: a plain row, lit on hover; an open one
+      // is a framed group holding what it shows and its steps.
+      {...(isOpen
+        ? { ...CARD_FRAME, borderStyle: data.icons.border }
+        : { paddingX: 1, hover: { backgroundColor: C.rowHover } })}
+    >
+      <Box flexDirection="row" columnGap={1}>
+        <Box flexGrow={1} flexShrink={1} overflow="hidden">
+          {canOpen ? (
+            <Button key={id} plain label={title} hover={{ ...hover, ...hoverText(data) }} onPress={line.onPress} />
+          ) : (
+            <Text color={C.text} wrap="truncate-end" hover={hover}>
+              {title}
+            </Text>
+          )}
+        </Box>
+        <Text key={`status-${id}`} color={state.color}>
+          {[state.text, canOpen ? (isOpen ? data.icons.expanded : data.icons.collapsed) : '']
+            .filter(part => part !== '')
+            .join(' ')}
+        </Text>
+      </Box>
+      {(model !== undefined || failed !== '') && (
+        <Box key={`meta-${id}`} flexDirection="row" columnGap={1}>
+          {model !== undefined && <Text color={C.muted}>{shortModel(model)}</Text>}
+          {failed !== '' && <Text color={C.error}>{`${failed} failed`}</Text>}
+        </Box>
+      )}
       {under}
     </Box>
   )

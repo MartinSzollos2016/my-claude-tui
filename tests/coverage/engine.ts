@@ -58,7 +58,7 @@ export const BAR_EVENT = {
   viewport: { columns: 160, rows: 48, isFullscreen: true },
 }
 
-function nodes(tree: unknown, found: Node[] = []): Node[] {
+export function nodes(tree: unknown, found: Node[] = []): Node[] {
   if (Array.isArray(tree)) for (const child of tree) nodes(child, found)
   else if (tree !== null && typeof tree === 'object' && 'type' in tree) {
     found.push(tree as Node)
@@ -98,6 +98,11 @@ type World = {
   api: unknown[]
   // Ring keys $.ui.focus refuses, as for an element drawn as Text.
   focusDenied: string[]
+  scrolls: unknown[]
+  // A $.ui.scroll that never answers, as the desktop app's may not while a press is in flight.
+  isScrollStuck: boolean
+  // A $.ui.focus or $.ui.open that never answers.
+  isUiStuck: boolean
   agents: AgentInfo[]
   surfaces: RenderSurface[]
   config: ConfigRow[]
@@ -153,6 +158,9 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     files: {},
     isGitDir: true,
     focusDenied: [],
+    scrolls: [],
+    isScrollStuck: false,
+    isUiStuck: false,
     hasRepo: true,
     now: 1_700_000_000_000,
     copyResult: { isCopied: true },
@@ -245,7 +253,13 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       status: (message: string | undefined) => {
         world.statuses.push(message)
       },
+      scroll: async (args: unknown) => {
+        world.scrolls.push(args)
+        if (world.isScrollStuck) await new Promise(() => {})
+        return {}
+      },
       focus: async (args: { key: string }) => {
+        if (world.isUiStuck) await new Promise(() => {})
         if (world.focusDenied.includes(args.key)) return { deny: 'not drawn' }
         world.focused.push(args.key)
         return {}

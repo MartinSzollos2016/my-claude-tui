@@ -25,7 +25,12 @@ export type El = Pick<Elements['terminal'], 'Button' | 'Code'> & {
 }
 
 // A hovered button reads at full contrast: its idle label is the theme grey.
-export const HOVER_TEXT = { color: C.text, bold: true } as const
+const HOVER_TEXT = { color: C.text, bold: true } as const
+
+// The hover text style a surface draws: the terminal's bold, a colour alone
+// on the desktop app, where bold text is wider and would move the row.
+const FLOW_HOVER_TEXT = { color: C.text } as const
+export const hoverText = (data: { isFlow?: boolean }) => (data.isFlow === true ? FLOW_HOVER_TEXT : HOVER_TEXT)
 
 // A hover scope the engine accepts: 1 to 64 characters. Ids can be long (a
 // subagent's tool id carries its agent id), so an over-long tail is replaced
@@ -61,12 +66,22 @@ export const BAR_CELLS = 8
 
 export const BAR_MIN_COLUMNS = 70
 
+// A card of the desktop app's pane, as the app's own panels draw theirs: a
+// dim frame (the icon set's border), a cell of padding, a row of room under it.
+export const FLOW_CARD = {
+  flexDirection: 'column',
+  borderColor: C.muted,
+  borderDimColor: true,
+  paddingX: 1,
+  marginBottom: 1,
+} as const
+
 export const HEADER_METER_COLUMNS = 80
 
 // A trace's rows sit this far in from its subagent's row.
 export const TRACE_INDENT = 4
 
-export const buttonHover = (scope: string) => ({ scope, ...HOVER_TEXT })
+export const buttonHoverOf = (data: { isFlow?: boolean }, scope: string) => ({ scope, ...hoverText(data) })
 
 // The state of a tool call as a glyph, so it reads without color too.
 export function statusMark(status: ItemStatus, frame: number, icons: Icons): { glyph: string; color: ThemeKey } {

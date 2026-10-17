@@ -163,6 +163,8 @@ export type ScrollFrame = {
   windowRows: number
   total: number
   starts: Readonly<Record<string, number>>
+  // The desktop app's window (the engine's), not the plugin's own scroll.
+  isFlow?: true
 }
 
 // The scroll that keeps row `id` in view; unchanged for a row not drawn.
@@ -182,6 +184,10 @@ export function stepCursor(
   delta: number,
   frame: ScrollFrame,
 ): string | null {
+  // The desktop app's window counts its cards and real rows, not these
+  // estimates: the cursor steps on from where it stands, and the app brings
+  // the focused row into view.
+  if (frame.isFlow === true) return moveCursor(ids, current !== null && ids.includes(current) ? current : null, delta)
   const margin = frame.windowRows > SCROLL_SLACK ? 1 : 0
   const first = frame.scrollTop + margin
   const last = frame.scrollTop + frame.windowRows - 1 - margin
@@ -200,7 +206,13 @@ export function stepCursor(
 
 // A move the engine asks of the pane's window: `by` rows, out of a body of
 // `bodyRows` over a tree of `contentRows`.
-export type EngineScroll = { by: number; bodyRows: number; contentRows: number }
+export type EngineScroll = {
+  by: number
+  bodyRows: number
+  contentRows: number
+  origin?: { kind: string }
+  pointer?: unknown
+}
 
 // Where the engine's move takes the own scroll: a page key arrives as the
 // whole body (header and footer included), so it moves one page of the own

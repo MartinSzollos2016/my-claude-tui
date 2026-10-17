@@ -19,7 +19,7 @@ import {
   type Ctx,
   type PaneActions,
 } from './context'
-import { buttonHover, cutter, endWrap, isUnicodeCut, middleWrap, scopeOf, type El } from './kit'
+import { buttonHoverOf, cutter, endWrap, isUnicodeCut, middleWrap, scopeOf, type El } from './kit'
 
 // What went in and what came out, each in a frame colored by its kind.
 // `inset`: the cells left of the sections' box (a trace's indent).
@@ -122,6 +122,30 @@ export function renderFrame(
     ...(body.format === undefined ? {} : { format: body.format }),
     ...(isUnicodeCut(data.icons) || metaText === '' ? {} : { headRows: metaRows(title, metaText, inner) }),
   })
+  const copy = (
+    <Button
+      key={`copy:${blockId}`}
+      plain
+      dimColor
+      hover={buttonHoverOf(data, scopeOf('btn:copy:', blockId))}
+      label="copy"
+      onPress={press => act.copy(copyText, press.surface)}
+    />
+  )
+  // In the desktop app, as a background task shows its command: a muted
+  // title over a code block, no frame.
+  if (data.isFlow === true)
+    return (
+      <Box key={`frame-${blockId}`} flexDirection="column" marginTop={1}>
+        <Box flexDirection="row" columnGap={1}>
+          <Box flexGrow={1} flexShrink={1} overflow="hidden">
+            <Text color={C.muted} wrap="truncate-end">{`${title}${metaText}`}</Text>
+          </Box>
+          {copy}
+        </Box>
+        {body.node}
+      </Box>
+    )
   return (
     <Box
       key={`frame-${blockId}`}
@@ -148,7 +172,7 @@ export function renderFrame(
           key={`copy:${blockId}`}
           plain
           dimColor
-          hover={buttonHover(scopeOf('btn:copy:', blockId))}
+          hover={buttonHoverOf(data, scopeOf('btn:copy:', blockId))}
           label="copy"
           onPress={press => act.copy(copyText, press.surface)}
         />
@@ -251,6 +275,8 @@ export function renderLong(el: El, id: string, raw: string, spec: LongSpec, data
             {...(spec.startLine === undefined ? {} : { startLine: spec.startLine + (starts[i] ?? 0) })}
             source={piece}
           />
+        ) : data.isFlow === true ? (
+          <Code source={piece} />
         ) : (
           <Text color={spec.isError ? C.error : C.muted}>{piece}</Text>
         ),
@@ -261,7 +287,7 @@ export function renderLong(el: El, id: string, raw: string, spec: LongSpec, data
           key={`full:${id}`}
           plain
           dimColor
-          hover={buttonHover(scopeOf('btn:full:', id))}
+          hover={buttonHoverOf(data, scopeOf('btn:full:', id))}
           label={fullLabel}
           onPress={() => act.toggleFull(id)}
         />
@@ -271,7 +297,7 @@ export function renderLong(el: El, id: string, raw: string, spec: LongSpec, data
           key={`full:${id}`}
           plain
           dimColor
-          hover={buttonHover(scopeOf('btn:full:', id))}
+          hover={buttonHoverOf(data, scopeOf('btn:full:', id))}
           label="show less"
           onPress={() => act.toggleFull(id)}
         />

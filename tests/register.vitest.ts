@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { ICON_SETS } from '../hooks/icons'
 import { promptDigest } from '../hooks/model/sanitize'
-import { BAR_EVENT, byKey, fakeEngine, hooksOf, PANE_EVENT, settle, text } from './coverage/engine'
+import { BAR_EVENT, byKey, fakeEngine, hooksOf, nodes, PANE_EVENT, settle, text } from './coverage/engine'
 
 // register.tsx keeps module-level state (pending turns, caches, the ticker):
 // each test gets a fresh copy of the module so none of it leaks between tests.
@@ -1500,6 +1500,42 @@ describe('keyboard cursor', () => {
     expect(world.focusRequests).toBe(before + 1)
   })
 
+  test('in the desktop app the ring follows every move, so a view change keeps the keys in the pane', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    const focus = async (element: string) => {
+      const nexts: unknown[] = []
+      await run(
+        'ui.focus',
+        $,
+        { component: 'Pane', requestId: 'tail', plugin: 'tail-view', element, origin: { kind: 'person' } },
+        async e => (nexts.push(e), {}),
+      )
+      return nexts.length
+    }
+    await run('ui.render', $, { ...PANE_EVENT, surface: 'desktop' })
+    for (const element of ['nav-help', 'turn-0', 'nav-detail', 'turn-search'])
+      expect(await focus(element), element).toBe(1)
+  })
+
+  test("a desktop drawing neither takes the keys back nor hides the terminal's Esc", async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    const focused = (isFocused: boolean, surface = 'terminal') => ({
+      ...PANE_EVENT,
+      surface,
+      props: { ...PANE_EVENT.props, isFocused },
+    })
+    await run('ui.render', $, focused(true))
+    await press($, 'nav-search')
+    await run('ui.render', $, focused(true))
+    const before = world.focusRequests
+    await run('ui.render', $, focused(false, 'desktop'))
+    await settle()
+    expect(world.focusRequests).toBe(before)
+    await run('ui.render', $, focused(false))
+    await settle()
+    expect(world.focusRequests).toBe(before + 1)
+  })
+
   test('a Tab or a click that moves the ring onto a row moves the cursor there', async () => {
     const { $ } = fakeEngine({ messages: main, agentMessages: { 'agent-1': child } })
     await draw($)
@@ -1703,6 +1739,165 @@ describe('own scroll', () => {
     await pressSmall($, 'nav-turns')
     await wheel(5)
     expect(await topOf($)).toBe(0)
+  })
+
+  const engineScroll = ($: Parameters<typeof run>[1], move: Record<string, unknown>, nexts: unknown[]) =>
+    run(
+      'ui.scroll',
+      $,
+      {
+        component: 'Pane',
+        requestId: 'tail',
+        offset: 0,
+        by: 3,
+        bodyRows: 10,
+        contentRows: 10,
+        origin: { kind: 'person' },
+        ...move,
+      },
+      async e => (nexts.push(e), {}),
+    )
+
+  test("a window over a taller tree is the engine's to move: the desktop app's pane", async () => {
+    const { $ } = fakeEngine({ messages: long })
+    await drawSmall($)
+    const nexts: unknown[] = []
+    await engineScroll($, { contentRows: 300, bodyRows: 40 }, nexts)
+    expect(nexts).toHaveLength(1)
+    expect(await topOf($)).toBe(0)
+  })
+
+  test("a plugin's move never moves the terminal's own window", async () => {
+    const { $ } = fakeEngine({ messages: long })
+    await drawSmall($)
+    const nexts: unknown[] = []
+    await engineScroll($, { by: 7, origin: { kind: 'plugin', name: 'tail-view' } }, nexts)
+    expect(nexts).toEqual([])
+    expect(await topOf($)).toBe(0)
+  })
+
+  // Presses j on the desktop's drawing: the desktop app has no cursor, so
+  // nothing moves, the focus ring included.
+  async function desktopDown($: Parameters<typeof run>[1], world: { focused: string[] }, offset: number) {
+    const tree = await run('ui.render', $, {
+      ...SMALL,
+      surface: 'desktop',
+      props: { ...SMALL.props, scroll: { offset, bodyRows: 10 } },
+    })
+    ;(byKey(tree, 'nav-down')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
+    await settle()
+    expect(world.focused).toEqual([])
+  }
+
+  test('the desktop app has no cursor: j moves nothing, an arrow scrolls the app', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    await desktopDown($, world, 12)
+    const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    expect(nodes(drawn).some(n => /^cursor-/.test(String(n.props['key'])))).toBe(false)
+    const nexts: unknown[] = []
+    await run(
+      'ui.scroll',
+      $,
+      {
+        component: 'Pane',
+        requestId: 'tail',
+        offset: 0,
+        by: 1,
+        bodyRows: 10,
+        contentRows: 300,
+        origin: { kind: 'person' },
+      },
+      async e => (nexts.push(e), {}),
+    )
+    expect(nexts).toHaveLength(1)
+  })
+
+  test("a ring the plugin moved never moves the cursor: only the person's ring does", async () => {
+    const { $ } = fakeEngine({ messages: long })
+    await drawSmall($)
+    const focus = (element: string, kind: string) =>
+      run(
+        'ui.focus',
+        $,
+        { component: 'Pane', requestId: 'tail', plugin: 'tail-view', element, origin: { kind } },
+        async () => ({}),
+      )
+    await focus('t0:o0', 'plugin')
+    const drawn = await drawSmall($)
+    expect(nodes(drawn).some(n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.nerd.cursor)).toBe(
+      false,
+    )
+    await focus('t0:o0', 'person')
+    const after = await drawSmall($)
+    expect(nodes(after).some(n => n.props['key'] === 'cursor-t0:o0' && text(n) === ICON_SETS.nerd.cursor)).toBe(true)
+  })
+
+  test("the cursor on the desktop leaves the terminal's own scroll alone", async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    await pressSmall($, 'nav-pagedown')
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-8)
+    await desktopDown($, world, 12)
+    expect(await topOf($)).toBe(-8)
+  })
+
+  test('a session the terminal draws too never reopens the pane from a desktop view change', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    world.surfaces = ['terminal', 'desktop']
+    const tree = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    const opens = world.openArgs.length
+    ;(byKey(tree, 'nav-turns')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
+    await settle()
+    expect(world.openArgs).toHaveLength(opens)
+  })
+
+  test('a view change on the desktop gives the pane the keys again, as a click there takes them away', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    world.surfaces = ['desktop']
+    await pressSmall($, 'nav-turns')
+    const terminalOpens = world.openArgs.length
+    await pressSmall($, 'nav-detail')
+    expect(world.openArgs).toHaveLength(terminalOpens)
+    const tree = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    ;(byKey(tree, 'nav-turns')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
+    await settle()
+    expect(world.openArgs.at(-1)).toMatchObject({ focus: true })
+  })
+
+  test('a press on the desktop never waits on the app to scroll: views, turns and the cursor stay live', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    world.isScrollStuck = true
+    world.isUiStuck = true
+    const DESKTOP = { ...SMALL, surface: 'desktop' }
+    const pressDesktop = async (key: string) => {
+      const button = byKey(await run('ui.render', $, DESKTOP), key)
+      if (!button) throw new Error(`no button ${key}`)
+      const pressed = (button.props['onPress'] as (e: unknown) => unknown)({ surface: 'desktop' })
+      const settled = await Promise.race([
+        Promise.resolve(pressed).then(() => 'done'),
+        new Promise(resolve =>
+          (globalThis as unknown as { setTimeout: (run: () => void, ms: number) => void }).setTimeout(
+            () => resolve('stuck'),
+            500,
+          ),
+        ),
+      ])
+      expect(settled, key).toBe('done')
+      await settle()
+    }
+    for (const key of [
+      'nav-turns',
+      'turn-0',
+      'nav-turns',
+      'nav-down',
+      'nav-detail',
+      'nav-down',
+      'nav-search',
+      'nav-team',
+      'nav-detail',
+    ])
+      await pressDesktop(key)
+    expect(world.scrolls).toEqual([])
   })
 
   test('after paging down, the first j or k lands inside the window and the view stays', async () => {
@@ -2831,5 +3026,72 @@ describe('turn stats kept between sessions', () => {
     expect(storedStats(world, 's1')).toEqual([promptDigest('go')])
     await press($, 'nav-turns')
     expect(text(byKey(await draw($), 'turn-0'))).toContain('3.0s')
+  })
+})
+
+describe('the desktop surface', () => {
+  const PUA = /[\u{E000}-\u{F8FF}\u{F0000}-\u{10FFFF}]/u
+  const desktop = (bodyColumns: number, rows: number) => ({
+    ...PANE_EVENT,
+    surface: 'desktop',
+    props: { ...PANE_EVENT.props, bodyColumns },
+    viewport: { columns: bodyColumns + 4, rows, isFullscreen: true },
+  })
+
+  test("the desktop pane does not follow the ticker: a redraw every half second dropped the app's hover", async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    world.trips.length = 0
+    await run('ui.render', $, desktop(100, 48))
+    expect(world.trips).not.toContain('state.get:tick')
+    world.trips.length = 0
+    await draw($)
+    expect(world.trips).toContain('state.get:tick')
+  })
+
+  test('a desktop render draws no private-use glyph, the bar and transcript rows neither', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    world.store.set('isCompact', true)
+    expect(JSON.stringify(await run('ui.render', $, desktop(100, 48))).match(PUA)?.[0]).toBeUndefined()
+    expect(
+      JSON.stringify(await run('ui.render', $, { ...BAR_EVENT, surface: 'desktop' })).match(PUA)?.[0],
+    ).toBeUndefined()
+    const use = {
+      component: 'ToolUse',
+      surface: 'desktop',
+      props: { tool_use_id: 'b9', tool: 'Bash', input: { command: 'ls' }, isRunning: true, isErrored: false },
+    }
+    expect(text(await run('ui.render', $, use, async () => 'engine')).match(PUA)?.[0]).toBeUndefined()
+  })
+
+  test('the ascii set stays ascii on the desktop, and /tail-icons answers what is stored', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    await draw($)
+    await run('ui.render', $, desktop(100, 48))
+    expect(await say($, 'tail-icons')).toContain('Icon set: nerd.')
+    await say($, 'tail-icons', 'ascii')
+    const tree = await run('ui.render', $, desktop(100, 48))
+    expect(text(byKey(tree, 'flow-turn-card')).startsWith(`${ICON_SETS.ascii.prompt} `)).toBe(true)
+  })
+
+  test('/tail-help draws its legend in the icons of a session drawn only on the desktop', async () => {
+    const { $, world } = fakeEngine()
+    world.surfaces = ['desktop']
+    expect(await say($, 'tail-help')).toContain(`${ICON_SETS.unicode.thinking} thinking blocks`)
+    world.surfaces = ['terminal', 'desktop']
+    expect(await say($, 'tail-help')).toContain(`${ICON_SETS.nerd.thinking} thinking blocks`)
+  })
+
+  test("a desktop render never overwrites the terminal's sizes", async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    await run('ui.render', $, { ...PANE_EVENT, props: { ...PANE_EVENT.props, bodyColumns: 80 } })
+    await settle()
+    const opened = world.openArgs.length
+    await run('ui.render', $, desktop(120, 90))
+    await run('ui.render', $, { ...BAR_EVENT, surface: 'desktop', viewport: { columns: 124, rows: 90 } })
+    await settle()
+    expect(world.openArgs).toHaveLength(opened)
+    expect(await say($, 'tail-width')).toContain('drawn 80')
+    await run('command.run', $, { ...command('tail'), presentation: { isFullscreen: true, columns: 90 } })
+    expect(world.openArgs.at(-1)).toMatchObject({ rows: 24 })
   })
 })

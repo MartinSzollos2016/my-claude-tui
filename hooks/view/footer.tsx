@@ -6,7 +6,7 @@ import { footerLayout, footerPads, type FooterLayout } from '../model/footer'
 import { clampScroll, pageScroll, type ScrollFrame } from '../model/scroll'
 import { displayWidth } from '../model/width'
 import type { Ctx, PaneActions } from './context'
-import { buttonHover, cutter, type El } from './kit'
+import { buttonHoverOf, cutter, FLOW_CARD, type El } from './kit'
 
 // One key of the footer: always a button with its hotkey; `isOn` says whether
 // a press acts. Without labels only the key and glyph remain.
@@ -44,7 +44,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
       KEY_GAP,
       width,
     )
-    return group.map((k, i) => renderFooterKey(el, k, footerLabel(k, layout.labels), pads[i] ?? 0))
+    return group.map((k, i) => renderFooterKey(el, data, k, footerLabel(k, layout.labels), pads[i] ?? 0))
   }
   const inner = data.columns - STATUS_INSET
   const pageWidth = displayWidth(page.map(textOf).join('  '))
@@ -101,7 +101,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
           {statusBox(inner - keysWidth)}
         </Box>
         <Box key="footer-hidden" display="none">
-          {bare.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+          {bare.hidden.map(k => renderFooterKey(el, data, k, footerLabel(k, layout.labels), 0))}
         </Box>
       </Box>
     )
@@ -131,7 +131,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
         )}
         {!collapsed.isStatusInRow && statusBox(inner)}
         <Box key="footer-hidden" display="none">
-          {collapsed.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+          {collapsed.hidden.map(k => renderFooterKey(el, data, k, footerLabel(k, layout.labels), 0))}
         </Box>
       </Box>
     )
@@ -154,9 +154,47 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
       )}
       {plan.hidden.length > 0 && (
         <Box key="footer-hidden" display="none">
-          {plan.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+          {plan.hidden.map(k => renderFooterKey(el, data, k, footerLabel(k, layout.labels), 0))}
         </Box>
       )}
+    </Box>
+  )
+}
+
+// The keys the desktop app's top row shows.
+const FLOW_KEYS = new Set(
+  ['prev', 'next', 'latest', 'detail', 'turns', 'team', 'search', 'expand', 'collapse'].map(name => `nav-${name}`),
+)
+
+// The desktop app's footer, drawn on top under the header: a frame as wide
+// as the pane (its border is the divider), the keys wrapping in it and the
+// status under them. Collapsed it shows the keys that act now, by priority;
+// open, every key of the view. The page keys are off (the app scrolls), so
+// they stay hidden with every other key, which keeps its hotkey.
+export function renderFlowFooter(el: El, data: Ctx, act: PaneActions, frame: ScrollFrame) {
+  const { Box, Text } = el
+  const groups = footerGroups(data, act, frame)
+  const all = allKeys(groups)
+  // The views and the moves between turns, as the app's buttons; the cursor,
+  // its open and copy, the pages and the key map keep their hotkeys hidden:
+  // the app's own scrolling and clicks do their work.
+  const shown = all.filter(k => k.isShown && FLOW_KEYS.has(k.key))
+  const status = footerStatus(data, Infinity, frame)
+  return (
+    <Box key="footer" {...FLOW_CARD} borderStyle={data.icons.border} backgroundColor={C.paneBackground}>
+      <Box key="footer-keys" flexDirection="row" flexWrap="wrap" columnGap={KEY_GAP}>
+        {shown.map(k => renderFooterKey(el, data, k, footerLabel(k, true), 0))}
+      </Box>
+      <Box key="footer-status" flexDirection="row">
+        {status.parts.map(part => (
+          <Text key={part.key} color={part.color}>
+            {part.text}
+          </Text>
+        ))}
+      </Box>
+      <Box key="footer-hidden" display="none">
+        {all.filter(k => !shown.includes(k)).map(k => renderFooterKey(el, data, k, footerLabel(k, true), 0))}
+      </Box>
     </Box>
   )
 }
@@ -344,8 +382,11 @@ function statusVariants(data: Ctx, place: string): StatusSegment[][] {
   const live = total > 0 && data.isLatest ? `${pos} live` : pos
   const focused = data.isFocused === true
   const noteColor = focused ? C.accent : C.muted
-  const long = data.isFocused === undefined ? '' : focused ? 'keys on' : `click or ${focusChord(data)}`
-  const short = data.isFocused === undefined ? '' : focused ? 'keys on' : 'click for keys'
+  // The desktop app says nothing of the keys: the note would change the
+  // footer's size on the first click and move the rows under the pointer.
+  const isNoted = data.isFocused !== undefined && data.isFlow !== true
+  const long = !isNoted ? '' : focused ? 'keys on' : `click or ${focusChord(data)}`
+  const short = !isNoted ? '' : focused ? 'keys on' : 'click for keys'
   const seg = (key: string, text: string, color: ThemeKey = C.muted): StatusSegment => ({ key, text, color })
   const variant = (position: string, where: string, note: string) =>
     [seg('turn-position', position), seg('scroll-place', where), seg('focus-note', note, noteColor)].filter(
@@ -410,14 +451,14 @@ const KEY_GAP = 2
 // from the pane. Out of reach, the press is swallowed and changes nothing.
 const swallow = (): undefined => undefined
 
-function renderFooterKey(el: El, k: FooterKey, label: string, pad: number) {
+function renderFooterKey(el: El, data: Ctx, k: FooterKey, label: string, pad: number) {
   const { Button } = el
   return (
     <Button
       key={k.key}
       plain
       dimColor
-      hover={buttonHover(`btn:${k.key}`)}
+      hover={buttonHoverOf(data, `btn:${k.key}`)}
       hotkey={k.hotkey}
       label={`${label}${' '.repeat(pad)}`}
       onPress={k.isOn ? k.onPress : swallow}

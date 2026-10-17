@@ -43,7 +43,7 @@ import {
   turnStatFrom,
   type Memo,
 } from './session'
-import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
+import { ICON_SET_NAMES, ICON_SETS, iconsFor, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
 import {
   callInput,
@@ -515,8 +515,13 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
       }
     case 'stats':
       return { text: await setStats($, parsed.arg) }
-    case 'help':
-      return { text: helpText(await currentIcons($)) }
+    case 'help': {
+      // Its legend in the glyphs the pane draws: a session no terminal draws
+      // (the desktop app alone) reads it in the desktop's set.
+      const surfaces = await $.session.surfaces().catch((): RenderSurface[] => [])
+      const isFlowOnly = surfaces.length > 0 && !surfaces.includes('terminal')
+      return { text: helpText(await currentIcons($, isFlowOnly)) }
+    }
     case 'unknown':
       return { text: unknownText(parsed.arg) }
     case 'turns': {
@@ -594,6 +599,14 @@ async function ringTo($: EngineInterface, key: string | null): Promise<void> {
   await $.ui.focus({ requestId: PANE, key }).catch(ignore)
 }
 
+// Whether the pane was last drawn for the desktop app, which has no cursor:
+// its rows are cards the person clicks, and its window scrolls on its own.
+let isFlowShown = false
+
+// The desktop app's window is the person's alone: the plugin never asks it to
+// scroll ($.ui.scroll). A press awaiting the app's scroll while the app
+// awaits the press froze the pane (no hook budget runs during a $ call).
+
 // Moves the keyboard cursor one row along `ids`, and the focus ring with it.
 // The detail view's content scrolls so the row the cursor lands on stays in
 // the window (`at`: the window as drawn).
@@ -631,7 +644,17 @@ const drawnFrames: Partial<Record<'detail' | 'turns' | 'team', ScrollFrame>> = {
 // instead (engineScroll: a wheel step, a page, the top or the end), clamped
 // like f and b, and the engine's window stays (no `next`); the state change
 // draws the pane again.
-async function scrollPane($: EngineInterface, move: EngineScroll): Promise<UiScrollResult> {
+async function scrollPane(
+  $: EngineInterface,
+  move: EngineScroll,
+  next: () => Promise<UiScrollResult>,
+): Promise<UiScrollResult> {
+  // A tree taller than its window is the desktop app's flowing pane: the
+  // engine moves its window, as the app asks.
+  if (move.contentRows > move.bodyRows) return next()
+  // The plugin's own asks (a view's top, a cursor's row) are for that pane;
+  // they never move the terminal's own scroll.
+  if (move.origin?.kind === 'plugin') return {}
   const view = await read($, paneView)
   const frame = drawnFrames[view]
   await update($, paneScroll, all => ({
@@ -670,6 +693,17 @@ async function showView($: EngineInterface, view: 'detail' | 'turns' | 'team'): 
   await seedSearch($)
   await update($, paneView, () => view)
   await scrollToTop($)
+  // A click in the desktop app takes the keys with the button it pressed,
+  // which the new view no longer draws: the pane takes them back, unawaited.
+  if (isFlowShown) reopenFlowPane($).catch(ignore)
+}
+
+// Gives the pane the keys again in the desktop app, only while no terminal
+// draws the session: opened without its columns there, the terminal's dock
+// would fall back to the engine's width.
+async function reopenFlowPane($: EngineInterface): Promise<void> {
+  const surfaces = await $.session.surfaces().catch((): RenderSurface[] => [])
+  if (surfaces.length > 0 && !surfaces.includes('terminal')) await openPane($, true)
 }
 
 // Shows one turn in the detail view; the latest one follows new turns.
@@ -683,9 +717,19 @@ async function pickTurn($: EngineInterface, index: number, latest: number) {
 async function focusSearch($: EngineInterface): Promise<void> {
   await showView($, 'turns')
   const { gen } = await read($, searchField)
-  await $.ui.focus({ requestId: PANE, key: searchFieldKey(gen) })
-  // The plugin's own $.ui.focus raises no ui.focus hook here: mark it.
-  isRingOnSearch = true
+  // The plugin's own $.ui.focus raises no ui.focus hook here: mark it. The
+  // desktop app's is not awaited: a press never waits on the app.
+  if (!isFlowShown) {
+    await $.ui.focus({ requestId: PANE, key: searchFieldKey(gen) })
+    isRingOnSearch = true
+    return
+  }
+  $.ui
+    .focus({ requestId: PANE, key: searchFieldKey(gen) })
+    .then(result => {
+      if (result.deny === undefined) isRingOnSearch = true
+    })
+    .catch(ignore)
 }
 
 // A search field drawn anew (another view, the pane opened) starts from the
@@ -732,8 +776,9 @@ async function iconSetName($: EngineInterface): Promise<IconSetName> {
   return isIconSetName(stored) ? stored : DEFAULT_ICONS
 }
 
-async function currentIcons($: EngineInterface): Promise<Icons> {
-  return ICON_SETS[await iconSetName($)]
+// The icons a surface draws; the terminal's (the grid) unless `isFlow`.
+async function currentIcons($: EngineInterface, isFlow = false): Promise<Icons> {
+  return iconsFor(await iconSetName($), isFlow)
 }
 
 async function isCompact($: EngineInterface): Promise<boolean> {
@@ -1218,13 +1263,23 @@ export const register: Register = on => {
     // After /clear or a resume in this process: the new session's stored stats.
     if (!statsSession.isKnown) statsSessionId($).catch(ignore)
     const viewport = e.viewport
+    // The desktop app (any surface but the terminal) gets the flowing pane;
+    // its sizes are its own and never stand in for the terminal's.
+    const isFlow = e.surface !== 'terminal'
+    isFlowShown = isFlow
     const terminal =
-      viewport === undefined ? undefined : terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)
-    keepKeysAfterSearchEsc($, e.props.isFocused, terminal)
-    // Only a docked pane's width answers to /tail-width; inline it is the screen's.
-    drawnColumns = e.props.placement === 'dock' ? e.props.bodyColumns : undefined
-    drawnPlacement = e.props.placement
-    noteViewport(e.viewport)
+      isFlow || viewport === undefined
+        ? undefined
+        : terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)
+    if (!isFlow) {
+      // The engine's Esc in a field is the terminal's: the desktop app keeps
+      // its own focus, and its drawings never stand for the terminal's.
+      keepKeysAfterSearchEsc($, e.props.isFocused, terminal)
+      // Only a docked pane's width answers to /tail-width; inline it is the screen's.
+      drawnColumns = e.props.placement === 'dock' ? e.props.bodyColumns : undefined
+      drawnPlacement = e.props.placement
+      noteViewport(e.viewport)
+    }
     if (terminal !== undefined) autoSize($, terminal).catch(ignore)
     const el = $.ui.resolve(e) as unknown as El
 
@@ -1253,7 +1308,9 @@ export const register: Register = on => {
       field,
       isFooterOpen,
     ] = await Promise.all([
-      read($, tick),
+      // The desktop app does not follow the ticker: a redraw every half
+      // second dropped its hover; it redraws on the session's own changes.
+      isFlow ? Promise.resolve(0) : read($, tick),
       currentTurns($, true),
       read($, selectedTurn),
       read($, expanded),
@@ -1263,7 +1320,7 @@ export const register: Register = on => {
       read($, paneView),
       read($, paneScroll),
       read($, searchQuery),
-      currentIcons($),
+      currentIcons($, isFlow),
       read($, cursor),
       read($, timings),
       $.session.model(),
@@ -1335,8 +1392,10 @@ export const register: Register = on => {
         thinking,
         isWorking: working,
         icons,
+        isFlow,
         now,
-        frame,
+        // A still spinner on the desktop app, which redraws on changes only.
+        frame: isFlow ? 0 : frame,
         agents,
         agentStats: agentStatsNow,
         traces,
@@ -1352,7 +1411,8 @@ export const register: Register = on => {
             ? inlineRows(e.props.scroll.bodyRows, paneRows(terminalRows ?? 0))
             : e.props.scroll.bodyRows,
         placement: e.props.placement,
-        scrollTop: view === 'detail' ? detailTop : scrolled[view],
+        // The desktop app's pane scrolls in the engine's window, the terminal's in its own.
+        scrollTop: isFlow ? e.props.scroll.offset : view === 'detail' ? detailTop : scrolled[view],
         full: new Set(fullIds),
         view,
         query,
@@ -1391,8 +1451,15 @@ export const register: Register = on => {
         submitSearch: value => openMatch($, value, turns).catch(ignore),
         focusSearch: () => focusSearch($).catch(ignore),
         copy: (text, surface) => copyBlock($, text, surface).catch(ignore),
-        cursorDown: at => (view === 'turns' ? moveTurnCursor($, 1, at) : moveRowCursor($, rowIds, 1, at)).catch(ignore),
-        cursorUp: at => (view === 'turns' ? moveTurnCursor($, -1, at) : moveRowCursor($, rowIds, -1, at)).catch(ignore),
+        // The desktop app has no cursor: its j and k move nothing.
+        cursorDown: at =>
+          isFlow
+            ? undefined
+            : (view === 'turns' ? moveTurnCursor($, 1, at) : moveRowCursor($, rowIds, 1, at)).catch(ignore),
+        cursorUp: at =>
+          isFlow
+            ? undefined
+            : (view === 'turns' ? moveTurnCursor($, -1, at) : moveRowCursor($, rowIds, -1, at)).catch(ignore),
         scroll: top => update($, paneScroll, all => ({ ...all, [view]: top })).catch(ignore),
         measure: at => {
           drawnFrames[view] = at
@@ -1412,24 +1479,29 @@ export const register: Register = on => {
   })
 
   // The ring moved by a Tab or a click onto a row takes the row cursor along.
+  // It always moves, in the desktop app too: kept off a button that a view
+  // change took away, it would leave the pane without the keys.
   on('ui.focus', { requestId: PANE }, async ($, e, next) => {
     const element = e.element
     isRingOnSearch = element !== undefined && element.startsWith('turn-search')
-    if (element !== undefined && drawnRowIds.has(element))
+    // Only the person's ring moves the cursor: a late ring of the plugin's own
+    // would pull it back a step.
+    const isPerson = e.origin.kind === 'person'
+    if (isPerson && element !== undefined && drawnRowIds.has(element))
       await update($, cursor, cur => (cur === element ? cur : element)).catch(ignore)
-    else if (element !== undefined && /^turn-\d+$/.test(element))
+    else if (isPerson && element !== undefined && /^turn-\d+$/.test(element))
       await update($, turnCursor, () => Number(element.slice('turn-'.length))).catch(ignore)
     return next(e)
   })
 
-  on('ui.scroll', { requestId: PANE }, ($, e) => scrollPane($, e))
+  on('ui.scroll', { requestId: PANE }, ($, e, next) => scrollPane($, e, () => next(e)))
 
   // The transcript stays a conversation; tool detail lives in the pane.
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
     if (!(await isCompact($))) return next(e)
     const { Text } = $.ui.resolve(e) as unknown as El
     const line = resultLine(e.props.output, e.props.isErrored)
-    const icons = await currentIcons($)
+    const icons = await currentIcons($, e.surface !== 'terminal')
     return (
       <Text color={e.props.isErrored ? C.error : undefined} dimColor={!e.props.isErrored}>
         {`${icons.result} ${line}`}
@@ -1440,7 +1512,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     if (!(await isCompact($))) return next(e)
     const { Box, Text } = $.ui.resolve(e) as unknown as El
-    const icons = await currentIcons($)
+    const icons = await currentIcons($, e.surface !== 'terminal')
     const { name, summary } = compactCall(e.props.tool, e.props.input, icons.ellipsis)
     const mark = e.props.isInterrupted
       ? C.interrupted
@@ -1495,7 +1567,7 @@ export const register: Register = on => {
   // drawn whole in its place; a line whose turn is not known stays the engine's.
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
     if (!(await isStatusOn($))) return next(e)
-    const icons = await currentIcons($)
+    const icons = await currentIcons($, e.surface !== 'terminal')
     const tail = await durationTail($, e.props.durationMs, icons.dot)
     if (tail === '') return next(e)
     const { Text } = $.ui.resolve(e) as unknown as El
@@ -1505,7 +1577,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    noteViewport(e.viewport)
+    if (e.surface === 'terminal') noteViewport(e.viewport)
     if (e.props.hasSurvey || (await read($, isBarHidden))) return next(e)
 
     const el = $.ui.resolve(e) as unknown as El
@@ -1517,7 +1589,7 @@ export const register: Register = on => {
       $.session.root(),
       read($, git),
       read($, mode),
-      currentIcons($),
+      currentIcons($, e.surface !== 'terminal'),
     ])
     // Only a running Workflow needs the latest turn, so only while working;
     // the turns the pane or the ticker read last are at most a tick old, so

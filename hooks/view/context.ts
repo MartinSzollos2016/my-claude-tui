@@ -41,6 +41,10 @@ export type PaneData = {
   isWorking: boolean
   // The glyph set; Nerd Font when left out.
   icons?: Icons
+  // Whether the pane flows (every surface but the terminal: the desktop app
+  // draws proportional text and scrolls the pane itself) instead of the
+  // terminal's grid of cells; the grid when left out.
+  isFlow?: boolean
   now: number
   frame: number
   agents: ReadonlyMap<string, AgentStatus>

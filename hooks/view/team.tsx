@@ -24,8 +24,10 @@ export function renderTeam(el: El, data: Ctx): PaneParts {
   // Every row draws from the pane's text budget; what does not fit is counted.
   const memberRows: { member: TeamMember; name: string; type: string; cost: number }[] = []
   for (const member of members) {
-    const name = padEndDisplay(trunc(member.name, 24), 24)
-    const type = padEndDisplay(trunc(member.type, 20), 20)
+    // On the desktop app boxes keep the columns, so nothing is padded.
+    const pad = (text: string, cells: number) => (data.isFlow === true ? text : padEndDisplay(text, cells))
+    const name = pad(trunc(member.name, 24), 24)
+    const type = pad(trunc(member.type, 20), 20)
     const cost = name.length + type.length + member.status.length + 4
     if (cost > data.budget.left) break
     data.budget.left -= cost
@@ -77,16 +79,31 @@ export function renderTeam(el: El, data: Ctx): PaneParts {
             </Text>
           </Box>
         )}
-        {memberRows.map((row, i) => (
-          <Box key={`member-${i}`} flexDirection="row">
-            <Text color={agentStatusColor(row.member.status)}>{`${data.icons.bullet} `}</Text>
-            <Text bold color={C.text}>
-              {row.name}
-            </Text>
-            <Text color={C.muted}>{` ${row.type} `}</Text>
-            <Text color={agentStatusColor(row.member.status)}>{row.member.status}</Text>
-          </Box>
-        ))}
+        {memberRows.map((row, i) =>
+          data.isFlow === true ? (
+            <Box key={`member-${i}`} flexDirection="row" columnGap={1}>
+              <Text color={agentStatusColor(row.member.status)}>{data.icons.bullet}</Text>
+              <Box width={24} flexShrink={0}>
+                <Text bold color={C.text}>
+                  {row.name}
+                </Text>
+              </Box>
+              <Box width={20} flexShrink={0}>
+                <Text color={C.muted}>{row.type}</Text>
+              </Box>
+              <Text color={agentStatusColor(row.member.status)}>{row.member.status}</Text>
+            </Box>
+          ) : (
+            <Box key={`member-${i}`} flexDirection="row">
+              <Text color={agentStatusColor(row.member.status)}>{`${data.icons.bullet} `}</Text>
+              <Text bold color={C.text}>
+                {row.name}
+              </Text>
+              <Text color={C.muted}>{` ${row.type} `}</Text>
+              <Text color={agentStatusColor(row.member.status)}>{row.member.status}</Text>
+            </Box>
+          ),
+        )}
         {hiddenMembers > 0 && <Text color={C.muted}>{`${hiddenMembers} more teammates`}</Text>}
       </Box>
       <Box flexDirection="column" marginTop={1}>

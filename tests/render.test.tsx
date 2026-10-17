@@ -49,6 +49,27 @@ function framesOf(node: unknown, found: { color: string; text: string }[] = []):
   return found
 }
 
+// The desktop app's pane: no height in cells, the footer framed, no Nerd Font
+// glyph and no hover that makes text bold (wider in the app's font).
+function expectFlowShape(tree: unknown) {
+  expect((tree as Node).props?.['height']).toBeUndefined()
+  expect(typeof findKey(tree, 'footer')?.props?.['borderStyle']).toBe('string')
+  expect(
+    textsOf(tree)
+      .join('')
+      .match(/[\u{E000}-\u{F8FF}\u{F0000}-\u{10FFFF}]/u)?.[0],
+  ).toBeUndefined()
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) node.forEach(walk)
+    else if (node !== null && typeof node === 'object') {
+      const n = node as Node & { hover?: Record<string, unknown> }
+      expect(n.hover?.['bold'] ?? n.props?.['hover']?.['bold' as never]).toBeUndefined()
+      walk(n.children)
+    }
+  }
+  walk(tree)
+}
+
 function findKey(node: unknown, key: string): Node | undefined {
   if (Array.isArray(node)) {
     for (const child of node) {
@@ -306,6 +327,7 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      if (surface === 'desktop') expectFlowShape(await ui.drawn())
 
       expect(await ui.find({ text: /1\/1/ })).toBeDefined()
       expect(await ui.find({ text: /Explore/ })).toBeDefined()
@@ -394,6 +416,7 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      if (surface === 'desktop') expectFlowShape(await ui.drawn())
       await ui.press({ key: 'nav-expand' })
       expect(await ui.find({ text: /chars hidden|lines hidden/ })).toBeDefined()
       const longest = Math.max(...textsOf(await ui.drawn()).map(t => t.length))
@@ -501,7 +524,17 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      if (surface === 'desktop') expectFlowShape(await ui.drawn())
       await ui.press({ key: 'nav-expand' })
+      if (surface === 'desktop') {
+        // As the app's background tasks: the open rows are framed groups, the
+        // command and its output code blocks with no frame of their own.
+        const groups = framesOf(await ui.drawn())
+        expect(groups.find(f => f.text.includes('go test ./...'))?.text).toContain('PASS')
+        expect(groups.some(f => f.color === 'permission' || f.color === 'success')).toBe(false)
+        await ui.unmount()
+        continue
+      }
       const frames = framesOf(await ui.drawn())
       const command = frames.find(f => f.text.includes('go test ./...'))
       const output = frames.find(f => f.text.includes('PASS'))
@@ -607,19 +640,25 @@ describe('detail pane', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
+      if (surface === 'desktop') expectFlowShape(await ui.drawn())
       expect(await ui.find({ text: /3\/3/ })).toBeDefined()
 
       await ui.press({ key: 'nav-turns' })
       expect(await ui.find({ text: /Turns \(3\)/ })).toBeDefined()
       const labels = (await ui.findAll({ type: 'Button' }))
-        .filter(b => String(b.key ?? '').startsWith('turn-'))
+        .filter(b => /^turn-\d+$/.test(String(b.key ?? '')))
         .map(b => String(b.props['label']))
       // Every turn is a button, newest first; the selected (latest) one too.
-      expect(await ui.find({ text: /#3.*Thanks/ })).toBeDefined()
       expect(labels.length).toBe(3)
-      expect(labels[2]).toContain('#1')
       expect(labels[2]).toContain('Fix the bug')
-      expect(labels[2]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
+      if (surface === 'terminal') {
+        expect(await ui.find({ text: /#3.*Thanks/ })).toBeDefined()
+        expect(labels[2]).toContain('#1')
+        expect(labels[2]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
+      } else {
+        // The desktop app's cards: the number leads the prompt's label.
+        expect(labels).toEqual(['#3  Thanks', '#2  Now add tests', expect.stringContaining('#1  Fix the bug')])
+      }
 
       await ui.press({ key: 'turn-0' })
       expect(await ui.find({ text: /Turns \(3\)/ })).toBeUndefined()

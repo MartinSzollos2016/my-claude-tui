@@ -6,8 +6,8 @@ import { contextMeter, formatClock, formatDuration, formatTokens, shortModel } f
 import { clampScroll, contentRows, overflowRows, type ScrollFrame } from '../model/scroll'
 import { reserveSections } from '../model/sections'
 import { EMPTY_TURN_TEXT } from '../model/turn-table'
-import { isAgentRunning, isSubagent } from '../model/turns'
-import type { Turn } from '../model/types'
+import { isAgentRunning, isSubagent, itemStatus } from '../model/turns'
+import type { Item, Turn } from '../model/types'
 import { displayWidth } from '../model/width'
 import {
   CARD_BUDGET,
@@ -24,9 +24,9 @@ import {
   type PaneData,
   type PaneParts,
 } from './context'
-import { focusChord, footerRowsOf, renderFooter, STATUS_INSET, type FooterMode } from './footer'
+import { focusChord, footerRowsOf, renderFlowFooter, renderFooter, STATUS_INSET, type FooterMode } from './footer'
 import { nameWidthOf, renderRows } from './items'
-import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, scopeOf, type El } from './kit'
+import { cutter, endWrap, FLOW_CARD, HEADER_METER_COLUMNS, METER_CELLS, scopeOf, type El } from './kit'
 import { renderThinking } from './row'
 import { renderTeam } from './team'
 import { renderTurnList } from './turn-list'
@@ -52,7 +52,8 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   if (!turn) {
     const sep = data.icons.groupSep
     // The keys that act with no turn yet; the focus note as the footer has it.
-    const focusNote = data.isFocused === true ? '' : ` ${sep} click or ${focusChord(data)} to use them`
+    const focusNote =
+      data.isFocused === true || data.isFlow === true ? '' : ` ${sep} click or ${focusChord(data)} to use them`
     const hint = `Keys: t turns ${sep} s search ${sep} h keys${focusNote}`
     data.layout.push(
       textLine(data, 'No turns yet.', 0),
@@ -87,6 +88,8 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   data.layout.push(LINE)
   // Thinking shares the name column of the turn's rows.
   const nameWidth = nameWidthOf(turn.items, (data.thinking?.text ?? '') === '' ? [] : ['Thinking'])
+  if (data.isFlow === true)
+    return paneBody(el, data, act, flowDetail(el, turn, data, act, nameWidth, isEmpty, emptyText))
   return paneBody(el, data, act, {
     // The metrics row is clipped to its one row where its parts would wrap.
     header: [
@@ -115,6 +118,76 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   })
 }
 
+// The detail in the desktop app, as the app lists its background tasks: the
+// turn's card on top (prompt, time, model, tokens, context), then its rows as
+// cards under Running and Finished.
+function flowDetail(
+  el: El,
+  turn: Turn,
+  data: Ctx,
+  act: PaneActions,
+  nameWidth: number,
+  isEmpty: boolean,
+  emptyText: string,
+): PaneParts {
+  const { Box, Text } = el
+  const isRunning = (item: Item) =>
+    item.kind === 'tool' &&
+    itemStatus(item, { ...data, isAgentRunning: isAgentRunning(data.agents.get(item.agentId ?? '')) }) === 'running'
+  const running = turn.items.filter(isRunning)
+  const finished = turn.items.filter(item => !isRunning(item))
+  const section = (key: string, label: string) =>
+    drawn(
+      data,
+      <Text key={key} color={C.muted}>
+        {label}
+      </Text>,
+      textLine(data, label, 0),
+    )
+  return {
+    header: [{ node: renderFlowHeader(el, turn, data), rows: 2 }],
+    content: (
+      <Box flexDirection="column">
+        {renderThinking(el, turn, data, act, nameWidth)}
+        {isEmpty && drawn(data, <Text color={C.muted}>{emptyText}</Text>, textLine(data, emptyText, 0))}
+        {running.length > 0 && section('flow-section-running', `Running ${running.length}`)}
+        {running.length > 0 && renderRows(el, running, data, act, undefined, nameWidth)}
+        {finished.length > 0 && section('flow-section-finished', `Finished ${finished.length}`)}
+        {finished.length > 0 && renderRows(el, finished, data, act, undefined, nameWidth)}
+      </Box>
+    ),
+  }
+}
+
+// The turn's card in the desktop app: its prompt, its time on the right
+// (running while it works), its model, tokens and context under it.
+function renderFlowHeader(el: El, turn: Turn, data: Ctx) {
+  const { Box, Text } = el
+  const stat = data.turnStat
+  const isRunning = data.isLatest && data.isWorking
+  const time = isRunning ? 'running' : stat ? formatDuration(stat.durationMs) : ''
+  const meta = [
+    shortModel(stat?.model ?? data.sessionModel),
+    ...(stat?.outputTokens === undefined
+      ? []
+      : [`${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)} tokens`]),
+    ...(data.isLatest && data.contextPercent !== undefined ? [`${Math.round(data.contextPercent)}% context`] : []),
+  ].join(` ${data.icons.dot} `)
+  return (
+    <Box key="flow-turn-card" flexDirection="column">
+      <Box flexDirection="row" columnGap={1}>
+        <Box flexGrow={1} flexShrink={1} overflow="hidden">
+          <Text color={C.text} wrap="truncate-end">
+            {`${data.icons.prompt} ${cutter(data.icons)(turn.prompt || '(no prompt)', data.columns)}`}
+          </Text>
+        </Box>
+        <Text color={isRunning ? C.brand : C.muted}>{time}</Text>
+      </Box>
+      <Text color={C.muted}>{meta}</Text>
+    </Box>
+  )
+}
+
 // The fewest content rows an inline pane keeps before it goes compact.
 const MIN_INLINE_WINDOW = 4
 
@@ -124,6 +197,7 @@ const MIN_INLINE_WINDOW = 4
 // top margin, in flow: the engine clamps an absolute box at the tree's top)
 // in a clipped window of its own, and the footer stays in flow under it.
 function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
+  if (data.isFlow === true) return flowBody(el, data, act, parts)
   const { Box, Text } = el
   const { icons } = data
   const sumRows = (list: PaneParts['header']) => list.reduce((sum, part) => sum + part.rows, 0)
@@ -189,6 +263,41 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   )
 }
 
+// The desktop app's pane: the header, the footer framed under it and the
+// content, at their natural height in one flow the app scrolls itself; no
+// window, no pinned rows, no sizes in cells. The page keys are off: the
+// app's window is not the plugin's to page.
+function flowBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
+  const { Box } = el
+  const rows = contentRows(data.layout)
+  // The app's window, where its scroll stands (the engine's offset): a
+  // cursor enters there, as it enters the terminal's window.
+  const frame: ScrollFrame = {
+    scrollTop: data.scrollTop ?? 0,
+    windowRows: Math.max(1, data.rows),
+    total: rows.total,
+    starts: rows.starts,
+    isFlow: true,
+  }
+  return (
+    <Box flexDirection="column" backgroundColor={C.paneBackground}>
+      {parts.header.length > 0 && (
+        <Box key="pane-header" {...FLOW_CARD} borderStyle={data.icons.border} rowGap={1}>
+          {parts.header.map((part, i) => (
+            <Box key={`pane-header-${i}`} flexDirection="column" flexShrink={0}>
+              {part.node}
+            </Box>
+          ))}
+        </Box>
+      )}
+      {renderFlowFooter(el, data, act, frame)}
+      <Box key="pane-content" {...FLOW_CARD} borderStyle={data.icons.border}>
+        {parts.content}
+      </Box>
+    </Box>
+  )
+}
+
 // A row's hover card over the window, revealed by the hover of its row: above
 // the row where the window has room for it under its top edge (and the
 // `▲ more above` row), else below the row above the window's bottom edge;
@@ -241,9 +350,13 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
   const subagents = turn.items.filter(isSubagent)
 
   return (
-    <Box flexDirection="row" justifyContent="space-between" width={data.columns}>
+    <Box flexDirection="row" justifyContent="space-between" width={data.isFlow === true ? undefined : data.columns}>
       <Box flexDirection="row" flexShrink={1} columnGap={1}>
-        <Text key="brand-mark" bold={data.isFocused === true} color={data.isFocused === true ? C.brand : C.muted}>
+        <Text
+          key="brand-mark"
+          bold={data.isFocused === true && data.isFlow !== true}
+          color={data.isFocused === true ? C.brand : C.muted}
+        >
           {icons.robot}
         </Text>
         <Text bold color={C.text}>
