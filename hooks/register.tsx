@@ -22,6 +22,7 @@ import {
   dropPending,
   enqueueTurn,
   isTextOnly,
+  MAX_STATS,
   memo,
   nextSelectedTurn,
   noteNotified,
@@ -81,7 +82,6 @@ import { renderPane } from './view/pane'
 import { searchFieldKey, turnRowId } from './view/turn-list'
 
 const PANE = 'tail'
-const MAX_STATS = 200
 const MAX_EXPANDED = 300
 const TICK_MS = 500
 
@@ -95,7 +95,7 @@ const fullBlocks = atom({ plugin: 'tail-view', key: 'full' } as const, [])
 const searchQuery = atom({ plugin: 'tail-view', key: 'query' } as const, '')
 const searchField = atom({ plugin: 'tail-view', key: 'searchField' } as const, { gen: 0, seed: '' })
 const timings = atom({ plugin: 'tail-view', key: 'timings' } as const, {})
-const turnStats = atom({ plugin: 'tail-view', key: 'turnStats' } as const, [])
+const turnStats = atom({ plugin: 'tail-view', key: 'turnStats' } as const, [], { shape: 'turn-stats-v2' })
 const agentStats = atom({ plugin: 'tail-view', key: 'agentStats' } as const, {})
 const cursor = atom({ plugin: 'tail-view', key: 'cursor' } as const, null)
 const turnCursor = atom({ plugin: 'tail-view', key: 'turnCursor' } as const, null)

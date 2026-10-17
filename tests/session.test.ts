@@ -13,6 +13,7 @@ import {
   statFor,
   statOfDuration,
   turnOfStat,
+  mergeStats,
   turnScrollKey,
   noteNotified,
   noteWorkflowAgent,
@@ -24,6 +25,7 @@ import {
   dropPending,
   discardStale,
 } from '../hooks/session'
+import { promptDigest } from '../hooks/model/sanitize'
 import { buildTurns } from '../hooks/model/turns'
 
 const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
@@ -60,9 +62,8 @@ describe('turnStatFrom', () => {
       cache_creation_input_tokens: 100,
       output_tokens: 500,
     }
-    expect(turnStatFrom({ durationMs: 65_000, usage }, 'Fix the bug', 42)).toEqual({
-      prompt: 'Fix the bug',
-      isKeyed: true,
+    expect(turnStatFrom({ durationMs: 65_000, usage }, promptDigest('Fix the bug'), 42)).toEqual({
+      key: promptDigest('Fix the bug'),
       durationMs: 65_000,
       endedAt: 42,
       model: 'claude-opus-5-5',
@@ -103,9 +104,9 @@ describe('statOfDuration and turnOfStat', () => {
   // A continuation: a turn with no prompt of its own.
   const turns = [...two, { ...two[1]!, index: 2, prompt: '' }]
   const stats = [
-    { prompt: 'One', turnIndex: 0, durationMs: 3_000, endedAt: 1 },
-    { prompt: 'Two', durationMs: 5_000, endedAt: 2 },
-    { prompt: 'Two', turnIndex: 1, durationMs: 3_000, endedAt: 3 },
+    { key: promptDigest('One'), turnIndex: 0, durationMs: 3_000, endedAt: 1 },
+    { key: promptDigest('Two'), durationMs: 5_000, endedAt: 2 },
+    { key: promptDigest('Two'), turnIndex: 1, durationMs: 3_000, endedAt: 3 },
   ]
 
   test('the newest stat with the exact duration and a turn index', () => {
@@ -123,38 +124,12 @@ describe('statOfDuration and turnOfStat', () => {
 })
 
 describe('statFor', () => {
-  test('a stat recorded before hand-backs were named still finds its turn', () => {
-    const turn = (index: number, prompt: string, senders?: string[]) => ({
-      index,
-      prompt,
-      items: [],
-      toolCount: 0,
-      outputCount: 0,
-      subagentCount: 0,
-      ...(senders === undefined ? {} : { senders }),
-    })
-    const all = [turn(0, 'go'), turn(1, 'Message from Explore · Scan', ['a1'])]
-    const old = { prompt: 'Message from agent', turnIndex: 1, durationMs: 7, endedAt: 0 }
-    expect(statFor([old], all[1], all)?.durationMs).toBe(7)
-    expect(statFor([{ ...old, turnIndex: undefined }], all[1], all)?.durationMs).toBe(7)
-    expect(turnOfStat(old, all)).toBe(all[1])
-    expect(statFor([old], all[0], all)).toBe(undefined)
-    // A new stat whose prompt was typed as the old text is not taken for one.
-    const typed = { ...old, isKeyed: true }
-    expect(statFor([typed], all[1], all)).toBe(undefined)
-    expect(turnOfStat(typed, all)).toBe(undefined)
-  })
-
-  test('a stat recorded now says it was matched by prompt key', () => {
-    expect(turnStatFrom({ durationMs: 5 }, 'go', 0, 1).isKeyed).toBe(true)
-  })
-
   test('picks the latest stat for the turn prompt', () => {
     const all = buildTurns([prompt('Fix the bug'), prompt('Thanks')])
     const turn = all[1]!
     const stats = [
-      { prompt: 'Thanks', durationMs: 1, endedAt: 0 },
-      { prompt: 'Thanks', durationMs: 2, endedAt: 0 },
+      { key: promptDigest('Thanks'), durationMs: 1, endedAt: 0 },
+      { key: promptDigest('Thanks'), durationMs: 2, endedAt: 0 },
     ]
     expect(statFor(stats, turn, all)?.durationMs).toBe(2)
     expect(statFor(stats, undefined, all)).toBe(undefined)
@@ -192,8 +167,8 @@ describe('turn index', () => {
 
   test('two identical prompts keep their own stat', () => {
     const stats = [
-      { prompt: 'ok', turnIndex: 0, durationMs: 1_000, endedAt: 0 },
-      { prompt: 'ok', turnIndex: 1, durationMs: 9_000, endedAt: 0 },
+      { key: promptDigest('ok'), turnIndex: 0, durationMs: 1_000, endedAt: 0 },
+      { key: promptDigest('ok'), turnIndex: 1, durationMs: 9_000, endedAt: 0 },
     ]
     expect(statFor(stats, turns[0], turns)?.durationMs).toBe(1_000)
     expect(statFor(stats, turns[1], turns)?.durationMs).toBe(9_000)
@@ -201,19 +176,23 @@ describe('turn index', () => {
   })
 
   test('a stat without an index still matches by prompt', () => {
-    expect(statFor([{ prompt: 'Thanks', durationMs: 5, endedAt: 0 }], turns[2], turns)?.durationMs).toBe(5)
-    expect(statFor([{ prompt: 'ok', turnIndex: 1, durationMs: 5, endedAt: 0 }], turns[0], turns)).toBe(undefined)
+    expect(statFor([{ key: promptDigest('Thanks'), durationMs: 5, endedAt: 0 }], turns[2], turns)?.durationMs).toBe(5)
+    expect(statFor([{ key: promptDigest('ok'), turnIndex: 1, durationMs: 5, endedAt: 0 }], turns[0], turns)).toBe(
+      undefined,
+    )
   })
 
   test('the running turn does not take the stat of an earlier identical prompt', () => {
-    expect(statFor([{ prompt: 'ok', turnIndex: 0, durationMs: 1_000, endedAt: 0 }], turns[1], turns)).toBe(undefined)
+    expect(statFor([{ key: promptDigest('ok'), turnIndex: 0, durationMs: 1_000, endedAt: 0 }], turns[1], turns)).toBe(
+      undefined,
+    )
   })
 
   test('an index that now points at another prompt falls back to the prompt (a shifted window)', () => {
     const shifted = buildTurns([prompt('Beta'), prompt('Gamma')])
     const stats = [
-      { prompt: 'Alpha', turnIndex: 0, durationMs: 1_000, endedAt: 0 },
-      { prompt: 'Beta', turnIndex: 1, durationMs: 9_000, endedAt: 0 },
+      { key: promptDigest('Alpha'), turnIndex: 0, durationMs: 1_000, endedAt: 0 },
+      { key: promptDigest('Beta'), turnIndex: 1, durationMs: 9_000, endedAt: 0 },
     ]
     expect(statFor(stats, shifted[0], shifted)?.durationMs).toBe(9_000)
     expect(statFor(stats, shifted[1], shifted)).toBe(undefined)
@@ -221,8 +200,8 @@ describe('turn index', () => {
 
   test('the starting turn is the last one when the transcript holds it, else the next', () => {
     expect(turnIndexAtStart([], 'ok')).toBe(0)
-    expect(turnIndexAtStart(turns, 'Thanks')).toBe(2)
-    expect(turnIndexAtStart(turns, 'Something new')).toBe(3)
+    expect(turnIndexAtStart(turns, promptDigest('Thanks'))).toBe(2)
+    expect(turnIndexAtStart(turns, promptDigest('Something new'))).toBe(3)
     expect(turnIndexAtStart(turns, '')).toBe(2)
   })
 
@@ -315,5 +294,53 @@ describe('turnScrollKey', () => {
     expect(turnScrollKey(turn(1, 'Fix it'))).not.toBe(turnScrollKey(turn(1, 'Fix that')))
     expect(turnScrollKey(turn(1, 'Fix it'))).not.toBe(turnScrollKey(turn(2, 'Fix it')))
     expect(turnScrollKey(undefined)).toBe('')
+  })
+})
+
+describe('digest-keyed stats', () => {
+  const turn = (index: number, prompt: string) => ({
+    index,
+    prompt,
+    items: [],
+    toolCount: 0,
+    outputCount: 0,
+    subagentCount: 0,
+  })
+  const stat = (prompt: string, endedAt: number, turnIndex?: number) => ({
+    key: promptDigest(prompt),
+    durationMs: endedAt,
+    endedAt,
+    ...(turnIndex === undefined ? {} : { turnIndex }),
+  })
+
+  test('a stat matches its turn by digest, also after the index shifted', () => {
+    const turns = [turn(0, 'Older'), turn(1, 'Fix it')]
+    const shifted = stat('Fix it', 5, 0)
+    expect(statFor([shifted], turns[1], turns)).toBe(shifted)
+    expect(statFor([shifted], turns[0], turns)).toBe(undefined)
+  })
+
+  test('two turns with the same prompt keep their own stats', () => {
+    const turns = [turn(0, 'Go'), turn(1, 'Go')]
+    const first = stat('Go', 1, 0)
+    const second = stat('Go', 2, 1)
+    expect(statFor([first, second], turns[0], turns)).toBe(first)
+    expect(statFor([first, second], turns[1], turns)).toBe(second)
+  })
+
+  test('mergeStats unions by endedAt, keeps order and the newest 200', () => {
+    const [s1, s2, s3] = [stat('a', 1), stat('b', 2), stat('c', 3)]
+    expect(mergeStats([s1!, s2!], [s2!, s3!])).toEqual([s1, s2, s3])
+    const many = Array.from({ length: 250 }, (_, i) => stat(`p${i}`, i + 1))
+    const merged = mergeStats(many.slice(0, 150), many.slice(100))
+    expect(merged).toHaveLength(200)
+    expect(merged.at(-1)!.endedAt).toBe(250)
+    expect(merged[0]!.endedAt).toBe(51)
+  })
+
+  test('turnStatFrom keeps a key and no prompt', () => {
+    const made = turnStatFrom({ durationMs: 3 }, promptDigest('Fix it'), 9, 1)
+    expect(made).toEqual({ key: promptDigest('Fix it'), turnIndex: 1, durationMs: 3, endedAt: 9 })
+    expect(made).not.toHaveProperty('prompt')
   })
 })

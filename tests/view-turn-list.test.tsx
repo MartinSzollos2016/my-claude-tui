@@ -6,6 +6,7 @@ import { displayWidth } from '../hooks/model/width'
 import { renderPane } from '../hooks/view/pane'
 import { searchFieldKey } from '../hooks/view/turn-list'
 import { act, base, byKey, el, measured, nodes, text } from './fixtures/view'
+import { promptDigest } from '../hooks/model/sanitize'
 
 describe('turn table', () => {
   const wide = buildTurns([
@@ -15,8 +16,8 @@ describe('turn table', () => {
     { role: 'assistant', text: 'ok', toolUses: [] },
   ])
   const stats = [
-    { prompt: 'Fix the bug', durationMs: 65_000, endedAt: 0, inputTokens: 1000, outputTokens: 500 },
-    { prompt: '', durationMs: 65_000, endedAt: 0, inputTokens: 10, outputTokens: 5 },
+    { key: promptDigest('Fix the bug'), durationMs: 65_000, endedAt: 0, inputTokens: 1000, outputTokens: 500 },
+    { key: promptDigest(''), durationMs: 65_000, endedAt: 0, inputTokens: 10, outputTokens: 5 },
   ]
   const table = (columns: number, extra: Record<string, unknown> = {}) =>
     renderPane(el, { ...base, turns: wide, stats, view: 'turns', columns, ...extra }, act)
