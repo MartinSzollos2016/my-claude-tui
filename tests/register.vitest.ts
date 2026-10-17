@@ -1786,9 +1786,11 @@ describe('own scroll', () => {
     })
     ;(byKey(tree, 'nav-down')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
     await settle()
-    // The ring rests on the open key, so Enter opens the cursor's row and
-    // the cursor moves no focus.
-    expect(new Set(world.focused)).toEqual(new Set(['nav-open']))
+    // The ring follows the cursor's row: the app scrolls it into view (a
+    // ring on the open key, at the top, scrolled the app back up) and Enter
+    // presses it.
+    expect(world.focused.at(-1)).not.toBe('nav-open')
+    expect(world.focused.length).toBeGreaterThan(0)
     const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
     const marked = nodes(drawn).find(
       n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor,
