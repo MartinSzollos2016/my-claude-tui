@@ -32,10 +32,13 @@ export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions, 
   const id = `t${turn.index}:thinking`
   const isOpen = data.expanded.has(id)
   // The label fills the row after its chevron and glyph columns (6 cells).
-  const label = padEndDisplay(
-    trunc(`${padEndDisplay('Thinking', nameWidth)}  ${expandTabs(thinking.text)}`, Math.max(8, data.columns - 8)),
-    Math.max(8, data.columns - 6),
-  )
+  const label =
+    data.isFlow === true
+      ? trunc(`Thinking  ${expandTabs(thinking.text)}`, Math.max(8, data.columns - 8))
+      : padEndDisplay(
+          trunc(`${padEndDisplay('Thinking', nameWidth)}  ${expandTabs(thinking.text)}`, Math.max(8, data.columns - 8)),
+          Math.max(8, data.columns - 6),
+        )
   data.layout.push({ kind: 'line', id })
   const frame =
     isOpen &&
@@ -136,7 +139,9 @@ export function renderLine(
 ) {
   // The row's hover card goes to the pane's layer over the window, which
   // places it above the row or below it, where it fits.
-  if (line.card !== undefined && data.cards !== undefined) {
+  // On the desktop app the card sits on its own row instead (flowCard).
+  const isFlow = data.isFlow === true
+  if (line.card !== undefined && data.cards !== undefined && !isFlow) {
     const row = rowsSoFar(data)
     const top = data.scrollTop ?? 0
     const lines = row >= top && row < top + data.rows ? line.card() : undefined
@@ -188,14 +193,15 @@ export function renderLine(
     (hasCursorColumn ? 1 : 0)
   // A row that opens takes a click anywhere from the chevron to the model
   // column: the chevron is a button too, and the label fills its room.
-  const label = canOpen ? padEndDisplay(line.label(room), room) : line.label(room)
+  // On the desktop app the label's box grows and clips it, so it is not padded.
+  const label = canOpen && !isFlow ? padEndDisplay(line.label(room), room) : line.label(room)
   // What the row reads, so the content below it need not repeat it.
   const under = below?.(label)
   const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
 
   return (
     <Box key={`item-${id}`} flexDirection="column" marginLeft={indent}>
-      <Box flexDirection="row" width={width}>
+      <Box flexDirection="row" width={isFlow ? undefined : width}>
         {hasCursorColumn && (
           <Text key={`cursor-${id}`} color={data.cursor === id ? C.accent : C.muted}>
             {data.cursor === id ? icons.cursor : ' '}
@@ -224,7 +230,7 @@ export function renderLine(
         <Text color={icon.color ?? C.muted} hover={hover}>
           {`${icon.glyph} `}
         </Text>
-        <Box flexGrow={1} flexShrink={1}>
+        <Box flexGrow={1} flexShrink={1} {...(isFlow ? { overflow: 'hidden' as const } : {})}>
           {canOpen ? (
             <Button
               key={id}
@@ -235,7 +241,7 @@ export function renderLine(
               onPress={line.onPress}
             />
           ) : (
-            <Text color={C.muted} wrap={endWrap(data.icons)} hover={hover}>
+            <Text color={C.muted} wrap={isFlow ? 'truncate-end' : endWrap(data.icons)} hover={hover}>
               {label}
             </Text>
           )}
@@ -252,20 +258,70 @@ export function renderLine(
                 {modelText}
               </Text>
             )}
-            {hasDuration && (
-              <Text color={C.muted} hover={hover}>
-                {` ${' '.repeat(Math.max(0, DURATION_CELLS - displayWidth(durationText)))}${durationText}${hasBar ? ' ' : ''}`}
-              </Text>
-            )}
-            {hasBar && duration !== undefined && (
-              <Text key={`bar-${id}`} color={duration > 0 && duration >= data.maxMs ? C.accent : C.muted} hover={hover}>
-                {padEndDisplay(durationBar(duration, data.maxMs, BAR_CELLS, icons), BAR_CELLS)}
-              </Text>
-            )}
+            {hasDuration &&
+              (isFlow ? (
+                <Box width={DURATION_CELLS + 1} justifyContent="flex-end">
+                  <Text color={C.muted} hover={hover}>
+                    {durationText}
+                  </Text>
+                </Box>
+              ) : (
+                <Text color={C.muted} hover={hover}>
+                  {` ${' '.repeat(Math.max(0, DURATION_CELLS - displayWidth(durationText)))}${durationText}${hasBar ? ' ' : ''}`}
+                </Text>
+              ))}
+            {hasBar &&
+              duration !== undefined &&
+              (isFlow ? (
+                <Box width={BAR_CELLS + 1} paddingLeft={1}>
+                  <Text
+                    key={`bar-${id}`}
+                    color={duration > 0 && duration >= data.maxMs ? C.accent : C.muted}
+                    hover={hover}
+                  >
+                    {durationBar(duration, data.maxMs, BAR_CELLS, icons)}
+                  </Text>
+                </Box>
+              ) : (
+                <Text
+                  key={`bar-${id}`}
+                  color={duration > 0 && duration >= data.maxMs ? C.accent : C.muted}
+                  hover={hover}
+                >
+                  {padEndDisplay(durationBar(duration, data.maxMs, BAR_CELLS, icons), BAR_CELLS)}
+                </Text>
+              ))}
           </Box>
         )}
       </Box>
-      {under}
+      {isFlow ? [line.card === undefined ? undefined : flowCard(el, line, data, place), under] : under}
+    </Box>
+  )
+}
+
+// A row's hover card on the desktop app: on the row itself, under it, shown
+// while the row is hovered; absolute, so showing it moves nothing.
+function flowCard(el: El, line: Line, data: Ctx, place: TreePlace | undefined) {
+  const { Box, Text } = el
+  const lines = line.card?.()
+  if (lines === undefined) return undefined
+  return (
+    <Box
+      key={`card-${line.id}`}
+      position="absolute"
+      display="none"
+      top={1}
+      left={CARD_INDENT + (place === undefined ? 0 : TRACE_INDENT)}
+      backgroundColor={C.paneBackground}
+      flexDirection="column"
+      borderStyle={data.icons.border}
+      borderColor={C.muted}
+      paddingX={1}
+      hover={{ scope: scopeOf('row:', line.id), display: 'flex' }}
+    >
+      {lines.map(text => (
+        <Text color={C.muted}>{text}</Text>
+      ))}
     </Box>
   )
 }

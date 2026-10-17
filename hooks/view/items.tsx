@@ -191,7 +191,9 @@ function renderItem(el: El, item: Item, data: Ctx, act: PaneActions, place: Tree
       ? statusMark(itemStatus(item, { ...data, isAgentRunning: isAgentRunning(agent) }), data.frame, icons)
       : undefined
 
-  const prefix = `${padEndDisplay(name, nameWidth)}  `
+  // A row is one button, so on the desktop app its name cannot have a column
+  // box of its own; padding it would not line up in a proportional font.
+  const prefix = `${data.isFlow === true ? name : padEndDisplay(name, nameWidth)}  `
   return renderLine(
     el,
     {

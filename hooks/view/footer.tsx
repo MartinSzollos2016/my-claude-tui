@@ -161,6 +161,54 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
   )
 }
 
+// The desktop app's footer, drawn on top under the header: a frame as wide
+// as the pane (its border is the divider), the keys wrapping in it and the
+// status under them. Collapsed it shows the keys that act now, by priority;
+// open, every key of the view. The page keys are off (the app scrolls), so
+// they stay hidden with every other key, which keeps its hotkey.
+export function renderFlowFooter(el: El, data: Ctx, act: PaneActions, frame: ScrollFrame) {
+  const { Box, Text } = el
+  const groups = footerGroups(data, act, frame)
+  const all = allKeys(groups)
+  const isPage = (k: FooterKey) => k.key === 'nav-pageup' || k.key === 'nav-pagedown'
+  const byName = new Map(all.map(k => [k.key.slice('nav-'.length), k] as const))
+  const help = groups.help[0]!
+  const wanted =
+    data.isFooterOpen === true
+      ? all.filter(k => k.isShown && k !== help)
+      : PRIORITY[data.view].flatMap(name => {
+          const k = byName.get(name)
+          return k !== undefined && k.isOn ? [k] : []
+        })
+  const shown = [...wanted.filter(k => !isPage(k)), help]
+  const status = footerStatus(data, Infinity, frame)
+  return (
+    <Box
+      key="footer"
+      flexDirection="column"
+      borderStyle={data.icons.border}
+      borderColor={C.muted}
+      borderDimColor
+      paddingX={1}
+      backgroundColor={C.paneBackground}
+    >
+      <Box key="footer-keys" flexDirection="row" flexWrap="wrap" columnGap={KEY_GAP}>
+        {shown.map(k => renderFooterKey(el, data, k, footerLabel(k, true), 0))}
+      </Box>
+      <Box key="footer-status" flexDirection="row">
+        {status.parts.map(part => (
+          <Text key={part.key} color={part.color}>
+            {part.text}
+          </Text>
+        ))}
+      </Box>
+      <Box key="footer-hidden" display="none">
+        {all.filter(k => !shown.includes(k)).map(k => renderFooterKey(el, data, k, footerLabel(k, true), 0))}
+      </Box>
+    </Box>
+  )
+}
+
 // As the engine draws a footer button: `<key>: <label>`.
 const footerText = (k: FooterKey, layout: FooterLayout) => `${k.hotkey}: ${footerLabel(k, layout.labels)}`
 

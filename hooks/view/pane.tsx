@@ -24,7 +24,7 @@ import {
   type PaneData,
   type PaneParts,
 } from './context'
-import { focusChord, footerRowsOf, renderFooter, STATUS_INSET, type FooterMode } from './footer'
+import { focusChord, footerRowsOf, renderFlowFooter, renderFooter, STATUS_INSET, type FooterMode } from './footer'
 import { nameWidthOf, renderRows } from './items'
 import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, scopeOf, type El } from './kit'
 import { renderThinking } from './row'
@@ -95,9 +95,9 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
         ? [
             {
               node: (
-                <Text key="prompt" color={C.muted} wrap={endWrap(data.icons)}>
+                <Text key="prompt" color={C.muted} wrap={data.isFlow === true ? 'truncate-end' : endWrap(data.icons)}>
                   {`${data.icons.prompt} `}
-                  {trunc(turn.prompt, promptRoom)}
+                  {trunc(turn.prompt, data.isFlow === true ? data.columns : promptRoom)}
                 </Text>
               ),
               rows: 1,
@@ -124,6 +124,7 @@ const MIN_INLINE_WINDOW = 4
 // top margin, in flow: the engine clamps an absolute box at the tree's top)
 // in a clipped window of its own, and the footer stays in flow under it.
 function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
+  if (data.isFlow === true) return flowBody(el, data, act, parts)
   const { Box, Text } = el
   const { icons } = data
   const sumRows = (list: PaneParts['header']) => list.reduce((sum, part) => sum + part.rows, 0)
@@ -189,6 +190,34 @@ function paneBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   )
 }
 
+// The desktop app's pane: the header, the footer framed under it and the
+// content, at their natural height in one flow the app scrolls itself; no
+// window, no pinned rows, no sizes in cells. The page keys are off: the
+// app's window is not the plugin's to page.
+function flowBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
+  const { Box } = el
+  const rows = contentRows(data.layout)
+  const frame: ScrollFrame = {
+    scrollTop: 0,
+    windowRows: Math.max(1, rows.total),
+    total: rows.total,
+    starts: rows.starts,
+  }
+  return (
+    <Box flexDirection="column" backgroundColor={C.paneBackground}>
+      {parts.header.map((part, i) => (
+        <Box key={`pane-header-${i}`} flexDirection="column" flexShrink={0}>
+          {part.node}
+        </Box>
+      ))}
+      {renderFlowFooter(el, data, act, frame)}
+      <Box key="pane-content" flexDirection="column">
+        {parts.content}
+      </Box>
+    </Box>
+  )
+}
+
 // A row's hover card over the window, revealed by the hover of its row: above
 // the row where the window has room for it under its top edge (and the
 // `▲ more above` row), else below the row above the window's bottom edge;
@@ -241,7 +270,7 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
   const subagents = turn.items.filter(isSubagent)
 
   return (
-    <Box flexDirection="row" justifyContent="space-between" width={data.columns}>
+    <Box flexDirection="row" justifyContent="space-between" width={data.isFlow === true ? undefined : data.columns}>
       <Box flexDirection="row" flexShrink={1} columnGap={1}>
         <Text key="brand-mark" bold={data.isFocused === true} color={data.isFocused === true ? C.brand : C.muted}>
           {icons.robot}
