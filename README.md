@@ -47,6 +47,7 @@ The commands run at once, even while Claude is answering.
 | `/tail-bar`              | show or hide the info bar (this session)                                                                                     |
 | `/tail-status [on\|off]` | status line under the prompt (off by default), spinner text and turn counts (on by default); on or off sets all three (kept) |
 | `/tail-notify [on\|off]` | toast when a subagent or workflow finishes (off by default, kept)                                                            |
+| `/tail-stats [on\|off]`  | keep turn times and tokens between sessions (on by default, kept); off deletes them                                          |
 | `/tail-help`             | list commands and keys                                                                                                       |
 
 `/tail <sub>` works too, e.g. `/tail width 70`.
@@ -87,16 +88,22 @@ Claude Code paints the pane's frame grey and a plugin cannot change it.
 
 - The plugin reads the current session through Claude Code's plugin API: the conversation and its
   tool calls and results, the session's agents, context usage and cost, and the permission mode
-  from the prompt hook. It keeps its own UI state (expanded rows, timings) in the session and five
-  preferences (pane width, compact transcript, icon set, status line, notifications) in Claude
-  Code's plugin store.
+  from the prompt hook. It keeps its own UI state (expanded rows, timings) in the session. In
+  Claude Code's plugin store, a JSON file under your Claude Code configuration directory, it keeps
+  six preferences (pane width, compact transcript, icon set, status line, notifications, stats).
+  While `/tail-stats` is on, which is the default, the store also holds each finished turn's time,
+  tokens and model, so the turn list shows them when you come back to a session. They are keyed by
+  the session id (the transcript file's name) and a short non-cryptographic hash of the turn's
+  prompt; the prompt itself is never stored. It keeps up to 200 turns per session, 20 sessions and
+  30 days.
 - It runs no programs. The branch in the info bar comes from the repository's `.git/HEAD` (through
   a worktree's `.git` file when there is one).
 - Nothing leaves the machine: the plugin makes no network requests and has no telemetry.
   Everything it reads is drawn in the pane, the info bar and the transcript of the same session.
 - Hooks it uses: its own slash commands (`command.run`, registered per command, so it never sees
-  others); `session.start` to set up the session and open the pane; `ui.focus` and `ui.scroll` for
-  the pane's own keys, cursor and scrolling; `tool.call`, `turn.start` and `turn.complete` to time
+  others); `session.start` to set up the session and open the pane; `session.end` to store the
+  ending session's turn stats and start the next session empty; `ui.focus` and `ui.scroll` for the
+  pane's own keys, cursor and scrolling; `tool.call`, `turn.start` and `turn.complete` to time
   calls and turns and match each turn to its prompt, passing each on unchanged; `prompt.submit`
   and the `UserPromptSubmit` prompt hook to note the prompt and the permission mode, passing both
   on unchanged; `ui.render` to draw the pane, the info bar and the compact tool rows in the
