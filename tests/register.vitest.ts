@@ -2833,3 +2833,52 @@ describe('turn stats kept between sessions', () => {
     expect(text(byKey(await draw($), 'turn-0'))).toContain('3.0s')
   })
 })
+
+describe('the desktop surface', () => {
+  const PUA = /[\u{E000}-\u{F8FF}\u{F0000}-\u{10FFFF}]/u
+  const desktop = (bodyColumns: number, rows: number) => ({
+    ...PANE_EVENT,
+    surface: 'desktop',
+    props: { ...PANE_EVENT.props, bodyColumns },
+    viewport: { columns: bodyColumns + 4, rows, isFullscreen: true },
+  })
+
+  test('a desktop render draws no private-use glyph, the bar and transcript rows neither', async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    world.store.set('isCompact', true)
+    expect(JSON.stringify(await run('ui.render', $, desktop(100, 48))).match(PUA)?.[0]).toBeUndefined()
+    expect(
+      JSON.stringify(await run('ui.render', $, { ...BAR_EVENT, surface: 'desktop' })).match(PUA)?.[0],
+    ).toBeUndefined()
+    const use = {
+      component: 'ToolUse',
+      surface: 'desktop',
+      props: { tool_use_id: 'b9', tool: 'Bash', input: { command: 'ls' }, isRunning: true, isErrored: false },
+    }
+    expect(text(await run('ui.render', $, use, async () => 'engine')).match(PUA)?.[0]).toBeUndefined()
+  })
+
+  test('the ascii set stays ascii on the desktop, and /tail-icons answers what is stored', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    await draw($)
+    await run('ui.render', $, desktop(100, 48))
+    expect(await say($, 'tail-icons')).toContain('Icon set: nerd.')
+    await say($, 'tail-icons', 'ascii')
+    const tree = await run('ui.render', $, desktop(100, 48))
+    expect(text(byKey(tree, 'brand-mark'))).toBe(ICON_SETS.ascii.robot)
+  })
+
+  test("a desktop render never overwrites the terminal's sizes", async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    await run('ui.render', $, { ...PANE_EVENT, props: { ...PANE_EVENT.props, bodyColumns: 80 } })
+    await settle()
+    const opened = world.openArgs.length
+    await run('ui.render', $, desktop(120, 90))
+    await run('ui.render', $, { ...BAR_EVENT, surface: 'desktop', viewport: { columns: 124, rows: 90 } })
+    await settle()
+    expect(world.openArgs).toHaveLength(opened)
+    expect(await say($, 'tail-width')).toContain('drawn 80')
+    await run('command.run', $, { ...command('tail'), presentation: { isFullscreen: true, columns: 90 } })
+    expect(world.openArgs.at(-1)).toMatchObject({ rows: 24 })
+  })
+})

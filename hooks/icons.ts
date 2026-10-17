@@ -246,3 +246,10 @@ export const ICON_SET_NAMES = Object.keys(ICON_SETS) as IconSetName[]
 
 export const isIconSetName = (value: unknown): value is IconSetName =>
   typeof value === 'string' && Object.hasOwn(ICON_SETS, value)
+
+// The set a surface draws: a surface other than the terminal (the desktop
+// app) draws text in its own font, which has no Nerd Font glyph, so the
+// nerd set (the default) becomes unicode there; ascii stays ascii.
+export function iconsFor(name: IconSetName, isFlow: boolean): Icons {
+  return isFlow && name === 'nerd' ? ICON_SETS.unicode : ICON_SETS[name]
+}

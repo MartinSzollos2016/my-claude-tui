@@ -43,7 +43,7 @@ import {
   turnStatFrom,
   type Memo,
 } from './session'
-import { ICON_SET_NAMES, ICON_SETS, isIconSetName, type Icons } from './icons'
+import { ICON_SET_NAMES, ICON_SETS, iconsFor, isIconSetName, type Icons } from './icons'
 import { C } from './theme'
 import {
   callInput,
@@ -732,8 +732,9 @@ async function iconSetName($: EngineInterface): Promise<IconSetName> {
   return isIconSetName(stored) ? stored : DEFAULT_ICONS
 }
 
-async function currentIcons($: EngineInterface): Promise<Icons> {
-  return ICON_SETS[await iconSetName($)]
+// The icons a surface draws; the terminal's (the grid) unless `isFlow`.
+async function currentIcons($: EngineInterface, isFlow = false): Promise<Icons> {
+  return iconsFor(await iconSetName($), isFlow)
 }
 
 async function isCompact($: EngineInterface): Promise<boolean> {
@@ -1218,13 +1219,20 @@ export const register: Register = on => {
     // After /clear or a resume in this process: the new session's stored stats.
     if (!statsSession.isKnown) statsSessionId($).catch(ignore)
     const viewport = e.viewport
+    // The desktop app (any surface but the terminal) gets the flowing pane;
+    // its sizes are its own and never stand in for the terminal's.
+    const isFlow = e.surface !== 'terminal'
     const terminal =
-      viewport === undefined ? undefined : terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)
+      isFlow || viewport === undefined
+        ? undefined
+        : terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)
     keepKeysAfterSearchEsc($, e.props.isFocused, terminal)
-    // Only a docked pane's width answers to /tail-width; inline it is the screen's.
-    drawnColumns = e.props.placement === 'dock' ? e.props.bodyColumns : undefined
-    drawnPlacement = e.props.placement
-    noteViewport(e.viewport)
+    if (!isFlow) {
+      // Only a docked pane's width answers to /tail-width; inline it is the screen's.
+      drawnColumns = e.props.placement === 'dock' ? e.props.bodyColumns : undefined
+      drawnPlacement = e.props.placement
+      noteViewport(e.viewport)
+    }
     if (terminal !== undefined) autoSize($, terminal).catch(ignore)
     const el = $.ui.resolve(e) as unknown as El
 
@@ -1263,7 +1271,7 @@ export const register: Register = on => {
       read($, paneView),
       read($, paneScroll),
       read($, searchQuery),
-      currentIcons($),
+      currentIcons($, isFlow),
       read($, cursor),
       read($, timings),
       $.session.model(),
@@ -1335,6 +1343,7 @@ export const register: Register = on => {
         thinking,
         isWorking: working,
         icons,
+        isFlow,
         now,
         frame,
         agents,
@@ -1429,7 +1438,7 @@ export const register: Register = on => {
     if (!(await isCompact($))) return next(e)
     const { Text } = $.ui.resolve(e) as unknown as El
     const line = resultLine(e.props.output, e.props.isErrored)
-    const icons = await currentIcons($)
+    const icons = await currentIcons($, e.surface !== 'terminal')
     return (
       <Text color={e.props.isErrored ? C.error : undefined} dimColor={!e.props.isErrored}>
         {`${icons.result} ${line}`}
@@ -1440,7 +1449,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     if (!(await isCompact($))) return next(e)
     const { Box, Text } = $.ui.resolve(e) as unknown as El
-    const icons = await currentIcons($)
+    const icons = await currentIcons($, e.surface !== 'terminal')
     const { name, summary } = compactCall(e.props.tool, e.props.input, icons.ellipsis)
     const mark = e.props.isInterrupted
       ? C.interrupted
@@ -1495,7 +1504,7 @@ export const register: Register = on => {
   // drawn whole in its place; a line whose turn is not known stays the engine's.
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
     if (!(await isStatusOn($))) return next(e)
-    const icons = await currentIcons($)
+    const icons = await currentIcons($, e.surface !== 'terminal')
     const tail = await durationTail($, e.props.durationMs, icons.dot)
     if (tail === '') return next(e)
     const { Text } = $.ui.resolve(e) as unknown as El
@@ -1505,7 +1514,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    noteViewport(e.viewport)
+    if (e.surface === 'terminal') noteViewport(e.viewport)
     if (e.props.hasSurvey || (await read($, isBarHidden))) return next(e)
 
     const el = $.ui.resolve(e) as unknown as El
@@ -1517,7 +1526,7 @@ export const register: Register = on => {
       $.session.root(),
       read($, git),
       read($, mode),
-      currentIcons($),
+      currentIcons($, e.surface !== 'terminal'),
     ])
     // Only a running Workflow needs the latest turn, so only while working;
     // the turns the pane or the ticker read last are at most a tick old, so

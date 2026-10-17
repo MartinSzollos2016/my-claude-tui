@@ -22,6 +22,8 @@ Requires Claude Code 2.1.289 or newer. The default icons need a [Nerd Font](http
 without one, `/tail-icons unicode` or `/tail-icons ascii` switches to plain symbols. The Nerd icons sit below U+10000,
 so the terminals of JetBrains IDEs draw them one cell wide, as Claude Code counts them. A Nerd Font Mono keeps every
 Nerd icon inside its cell. Other variants may draw one into the next cell, and each tool row leaves a cell free for it.
+In the Claude desktop app the pane draws the `unicode` icons on its own, since the app's font has no Nerd icons;
+`/tail-icons ascii` still applies there.
 
 ```bash
 claude plugin marketplace add MartinSzollos2016/my-claude-tui

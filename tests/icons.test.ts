@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { ICON_SETS } from '../hooks/icons'
+import { ICON_SETS, iconsFor } from '../hooks/icons'
 import { displayWidth } from '../hooks/model/width'
 
 describe('icon sets', () => {
+  test('the desktop app draws unicode for nerd and keeps ascii; unicode has no private-use glyph', () => {
+    expect(iconsFor('nerd', true)).toBe(ICON_SETS.unicode)
+    expect(iconsFor('ascii', true)).toBe(ICON_SETS.ascii)
+    expect(iconsFor('unicode', true)).toBe(ICON_SETS.unicode)
+    expect(iconsFor('nerd', false)).toBe(ICON_SETS.nerd)
+    const glyphs = JSON.stringify(Object.values(ICON_SETS.unicode))
+    expect(glyphs.match(/[\u{E000}-\u{F8FF}\u{F0000}-\u{10FFFF}]/u)?.[0]).toBeUndefined()
+  })
+
   test('every set has the same keys', () => {
     const keys = Object.keys(ICON_SETS.nerd).sort()
     expect(Object.keys(ICON_SETS.unicode).sort()).toEqual(keys)
