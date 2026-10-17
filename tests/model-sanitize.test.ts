@@ -75,6 +75,19 @@ describe('handBackSenders', () => {
     expect(handBackSenders(`${report}\n${block('b2')}`)).toEqual(['a1', 'b2'])
   })
 
+  test('blocks quoted inside a report add no sender, however many', () => {
+    const quotes = `<agent-message from="a1">quotes <agent-message from="zz">x</agent-message> and <agent-message from="yy">x</agent-message> end</agent-message>`
+    expect(handBackSenders(quotes)).toEqual(['a1'])
+    expect(handBackSenders(`${quotes}\n${block('b2')}`)).toEqual(['a1', 'b2'])
+  })
+
+  test('the scan follows tags, not meaning: an unclosed block holds the rest, a stray end closes it', () => {
+    expect(handBackSenders(`<agent-message from="a1">report ${block('b2')}`)).toEqual(['a1'])
+    expect(
+      handBackSenders(`<agent-message from="a1">see </agent-message> then ${block('zz')} end</agent-message>`),
+    ).toEqual(['a1', 'zz'])
+  })
+
   test('a block inside a reminder is not a sender', () => {
     expect(handBackSenders(`<system-reminder>${block('r1')}</system-reminder>\n${block('a1')}`)).toEqual(['a1'])
   })
