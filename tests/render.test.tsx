@@ -612,14 +612,23 @@ describe('detail pane', () => {
       await ui.press({ key: 'nav-turns' })
       expect(await ui.find({ text: /Turns \(3\)/ })).toBeDefined()
       const labels = (await ui.findAll({ type: 'Button' }))
-        .filter(b => String(b.key ?? '').startsWith('turn-'))
+        .filter(b => /^turn-\d+$/.test(String(b.key ?? '')))
         .map(b => String(b.props['label']))
       // Every turn is a button, newest first; the selected (latest) one too.
-      expect(await ui.find({ text: /#3.*Thanks/ })).toBeDefined()
       expect(labels.length).toBe(3)
-      expect(labels[2]).toContain('#1')
       expect(labels[2]).toContain('Fix the bug')
-      expect(labels[2]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
+      if (surface === 'terminal') {
+        expect(await ui.find({ text: /#3.*Thanks/ })).toBeDefined()
+        expect(labels[2]).toContain('#1')
+        expect(labels[2]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
+      } else {
+        // The desktop app's table: the number is a button of its own.
+        expect(labels[0]).toBe('Thanks')
+        const numbers = (await ui.findAll({ type: 'Button' }))
+          .filter(b => /^turn-num-\d+$/.test(String(b.key ?? '')))
+          .map(b => String(b.props['label']))
+        expect(numbers).toEqual(['#3', '#2', '#1'])
+      }
 
       await ui.press({ key: 'turn-0' })
       expect(await ui.find({ text: /Turns \(3\)/ })).toBeUndefined()
