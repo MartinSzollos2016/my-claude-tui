@@ -161,6 +161,11 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
   )
 }
 
+// The keys the desktop app's top row shows.
+const FLOW_KEYS = new Set(
+  ['prev', 'next', 'latest', 'detail', 'turns', 'team', 'search', 'expand', 'collapse'].map(name => `nav-${name}`),
+)
+
 // The desktop app's footer, drawn on top under the header: a frame as wide
 // as the pane (its border is the divider), the keys wrapping in it and the
 // status under them. Collapsed it shows the keys that act now, by priority;
@@ -170,17 +175,10 @@ export function renderFlowFooter(el: El, data: Ctx, act: PaneActions, frame: Scr
   const { Box, Text } = el
   const groups = footerGroups(data, act, frame)
   const all = allKeys(groups)
-  const isPage = (k: FooterKey) => k.key === 'nav-pageup' || k.key === 'nav-pagedown'
-  const byName = new Map(all.map(k => [k.key.slice('nav-'.length), k] as const))
-  const help = groups.help[0]!
-  const wanted =
-    data.isFooterOpen === true
-      ? all.filter(k => k.isShown && k !== help)
-      : PRIORITY[data.view].flatMap(name => {
-          const k = byName.get(name)
-          return k !== undefined && k.isOn ? [k] : []
-        })
-  const shown = [...wanted.filter(k => !isPage(k)), help]
+  // The views and the moves between turns, as the app's buttons; the cursor,
+  // its open and copy, the pages and the key map keep their hotkeys hidden:
+  // the app's own scrolling and clicks do their work.
+  const shown = all.filter(k => k.isShown && FLOW_KEYS.has(k.key))
   const status = footerStatus(data, Infinity, frame)
   return (
     <Box key="footer" {...FLOW_CARD} borderStyle={data.icons.border} backgroundColor={C.paneBackground}>

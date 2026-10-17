@@ -246,6 +246,23 @@ describe('the desktop flow pane', () => {
     expect(nodes(tree).some(n => /^flow-bar/.test(String(n.props['key'])))).toBe(false)
   })
 
+  test('the top row holds the views and the turn moves, as buttons; the cursor keys keep their hotkeys hidden', () => {
+    for (const isFooterOpen of [true, false])
+      for (const view of ['detail', 'turns'] as const) {
+        const tree = flow({ view, isFooterOpen, stats: [undefined, undefined], cursor: 'b1' })
+        const shown = nodes(byKey(tree, 'footer-keys'))
+          .filter(n => n.type === 'Button')
+          .map(n => String(n.props['key']))
+        const nav = ['prev', 'next', 'latest', 'detail', 'turns', 'team', 'search', 'expand', 'collapse'].map(
+          k => `nav-${k}`,
+        )
+        expect(shown.length).toBeGreaterThan(0)
+        for (const key of shown) expect(nav, key).toContain(key)
+        const hidden = nodes(byKey(tree, 'footer-hidden')).map(n => n.props['key'])
+        for (const key of ['nav-down', 'nav-up', 'nav-keys']) expect(hidden, key).toContain(key)
+      }
+  })
+
   test('a very long turn stays under the text budget and says what it left out', () => {
     // Edits do not fold into one row: each is a row of its own.
     const long = buildTurns([
