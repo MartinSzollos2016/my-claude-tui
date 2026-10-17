@@ -529,6 +529,49 @@ describe('live data', () => {
     expect(row).toContain('3.0s')
   })
 
+  test('two hand-backs in a row from the same agent keep their own times', async () => {
+    const handBack = 'Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>'
+    const spawn = {
+      tool_use_id: 'u1',
+      tool: 'Agent',
+      input: { subagent_type: 'Explore', description: 'Scan' },
+      agentId: 'a1',
+      text: 'ok',
+    }
+    const { $, world } = fakeEngine()
+    await run('prompt.submit', $, { text: 'go' }, async e => e)
+    world.messages = [
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: 'spawned', toolUses: [spawn] },
+    ]
+    world.api = [
+      { role: 'user', content: [{ type: 'text', text: 'go' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'spawned' }] },
+    ]
+    await run('turn.start', $, { text: 'go', turnId: 'g' }, async e => e)
+    await settle()
+    await finish('g', 2_000, $)
+    // The same agent hands back twice (a SendMessage continuation): both keys are equal.
+    for (const [reply, ms, id] of [
+      ['First result', 3_000, 'h1'],
+      ['Second result', 5_000, 'h2'],
+    ] as const) {
+      await run('turn.start', $, { text: handBack, turnId: id }, async e => e)
+      await settle()
+      world.messages = [...world.messages, { role: 'assistant', text: reply, toolUses: [] }]
+      world.api = [
+        ...world.api,
+        { role: 'user', content: [{ type: 'text', text: handBack }] },
+        { role: 'assistant', content: [{ type: 'text', text: reply }] },
+      ]
+      await finish(id, ms, $)
+    }
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(text(byKey(list, 'turn-1'))).toContain('3.0s')
+    expect(text(byKey(list, 'turn-2'))).toContain('5.0s')
+  })
+
   test('a prompt with a carriage return or an escape still finds its stat', async () => {
     const { $, world } = fakeEngine()
     await run('prompt.submit', $, { text: 'fix\r\n\u001b[31mbug' }, async e => e)
@@ -1680,6 +1723,39 @@ describe('own scroll', () => {
     const grown = structuredClone(long)
     grown[1]!.toolUses.push({ tool_use_id: 'b99', tool: 'Bash', input: { command: 'echo more' }, text: 'more' })
     world.messages = [...long, ...grown]
+    expect(await topOf($)).toBe(-4)
+  })
+
+  test('a hand-back keeps its detail scroll when its agent call leaves the rows', async () => {
+    const handBack = 'Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>'
+    const spawn = {
+      tool_use_id: 's1',
+      tool: 'Agent',
+      input: { subagent_type: 'Explore', description: 'Scan' },
+      agentId: 'a1',
+      text: 'ok',
+    }
+    const messages: SessionMessage[] = [
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: 'spawned', toolUses: [spawn] },
+      { role: 'assistant', text: 'waiting', toolUses: [] },
+      { role: 'assistant', text: 'Result', toolUses: long[1]!.toolUses },
+    ]
+    const say = (role: 'user' | 'assistant', text: string) => ({ role, content: [{ type: 'text', text }] })
+    const api = [
+      say('user', 'go'),
+      say('assistant', 'spawned'),
+      say('assistant', 'waiting'),
+      say('user', handBack),
+      say('assistant', 'Result'),
+    ]
+    const { $, world } = fakeEngine({ messages, api })
+    await pressSmall($, 'nav-pagedown')
+    expect(await topOf($)).toBe(-4)
+    // The window of the newest rows moved on: the prompt and the Agent call left.
+    world.messages = messages.slice(2)
+    world.api = api.slice(2)
+    expect(text(byKey(await drawSmall($), 'pane-header'))).toContain('Message from agent')
     expect(await topOf($)).toBe(-4)
   })
 

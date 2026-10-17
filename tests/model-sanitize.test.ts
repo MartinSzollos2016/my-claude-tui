@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { handBackSenders, isHandBack, sanitizePrompt, sanitizeText, statPrompt } from '../hooks/model/sanitize'
+import {
+  handBackSenders,
+  isHandBack,
+  promptKey,
+  sanitizePrompt,
+  sanitizeText,
+  statPrompt,
+} from '../hooks/model/sanitize'
 
 describe('untrusted input stays linear', () => {
   const ws = ' '.repeat(50_000)
@@ -142,6 +149,9 @@ describe('isHandBack', () => {
   test('a text with an agent-message tag is a hand-back, and its stat key says so', () => {
     expect(isHandBack('Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>')).toBe(true)
     expect(isHandBack('plain prompt')).toBe(false)
-    expect(statPrompt('<agent-message from="a1">x</agent-message>')).not.toBe(statPrompt('plain prompt'))
+    expect(statPrompt('<agent-message from="a1">x</agent-message>')).toBe(
+      promptKey({ prompt: 'shown name', senders: ['a1'] }),
+    )
+    expect(statPrompt('plain prompt')).toBe('plain prompt')
   })
 })
