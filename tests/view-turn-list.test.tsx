@@ -150,16 +150,16 @@ describe('the desktop flow', () => {
     for (const index of [0, 1]) expect(widths(byKey(tree, `turn-cells-${index}`))).toEqual(widths(header))
   })
 
-  test('the number and the prompt are buttons that pick the turn; the prompt is cut, not wrapped', () => {
+  test('the prompt is the button that picks the turn; the prompt is cut, not wrapped', () => {
     const tree = flow({ icons: ICON_SETS.ascii })
     const prompt = byKey(tree, 'turn-1')
     const number = byKey(tree, 'turn-num-1')
-    expect([prompt?.type, number?.type]).toEqual(['Button', 'Button'])
+    expect([prompt?.type, number?.type]).toEqual(['Button', 'Text'])
     expect(String(prompt?.props['label']).length).toBeLessThanOrEqual(100)
     expect(String(prompt?.props['label'])).toContain('a long question')
     const cell = nodes(tree).find(n => n.type === 'Box' && nodes(n).includes(prompt!) && n.props['flexGrow'] === 1)
     expect([cell?.props['flexShrink'], cell?.props['overflow']]).toEqual([1, 'hidden'])
-    for (const button of [prompt, number]) {
+    for (const button of [prompt]) {
       const calls = [] as string[]
       const pick = { ...act, pickTurn: (i: number) => calls.push(`pick:${i}`) }
       const fresh = byKey(

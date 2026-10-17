@@ -647,12 +647,9 @@ describe('detail pane', () => {
         expect(labels[2]).toContain('#1')
         expect(labels[2]).toMatch(/#1\s+Fix the bug\s+2(\s|$)/)
       } else {
-        // The desktop app's table: the number is a button of its own.
+        // The desktop app's table: the number is a cell of its own.
         expect(labels[0]).toBe('Thanks')
-        const numbers = (await ui.findAll({ type: 'Button' }))
-          .filter(b => /^turn-num-\d+$/.test(String(b.key ?? '')))
-          .map(b => String(b.props['label']))
-        expect(numbers).toEqual(['#3', '#2', '#1'])
+        for (const number of ['#3', '#2', '#1']) expect(await ui.find({ text: number })).toBeDefined()
       }
 
       await ui.press({ key: 'turn-0' })

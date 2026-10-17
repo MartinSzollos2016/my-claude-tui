@@ -277,7 +277,12 @@ function renderFlowRow(
             {isCursor ? data.icons.cursor : isSelected ? data.icons.marker : ' '}
           </Text>
         ),
-        number: button(`turn-num-${row.index}`, cells?.number ?? `#${row.index + 1}`),
+        // Text: a native button's own padding does not fit the number's box.
+        number: (
+          <Text key={`turn-num-${row.index}`} color={isSelected ? C.text : C.muted} hover={hover}>
+            {cells?.number ?? `#${row.index + 1}`}
+          </Text>
+        ),
         prompt: button(`turn-${row.index}`, row.prompt ?? ''),
         tools: muted(cells?.tools),
         time: muted(cells?.time),

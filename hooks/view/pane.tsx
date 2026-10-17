@@ -52,7 +52,8 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   if (!turn) {
     const sep = data.icons.groupSep
     // The keys that act with no turn yet; the focus note as the footer has it.
-    const focusNote = data.isFocused === true ? '' : ` ${sep} click or ${focusChord(data)} to use them`
+    const focusNote =
+      data.isFocused === true || data.isFlow === true ? '' : ` ${sep} click or ${focusChord(data)} to use them`
     const hint = `Keys: t turns ${sep} s search ${sep} h keys${focusNote}`
     data.layout.push(
       textLine(data, 'No turns yet.', 0),
@@ -275,7 +276,11 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
   return (
     <Box flexDirection="row" justifyContent="space-between" width={data.isFlow === true ? undefined : data.columns}>
       <Box flexDirection="row" flexShrink={1} columnGap={1}>
-        <Text key="brand-mark" bold={data.isFocused === true} color={data.isFocused === true ? C.brand : C.muted}>
+        <Text
+          key="brand-mark"
+          bold={data.isFocused === true && data.isFlow !== true}
+          color={data.isFocused === true ? C.brand : C.muted}
+        >
           {icons.robot}
         </Text>
         <Text bold color={C.text}>

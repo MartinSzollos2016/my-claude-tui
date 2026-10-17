@@ -392,8 +392,11 @@ function statusVariants(data: Ctx, place: string): StatusSegment[][] {
   const live = total > 0 && data.isLatest ? `${pos} live` : pos
   const focused = data.isFocused === true
   const noteColor = focused ? C.accent : C.muted
-  const long = data.isFocused === undefined ? '' : focused ? 'keys on' : `click or ${focusChord(data)}`
-  const short = data.isFocused === undefined ? '' : focused ? 'keys on' : 'click for keys'
+  // The desktop app says nothing of the keys: the note would change the
+  // footer's size on the first click and move the rows under the pointer.
+  const isNoted = data.isFocused !== undefined && data.isFlow !== true
+  const long = !isNoted ? '' : focused ? 'keys on' : `click or ${focusChord(data)}`
+  const short = !isNoted ? '' : focused ? 'keys on' : 'click for keys'
   const seg = (key: string, text: string, color: ThemeKey = C.muted): StatusSegment => ({ key, text, color })
   const variant = (position: string, where: string, note: string) =>
     [seg('turn-position', position), seg('scroll-place', where), seg('focus-note', note, noteColor)].filter(

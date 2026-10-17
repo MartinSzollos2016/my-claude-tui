@@ -143,6 +143,22 @@ describe('the desktop flow pane', () => {
     }
   })
 
+  test('holding the keys changes nothing that takes room: the rows never shift under a click', () => {
+    for (const extra of [{}, { view: 'turns', stats: [undefined, undefined] }, { isFooterOpen: false }]) {
+      const at = (isFocused: boolean) =>
+        JSON.stringify(flow({ ...extra, isFocused }), (k, v) =>
+          k === 'color' || typeof v === 'function' ? undefined : v,
+        )
+      expect(at(true)).toBe(at(false))
+    }
+  })
+
+  test('a turn number is plain text in its box: a native button does not fit a cell width', () => {
+    const tree = flow({ view: 'turns', stats: [undefined, undefined] })
+    expect(byKey(tree, 'turn-num-1')?.type).toBe('Text')
+    expect(text(byKey(tree, 'turn-num-1'))).toBe('#2')
+  })
+
   test('a very long turn stays under the text budget and says what it left out', () => {
     // Edits do not fold into one row: each is a row of its own.
     const long = buildTurns([
