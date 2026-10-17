@@ -37,13 +37,13 @@ export function itemStatus(
 type ToolUse = SessionMessage['toolUses'][number]
 type ToolPiece = Omit<ToolItem, 'kind' | 'id'>
 
+// What opens a turn: its prompt and, for an agent's hand-back, who sent it.
+type Opener = { prompt: string; senders?: readonly string[] }
+
 // The sanitized pieces of a row, independent of where the row sits: a user
 // row's prompt (undefined when it opens no turn), an assistant row's text,
 // a tool use's fields. Turn indexes and output ids depend on position, so
 // they are not part of a piece.
-// What opens a turn: its prompt and, for an agent's hand-back, who sent it.
-type Opener = { prompt: string; senders?: readonly string[] }
-
 type Pieces = {
   prompt: (text: string, hasResults: boolean) => Opener | undefined
   output: (text: string) => string
@@ -284,6 +284,8 @@ export function incrementalTurns(): {
   build: (messages: readonly SessionMessage[], idPrefix?: string, starts?: TurnStarts) => Turn[]
   work: { messages: number; tools: number; serialized: number; senders: number }
 } {
+  // One value type per kind prefix of the key ('u' and 'ur' an Opener, 'a' a
+  // string): a kind is read only as the type it was made with.
   type Row = { source: string; value: unknown }
   type Tool = { source: ToolSource; value: ToolPiece; raw: unknown }
   const work = { messages: 0, tools: 0, serialized: 0, senders: 0 }
@@ -314,8 +316,7 @@ export function incrementalTurns(): {
         if (opener?.senders !== undefined) work.senders += 1
         return opener
       }),
-    output: text => row('a', text, () => fresh.output(text)) ?? '',
-
+    output: text => row('a', text, () => fresh.output(text)),
     tool: use => {
       const known = nextById.get(use.tool_use_id) ?? byId.get(use.tool_use_id)
       if (
@@ -488,16 +489,20 @@ export const isAgentFinished = (status: AgentStatus | undefined): boolean =>
 // "type · description", the type alone when the call has no description.
 const AGENT_LABEL = 60
 
-// By the call's input, which a rebuild reuses while the call is unchanged.
+// Kept by the call's input, which a rebuild reuses while the call is
+// unchanged. For a subagent call (the only caller) the name and the label
+// depend on the input alone; an input that is not an object is not kept.
 const labels = new WeakMap<object, string>()
 
 export function agentLabel(item: ToolItem): string {
-  const known = labels.get(item.input)
+  const input: unknown = item.input
+  const isKept = typeof input === 'object' && input !== null
+  const known = isKept ? labels.get(input) : undefined
   if (known !== undefined) return known
   const description = str(item.input, 'description').trim()
   const label = description === '' ? itemName(item) : `${itemName(item)} · ${description}`
   const cut = truncateDisplay(expandTabs(label), AGENT_LABEL)
-  labels.set(item.input, cut)
+  if (isKept) labels.set(input, cut)
   return cut
 }
 
