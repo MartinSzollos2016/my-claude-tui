@@ -2790,6 +2790,36 @@ describe('turn stats kept between sessions', () => {
     expect(storedStats(world, 's2')).toEqual([promptDigest('next')])
   })
 
+  test('a session start prunes old and surplus sessions, never its own nor the preferences', async () => {
+    const { $, world } = fakeEngine()
+    const DAY = 86_400_000
+    const old = (endedAt: number) => ({ v: 1, stats: [{ key: 'k', durationMs: 1, endedAt }] })
+    world.now = 40 * DAY
+    for (let i = 0; i < 22; i++) world.store.set(STORED(`o${i}`), old(world.now - i * DAY))
+    world.store.set(STORED('ancient'), old(world.now - 35 * DAY))
+    world.store.set(STORED('s1'), old(world.now - 39 * DAY))
+    world.store.set('paneWidth', 70)
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    const left = [...world.store.keys()].filter(k => k.startsWith('tail-view.stats.'))
+    expect(left).toContain(STORED('s1'))
+    expect(left).not.toContain(STORED('ancient'))
+    expect(left).not.toContain(STORED('o20'))
+    expect(left).toHaveLength(21)
+    expect(world.store.get('paneWidth')).toBe(70)
+  })
+
+  test('/tail-stats off keeps the preferences', async () => {
+    const { $, world } = fakeEngine()
+    world.store.set('paneWidth', 70)
+    world.store.set('tail-view.icons', 'ascii')
+    world.store.set(STORED('other'), { v: 1, stats: [{ key: 'k', durationMs: 1, endedAt: world.now }] })
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    expect(await say($, 'tail-stats', 'off')).toBe('Turn stats off: deleted 1 sessions, 1 turns.')
+    expect([...world.store.keys()].sort()).toEqual(['paneWidth', 'tail-view.icons', 'tail-view.stats'])
+  })
+
   test('session.end on exit stores the stats and keeps them in memory', async () => {
     const { $, world } = fakeEngine()
     await run('session.start', $, { cwd: '/r' }, async e => e)

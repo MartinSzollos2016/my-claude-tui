@@ -17,15 +17,7 @@ import type {
 
 import type { AgentStat, IconSetName, TurnStat } from '../types'
 import { COMMANDS, helpText, parseCommand, unknownText } from './commands'
-import {
-  deleteAllStats,
-  isStatsOn,
-  loadSessionStats,
-  pruneStats,
-  saveSessionStats,
-  STATS_KEY,
-  statsSummary,
-} from './stats-store'
+import { isOnValue, isStatsKey, newestEnd, STATS_KEY, statsKeyOf, statsOf, storedValue } from './stats-store'
 import {
   discardStale,
   dropPending,
@@ -37,6 +29,7 @@ import {
   nextSelectedTurn,
   noteNotified,
   noteWorkflowAgent,
+  pruneSessions,
   recordToolEnd,
   recordToolStart,
   remember,
@@ -879,6 +872,75 @@ async function setStatus($: EngineInterface, arg: string): Promise<string> {
   if ((await isStatusOn($)) !== wasOn) $.ui.invalidate('ui.render')
   await syncStatus($)
   return text
+}
+
+// The turn stats store (stats-store.ts). Every call catches its failures: a
+// full store or a malformed value never reaches a turn or a drawing.
+async function isStatsOn($: EngineInterface): Promise<boolean> {
+  try {
+    return isOnValue(await $.store.get(STATS_KEY))
+  } catch {
+    return true
+  }
+}
+
+async function loadSessionStats($: EngineInterface, sessionId: string): Promise<TurnStat[]> {
+  try {
+    return statsOf(await $.store.get(statsKeyOf(sessionId)))
+  } catch {
+    return []
+  }
+}
+
+async function saveSessionStats($: EngineInterface, sessionId: string, stats: readonly TurnStat[]): Promise<void> {
+  try {
+    if (!(await isStatsOn($))) return
+    // Merged with what is stored, so a save never shrinks a session: not one
+    // from a process that has not loaded it yet, nor another on the same id.
+    const stored = await loadSessionStats($, sessionId)
+    await $.store.set(statsKeyOf(sessionId), storedValue(mergeStats(stored, stats)))
+  } catch {
+    // A full or failing store leaves the stats in memory only.
+  }
+}
+
+async function statsKeys($: EngineInterface): Promise<string[]> {
+  return (await $.store.keys()).filter(isStatsKey)
+}
+
+// Deletes the other sessions' stats that are too old or too many; `keepId`'s
+// stay whatever their age.
+async function pruneStats($: EngineInterface, keepId: string): Promise<void> {
+  try {
+    const keys = await statsKeys($)
+    const entries = await Promise.all(keys.map(async key => ({ key, newest: newestEnd(await $.store.get(key)) })))
+    const dropped = pruneSessions(entries, await $.clock.now(), statsKeyOf(keepId))
+    await Promise.all(dropped.map(key => $.store.delete(key)))
+  } catch {
+    // Pruning waits for the next session start.
+  }
+}
+
+// How many sessions and turns the store holds.
+async function statsSummary($: EngineInterface): Promise<{ sessions: number; turns: number }> {
+  try {
+    const keys = await statsKeys($)
+    const counts = await Promise.all(keys.map(async key => statsOf(await $.store.get(key)).length))
+    return { sessions: keys.length, turns: counts.reduce((sum, n) => sum + n, 0) }
+  } catch {
+    return { sessions: 0, turns: 0 }
+  }
+}
+
+// Deletes every stored session's stats, the preferences kept; what was there.
+async function deleteAllStats($: EngineInterface): Promise<{ sessions: number; turns: number }> {
+  const summary = await statsSummary($)
+  try {
+    await Promise.all((await statsKeys($)).map(key => $.store.delete(key)))
+  } catch {
+    // What stays is deleted at the next session start while storing is off.
+  }
+  return summary
 }
 
 // The session the in-memory turn stats belong to, and whether they are kept
