@@ -68,6 +68,11 @@ export function toggleId(ids: readonly string[], id: string, max: number): strin
   return ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-max)
 }
 
+// What the detail scroll is kept by: the turn's index and prompt key, so a
+// hand-back whose shown name changes as its call leaves the rows keeps it.
+export const turnScrollKey = (turn: Turn | undefined): string =>
+  turn === undefined ? '' : `${turn.index}\u0000${promptKey(turn)}`
+
 // The prompt every hand-back had before they were matched by their senders.
 const LEGACY_HAND_BACK = 'Message from agent'
 

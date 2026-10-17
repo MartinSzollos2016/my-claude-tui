@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { handBackSenders, sanitizePrompt, sanitizeText } from '../hooks/model/sanitize'
+import { handBackSenders, isHandBack, sanitizePrompt, sanitizeText, statPrompt } from '../hooks/model/sanitize'
 
 describe('untrusted input stays linear', () => {
   const ws = ' '.repeat(50_000)
@@ -110,6 +110,7 @@ describe('handBackSenders', () => {
     expect(handBackSenders('<agent-message to=" from=" from="b">x</agent-message>')).toEqual(['b'])
     expect(handBackSenders('<agent-message data-from="q" from="a1">x</agent-message>')).toEqual(['a1'])
     expect(handBackSenders('<agent-message>the body says from="X"</agent-message>')).toEqual([])
+    expect(handBackSenders('<agent-message from="a" from="b">x</agent-message>')).toEqual(['a'])
   })
 
   test('an open tag takes attributes around from, new lines and a space before >, up to the limits', () => {
@@ -134,5 +135,13 @@ describe('handBackSenders', () => {
     const started = performance.now()
     expect(handBackSenders(long)).toEqual(['x0', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'x7'])
     expect(performance.now() - started).toBeLessThan(50)
+  })
+})
+
+describe('isHandBack', () => {
+  test('a text with an agent-message tag is a hand-back, and its stat key says so', () => {
+    expect(isHandBack('Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>')).toBe(true)
+    expect(isHandBack('plain prompt')).toBe(false)
+    expect(statPrompt('<agent-message from="a1">x</agent-message>')).not.toBe(statPrompt('plain prompt'))
   })
 })
