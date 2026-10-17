@@ -18,12 +18,22 @@ import type {
 import type { AgentStat, IconSetName } from '../types'
 import { COMMANDS, helpText, parseCommand, unknownText } from './commands'
 import {
+  deleteAllStats,
+  isStatsOn,
+  loadSessionStats,
+  pruneStats,
+  saveSessionStats,
+  STATS_KEY,
+  statsSummary,
+} from './stats-store'
+import {
   discardStale,
   dropPending,
   enqueueTurn,
   isTextOnly,
   MAX_STATS,
   memo,
+  mergeStats,
   nextSelectedTurn,
   noteNotified,
   noteWorkflowAgent,
@@ -509,6 +519,8 @@ async function runCommand($: EngineInterface, e: CommandRunInput): Promise<Comma
           parsed.arg,
         ),
       }
+    case 'stats':
+      return { text: await setStats($, parsed.arg) }
     case 'help':
       return { text: helpText(await currentIcons($)) }
     case 'unknown':
@@ -868,6 +880,70 @@ async function setStatus($: EngineInterface, arg: string): Promise<string> {
   return text
 }
 
+// The session the in-memory turn stats belong to, and whether they are kept
+// in the store at all (a `claude -p` or SDK run is not). `isKnown` turns false
+// when /clear or an in-process resume hands the process to another session;
+// the next turn, prompt or turn list asks for its id once.
+let statsSession: { id: string | undefined; isInteractive: boolean; isKnown: boolean } = {
+  id: undefined,
+  isInteractive: true,
+  isKnown: false,
+}
+// The load of the current session's stored stats; a save waits for it, so it
+// never writes the session's stats without the stored ones.
+let statsLoad: Promise<void> = Promise.resolve()
+
+// The current session's id for its stats, asked once per session; the first
+// ask starts loading its stored stats, merged into memory in the background.
+async function statsSessionId($: EngineInterface): Promise<string | undefined> {
+  if (statsSession.isKnown) return statsSession.id
+  const id = await $.session.id().catch(() => undefined)
+  statsSession = { ...statsSession, id, isKnown: true }
+  if (id !== undefined && statsSession.isInteractive)
+    statsLoad = (async () => {
+      if (!(await isStatsOn($))) return
+      const loaded = await loadSessionStats($, id)
+      if (loaded.length > 0) await update($, turnStats, all => mergeStats(all, loaded))
+    })().catch(ignore)
+  return id
+}
+
+// Stores the session's stats once its stored ones are in; never awaited by a turn.
+async function persistStats($: EngineInterface, id: string | undefined): Promise<void> {
+  if (id === undefined || !statsSession.isInteractive) return
+  await statsLoad
+  await saveSessionStats($, id, await read($, turnStats))
+}
+
+// Set up at session start: the session, its stored stats, and the pruning
+// of the others; with storing off, any stats left behind are deleted.
+async function startStats($: EngineInterface, isInteractive: boolean): Promise<void> {
+  statsSession = { id: undefined, isInteractive, isKnown: false }
+  const id = await statsSessionId($)
+  if (!isInteractive || id === undefined) return
+  if (await isStatsOn($)) await pruneStats($, id)
+  else await deleteAllStats($)
+}
+
+// /tail-stats: says what is kept, or switches storing on (and stores this
+// session's stats at once) or off (and deletes every stored one).
+async function setStats($: EngineInterface, rawArg: string): Promise<string> {
+  const arg = rawArg.trim().toLowerCase()
+  if (arg === 'off') {
+    await $.store.set(STATS_KEY, false)
+    const deleted = await deleteAllStats($)
+    return `Turn stats off: deleted ${deleted.sessions} sessions, ${deleted.turns} turns.`
+  }
+  if (arg === 'on') {
+    await $.store.set(STATS_KEY, true)
+    await persistStats($, await statsSessionId($))
+  } else if (arg !== '') return 'Unknown value. Use /tail-stats on|off.'
+  if (!(await isStatsOn($)))
+    return 'Turn stats: off. Turn times show only for turns finished since Claude Code started. /tail-stats on keeps them.'
+  const kept = await statsSummary($)
+  return `Turn stats: on (${kept.sessions} sessions, ${kept.turns} turns stored). /tail-stats off deletes them.`
+}
+
 async function toggleCompact($: EngineInterface): Promise<string> {
   const next = !(await isCompact($))
   await $.store.set(COMPACT_KEY, next)
@@ -892,7 +968,20 @@ export const register: Register = on => {
     }
     refreshGit($).catch(ignore)
     openPane($, false).catch(ignore)
+    startStats($, e.isInteractive !== false).catch(ignore)
     return started
+  })
+
+  // The ending session's stats are stored; after /clear or an in-process
+  // resume the process goes on under another session, which starts empty.
+  on('session.end', async ($, e, next) => {
+    if (statsSession.isInteractive) await persistStats($, e.sessionId).catch(ignore)
+    if (e.reason === 'clear' || e.reason === 'resume') {
+      await update($, turnStats, () => [])
+      statsSession = { ...statsSession, id: undefined, isKnown: false }
+      statsLoad = Promise.resolve()
+    }
+    return next(e)
   })
 
   // One registration per command, so the hook never sees anyone else's.
@@ -904,6 +993,7 @@ export const register: Register = on => {
   on('command.run', { command: 'tail-status' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-notify' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-bar' }, ($, e) => runCommand($, e))
+  on('command.run', { command: 'tail-stats' }, ($, e) => runCommand($, e))
   on('command.run', { command: 'tail-help' }, ($, e) => runCommand($, e))
 
   on('classic.UserPromptSubmit', async ($, e, next) => {
@@ -914,6 +1004,7 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     // In the form a turn's prompt takes, so the fallback stat finds its turn.
     lastPrompt = statPrompt(e.text)
+    if (!statsSession.isKnown) statsSessionId($).catch(ignore)
     const pushed = e.turnId === undefined ? await notePrompt($) : undefined
     const wasWorking = await read($, isWorking)
     await update($, isWorking, () => true)
@@ -983,7 +1074,10 @@ export const register: Register = on => {
       // The prompt its turn.start carried; a continuation's is empty.
       const prompt = opened?.prompt || lastPrompt
       const stat = turnStatFrom(e, prompt, endedAt, opened?.index)
+      // The session first: a turn after /clear lands in the new one.
+      const statsId = await statsSessionId($)
       await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
+      persistStats($, statsId).catch(ignore)
       await update($, isWorking, () => false)
       runningTools = []
       await clearStatus($)
@@ -995,6 +1089,8 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    // After /clear or a resume in this process: the new session's stored stats.
+    if (!statsSession.isKnown) statsSessionId($).catch(ignore)
     const viewport = e.viewport
     const terminal =
       viewport === undefined ? undefined : terminalWidth(viewport.columns, e.props.placement, e.props.bodyColumns)

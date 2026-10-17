@@ -8,12 +8,12 @@ import type { TurnStat } from '../types'
 import { MAX_STATS, pruneSessions } from './session'
 
 // The switch: on unless false, read at every write.
-const STATS_KEY = 'tail-view.stats'
+export const STATS_KEY = 'tail-view.stats'
 const PREFIX = `${STATS_KEY}.`
 
 export const statsKeyOf = (sessionId: string): string => PREFIX + sessionId
 
-async function isStatsOn($: EngineInterface): Promise<boolean> {
+export async function isStatsOn($: EngineInterface): Promise<boolean> {
   try {
     return (await $.store.get(STATS_KEY)) !== false
   } catch {

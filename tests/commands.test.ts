@@ -105,3 +105,12 @@ describe('help on Esc', () => {
     expect(help).toMatch(/Esc leaves the search field, then gives the keys back to the prompt/)
   })
 })
+
+describe('tail-stats', () => {
+  test('helpText lists /tail-stats and /tail stats routes to it', () => {
+    expect(helpText()).toContain('/tail-stats [on|off]')
+    expect(helpText()).toContain('Keep turn times and tokens between sessions')
+    expect(parseCommand('tail-stats', 'off')).toEqual({ sub: 'stats', arg: 'off' })
+    expect(parseCommand('tail', 'stats on')).toEqual({ sub: 'stats', arg: 'on' })
+  })
+})

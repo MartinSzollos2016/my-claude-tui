@@ -5,6 +5,7 @@ import type { SessionMessage } from 'claude-code'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { ICON_SETS } from '../hooks/icons'
+import { promptDigest } from '../hooks/model/sanitize'
 import { BAR_EVENT, byKey, fakeEngine, hooksOf, PANE_EVENT, settle, text } from './coverage/engine'
 
 // register.tsx keeps module-level state (pending turns, caches, the ticker):
@@ -90,6 +91,7 @@ describe('session start', () => {
       'tail-bar',
       'tail-status',
       'tail-notify',
+      'tail-stats',
       'tail-help',
     ])
     // Opened once, before any width was known: no columns asked for.
@@ -2582,5 +2584,159 @@ describe('wave 1 correctness', () => {
     await press($, 'nav-prev')
     await press($, 'nav-expand')
     expect(text(await draw($))).toContain('zero-output')
+  })
+})
+
+describe('turn stats kept between sessions', () => {
+  const STORED = (id: string) => `tail-view.stats.${id}`
+  const done = { answer: '', isAborted: false, reason: 'answer' }
+  const storedStats = (world: { store: Map<string, unknown> }, id: string) =>
+    ((world.store.get(STORED(id)) as { stats?: { key: string }[] } | undefined)?.stats ?? []).map(s => s.key)
+
+  // One finished turn: prompt.submit, the rows, turn.start and turn.complete.
+  async function turn(
+    $: Parameters<typeof run>[1],
+    world: { messages: SessionMessage[]; api: unknown[]; now: number },
+    prompt: string,
+    ms: number,
+  ) {
+    await run('prompt.submit', $, { text: prompt }, async e => e)
+    world.messages = [
+      ...world.messages,
+      { role: 'user', text: prompt, toolUses: [] },
+      { role: 'assistant', text: `done ${prompt}`, toolUses: [] },
+    ]
+    world.api = [
+      ...world.api,
+      { role: 'user', content: [{ type: 'text', text: prompt }] },
+      { role: 'assistant', content: [{ type: 'text', text: `done ${prompt}` }] },
+    ]
+    await run('turn.start', $, { text: prompt, turnId: prompt }, async e => e)
+    await settle()
+    world.now += ms
+    await run('turn.complete', $, { ...done, turnId: prompt, durationMs: ms }, async () => ({ text: '' }))
+    await settle()
+  }
+
+  test('a new process shows the stored time of a past turn', async () => {
+    const { $, world } = fakeEngine()
+    world.messages = [
+      { role: 'user', text: 'go', toolUses: [] },
+      { role: 'assistant', text: 'done', toolUses: [] },
+    ]
+    world.store.set(STORED('s1'), {
+      v: 1,
+      stats: [{ key: promptDigest('go'), turnIndex: 0, durationMs: 2_000, endedAt: 5 }],
+    })
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await press($, 'nav-turns')
+    expect(text(byKey(await draw($), 'turn-0'))).toContain('2.0s')
+  })
+
+  test('a finished turn is stored at once, under its session and its digest', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'go', 3_000)
+    expect(storedStats(world, 's1')).toEqual([promptDigest('go')])
+    expect(JSON.stringify(world.store.get(STORED('s1')))).not.toContain('"go"')
+  })
+
+  test.each(['clear', 'resume'])(
+    'session.end with %s empties the stats and the next session keeps its own',
+    async reason => {
+      const { $, world } = fakeEngine()
+      await run('session.start', $, { cwd: '/r' }, async e => e)
+      await settle()
+      await turn($, world, 'go', 3_000)
+      await run('session.end', $, { reason, sessionId: 's1', resume: { id: 's1' } }, async () => ({}))
+      world.sessionId = 's2'
+      world.messages = []
+      world.api = []
+      await turn($, world, 'next', 2_000)
+      expect(storedStats(world, 's1')).toEqual([promptDigest('go')])
+      expect(storedStats(world, 's2')).toEqual([promptDigest('next')])
+    },
+  )
+
+  test('a non-interactive session stores nothing', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r', isInteractive: false }, async e => e)
+    await settle()
+    await turn($, world, 'go', 3_000)
+    expect([...world.store.keys()].filter(k => k.startsWith('tail-view.stats.'))).toEqual([])
+  })
+
+  test('/tail-stats off deletes and stops storing, on writes at once', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'go', 3_000)
+    expect(await say($, 'tail-stats')).toContain('on (1 sessions, 1 turns stored)')
+    expect(await say($, 'tail-stats', 'off')).toBe('Turn stats off: deleted 1 sessions, 1 turns.')
+    await turn($, world, 'more', 1_000)
+    expect(world.store.has(STORED('s1'))).toBe(false)
+    expect(await say($, 'tail-stats')).toContain('Turn stats: off.')
+    expect(await say($, 'tail-stats', 'on')).toContain('Turn stats: on')
+    expect(storedStats(world, 's1')).toEqual([promptDigest('go'), promptDigest('more')])
+    expect(await say($, 'tail-stats', 'maybe')).toBe('Unknown value. Use /tail-stats on|off.')
+  })
+
+  test('a full store does not fail the turn', async () => {
+    const { $, world } = fakeEngine()
+    world.storeFull = true
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'go', 2_000)
+    await turn($, world, 'again', 3_000)
+    await press($, 'nav-turns')
+    const list = await draw($)
+    expect(text(byKey(list, 'turn-0'))).toContain('2.0s')
+    expect(text(byKey(list, 'turn-1'))).toContain('3.0s')
+  })
+
+  test('a reload does not duplicate stored stats', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'go', 3_000)
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'more', 1_000)
+    expect(storedStats(world, 's1')).toEqual([promptDigest('go'), promptDigest('more')])
+  })
+
+  test('storing off at start deletes stray stats and keeps the preferences', async () => {
+    const { $, world } = fakeEngine()
+    world.store.set('tail-view.stats', false)
+    world.store.set(STORED('other'), { v: 1, stats: [{ key: 'k', durationMs: 1, endedAt: 1 }] })
+    world.store.set('paneWidth', 70)
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    expect(world.store.has(STORED('other'))).toBe(false)
+    expect(world.store.get('paneWidth')).toBe(70)
+  })
+
+  test('a turn finished while the stored stats still load keeps both', async () => {
+    const { $, world } = fakeEngine()
+    world.messages = [
+      { role: 'user', text: 'old', toolUses: [] },
+      { role: 'assistant', text: 'done old', toolUses: [] },
+    ]
+    world.store.set(STORED('s1'), {
+      v: 1,
+      stats: [{ key: promptDigest('old'), turnIndex: 0, durationMs: 1_000, endedAt: 1 }],
+    })
+    let release = () => {}
+    world.storeHold = new Promise<void>(resolve => {
+      release = resolve
+    })
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await turn($, world, 'new', 2_000)
+    world.storeHold = undefined
+    release()
+    await settle()
+    expect(storedStats(world, 's1')).toEqual([promptDigest('old'), promptDigest('new')])
   })
 })
