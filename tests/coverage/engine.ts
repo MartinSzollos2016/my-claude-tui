@@ -59,7 +59,7 @@ export const BAR_EVENT = {
   viewport: { columns: 160, rows: 48, isFullscreen: true },
 }
 
-function nodes(tree: unknown, found: Node[] = []): Node[] {
+export function nodes(tree: unknown, found: Node[] = []): Node[] {
   if (Array.isArray(tree)) for (const child of tree) nodes(child, found)
   else if (tree !== null && typeof tree === 'object' && 'type' in tree) {
     found.push(tree as Node)

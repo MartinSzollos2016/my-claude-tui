@@ -202,7 +202,11 @@ export function renderLine(
 
   return (
     <Box key={`item-${id}`} flexDirection="column" marginLeft={indent}>
-      <Box flexDirection="row" width={isFlow ? undefined : width}>
+      <Box
+        flexDirection="row"
+        width={isFlow ? undefined : width}
+        {...(isFlow && data.cursor === id ? { backgroundColor: C.rowHover } : {})}
+      >
         {hasCursorColumn &&
           (isFlow ? (
             <Box width={2} flexShrink={0}>

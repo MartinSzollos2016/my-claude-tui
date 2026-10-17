@@ -615,7 +615,9 @@ async function moveRowCursor(
   const landed = await update($, cursor, cur => stepCursor(ids, cur, delta, at))
   // On the desktop app the app's window follows the ring (ringTo), not ours.
   if (at.isFlow !== true) await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
-  await ringTo($, landed)
+  // The desktop app draws its native ring around the focused button, a
+  // second cursor beside the highlighted row: there the ring stays put.
+  if (at.isFlow !== true) await ringTo($, landed)
 }
 
 // Moves the turn list's cursor one turn along the rows the list draws (newest
@@ -629,7 +631,7 @@ async function moveTurnCursor($: EngineInterface, delta: number, at: ScrollFrame
   })
   if (at.isFlow !== true)
     await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
-  await ringTo($, landed === null ? null : `turn-${landed}`)
+  if (at.isFlow !== true) await ringTo($, landed === null ? null : `turn-${landed}`)
 }
 
 // Where each view's window stood at its last drawing; a reload starts over

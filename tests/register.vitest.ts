@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { ICON_SETS } from '../hooks/icons'
 import { promptDigest } from '../hooks/model/sanitize'
-import { BAR_EVENT, byKey, fakeEngine, hooksOf, PANE_EVENT, settle, text } from './coverage/engine'
+import { BAR_EVENT, byKey, fakeEngine, hooksOf, nodes, PANE_EVENT, settle, text } from './coverage/engine'
 
 // register.tsx keeps module-level state (pending turns, caches, the ticker):
 // each test gets a fresh copy of the module so none of it leaks between tests.
@@ -1769,7 +1769,13 @@ describe('own scroll', () => {
     })
     ;(byKey(tree, 'nav-down')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
     await settle()
-    return world.focused.at(-1)
+    // The app's native focus ring stays put: the row's highlight marks the cursor.
+    expect(world.focused).toEqual([])
+    const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    const marked = nodes(drawn).find(
+      n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor,
+    )
+    return String(marked?.props['key'])
   }
 
   test('the cursor on the desktop steps on from where it stands, wherever the app has scrolled', async () => {

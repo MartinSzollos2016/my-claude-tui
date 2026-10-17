@@ -2,6 +2,7 @@
 // framed on top, rows sized by boxes, cards on their rows, no cell sizes.
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
+import { C } from '../hooks/theme'
 import { buildTurns } from '../hooks/model/turns'
 import { PANE_TEXT_BUDGET } from '../hooks/view/context'
 import { renderPane } from '../hooks/view/pane'
@@ -211,6 +212,17 @@ describe('the desktop flow pane', () => {
     const timings = Object.fromEntries(Array.from({ length: rows }, (_, i) => [`e${i}`, { start: 0, end: 1_000 + i }]))
     const tree = flow({ turns, timings, stats: [undefined], columns: 100 })
     expect(strings(tree).join('').length).toBeLessThan(PANE_TEXT_BUDGET + 5_000)
+  })
+
+  test("the cursor's row is highlighted across its width, the app's way of showing a selection", () => {
+    const detail = flow({ cursor: 'b1' })
+    const row = nodes(byKey(detail, 'item-b1')).find(n => n.type === 'Box' && n.props['flexDirection'] === 'row')
+    expect(row?.props['backgroundColor']).toBe(C.rowHover)
+    const other = nodes(byKey(detail, 'item-p1')).find(n => n.type === 'Box' && n.props['flexDirection'] === 'row')
+    expect(other?.props['backgroundColor']).toBeUndefined()
+    const turns = flow({ view: 'turns', stats: [undefined, undefined], turnCursor: 1 })
+    expect(byKey(turns, 'turn-cells-1')?.props['backgroundColor']).toBe(C.rowHover)
+    expect(byKey(turns, 'turn-cells-0')?.props['backgroundColor']).toBeUndefined()
   })
 
   test('a very long turn stays under the text budget and says what it left out', () => {

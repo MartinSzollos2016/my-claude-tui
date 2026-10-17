@@ -206,7 +206,7 @@ type FlowCells = {
 // A row of the desktop app's table: a box per column at the text table's
 // widths, the prompt taking what is left, so the header and every row line
 // up in the app's proportional font.
-function flowCells(el: El, key: string, columns: TurnTable['columns'], cells: FlowCells) {
+function flowCells(el: El, key: string, columns: TurnTable['columns'], cells: FlowCells, isCursor = false) {
   const { Box } = el
   const right = (width: number, child: RenderChildren) => (
     <Box width={width} flexShrink={0} justifyContent="flex-end">
@@ -214,7 +214,7 @@ function flowCells(el: El, key: string, columns: TurnTable['columns'], cells: Fl
     </Box>
   )
   return (
-    <Box key={key} flexDirection="row" columnGap={1}>
+    <Box key={key} flexDirection="row" columnGap={1} {...(isCursor ? { backgroundColor: C.rowHover } : {})}>
       <Box width={1} flexShrink={0}>
         {cells.marker}
       </Box>
@@ -275,29 +275,35 @@ function renderFlowRow(
   )
   return (
     <Box key={`turn-row-${row.index}`} flexDirection="column">
-      {flowCells(el, `turn-cells-${row.index}`, table.columns, {
-        marker: (
-          <Text key={`turn-cursor-${row.index}`} color={isCursor ? C.accent : C.text}>
-            {isCursor ? data.icons.cursor : isSelected ? data.icons.marker : ' '}
-          </Text>
-        ),
-        // Text: a native button's own padding does not fit the number's box.
-        number: (
-          <Text key={`turn-num-${row.index}`} color={isSelected ? C.text : C.muted} hover={hover}>
-            {cells?.number ?? `#${row.index + 1}`}
-          </Text>
-        ),
-        prompt: button(`turn-${row.index}`, row.prompt ?? ''),
-        tools: muted(cells?.tools),
-        time: muted(cells?.time),
-        tokens: muted(cells?.tokens),
-        bar: (() => {
-          const ms = data.stats[row.index]?.durationMs
-          return ms === undefined || longest <= 0
-            ? undefined
-            : flowBar(el, `turn-${row.index}`, ms / longest, table.columns.bar ?? 8, ms >= longest)
-        })(),
-      })}
+      {flowCells(
+        el,
+        `turn-cells-${row.index}`,
+        table.columns,
+        {
+          marker: (
+            <Text key={`turn-cursor-${row.index}`} color={isCursor ? C.accent : C.text}>
+              {isCursor ? data.icons.cursor : isSelected ? data.icons.marker : ' '}
+            </Text>
+          ),
+          // Text: a native button's own padding does not fit the number's box.
+          number: (
+            <Text key={`turn-num-${row.index}`} color={isSelected ? C.text : C.muted} hover={hover}>
+              {cells?.number ?? `#${row.index + 1}`}
+            </Text>
+          ),
+          prompt: button(`turn-${row.index}`, row.prompt ?? ''),
+          tools: muted(cells?.tools),
+          time: muted(cells?.time),
+          tokens: muted(cells?.tokens),
+          bar: (() => {
+            const ms = data.stats[row.index]?.durationMs
+            return ms === undefined || longest <= 0
+              ? undefined
+              : flowBar(el, `turn-${row.index}`, ms / longest, table.columns.bar ?? 8, ms >= longest)
+          })(),
+        },
+        isCursor,
+      )}
       {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
     </Box>
   )
