@@ -1312,7 +1312,9 @@ export const register: Register = on => {
       field,
       isFooterOpen,
     ] = await Promise.all([
-      read($, tick),
+      // The desktop app does not follow the ticker: a redraw every half
+      // second dropped its hover; it redraws on the session's own changes.
+      isFlow ? Promise.resolve(0) : read($, tick),
       currentTurns($, true),
       read($, selectedTurn),
       read($, expanded),
@@ -1403,7 +1405,8 @@ export const register: Register = on => {
         icons,
         isFlow,
         now,
-        frame,
+        // A still spinner on the desktop app, which redraws on changes only.
+        frame: isFlow ? 0 : frame,
         agents,
         agentStats: agentStatsNow,
         traces,

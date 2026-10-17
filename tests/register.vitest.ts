@@ -3036,6 +3036,16 @@ describe('the desktop surface', () => {
     viewport: { columns: bodyColumns + 4, rows, isFullscreen: true },
   })
 
+  test("the desktop pane does not follow the ticker: a redraw every half second dropped the app's hover", async () => {
+    const { $, world } = fakeEngine({ messages: main })
+    world.trips.length = 0
+    await run('ui.render', $, desktop(100, 48))
+    expect(world.trips).not.toContain('state.get:tick')
+    world.trips.length = 0
+    await draw($)
+    expect(world.trips).toContain('state.get:tick')
+  })
+
   test('a desktop render draws no private-use glyph, the bar and transcript rows neither', async () => {
     const { $, world } = fakeEngine({ messages: main })
     world.store.set('isCompact', true)
