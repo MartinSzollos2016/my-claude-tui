@@ -73,6 +73,10 @@ export function stripBlocks(text: string, open: string, close: string): string {
 // closes the block it sits in. A text with many blocks names at most
 // MAX_SENDERS and is read only up to MAX_BLOCKS top blocks.
 const HAND_BACK = '<agent-message'
+
+// Whether a prompt text is an agent's hand-back: the one test every path
+// (the turn, its stat, its title) shares, so they always agree.
+export const isHandBack = (text: string): boolean => text.includes(HAND_BACK)
 const HAND_BACK_TAGS = /<agent-message((?:\s+[\w-]+="[^"]{0,200}"){0,8})\s*>|<\/agent-message>/g
 const MAX_SENDERS = 8
 const MAX_BLOCKS = 64
@@ -81,8 +85,7 @@ const MAX_BLOCKS = 64
 // list (` a="1" b="2"`), read attribute by attribute so another attribute's
 // value never stands in for it; '' when it has none.
 function attributeOf(attributes: string, name: string): string {
-  for (const attribute of attributes.matchAll(/\s+([\w-]+)="([^"]*)"/g))
-    if (attribute[1] === name) return attribute[2] ?? ''
+  for (const attribute of attributes.matchAll(/\s+([\w-]+)="([^"]*)"/g)) if (attribute[1] === name) return attribute[2]!
   return ''
 }
 
@@ -120,7 +123,7 @@ export const promptKey = (turn: { prompt: string; senders?: readonly string[] })
 // The key of the turn a prompt text opens, before the turn is in the rows
 // (turn.start, prompt.submit).
 export function statPrompt(text: string): string {
-  return text.includes(HAND_BACK) ? handBackKey(handBackSenders(text)) : sanitizePrompt(sanitizeText(text).trim())
+  return isHandBack(text) ? handBackKey(handBackSenders(text)) : sanitizePrompt(sanitizeText(text).trim())
 }
 
 // Turns XML-ish wrappers the engine injects into a readable one-liner.
@@ -130,7 +133,7 @@ export function sanitizePrompt(text: string): string {
 
 function promptOf(text: string): string {
   // An agent's hand-back: the engine's frame around its report.
-  if (text.includes('<agent-message')) return 'Message from agent'
+  if (isHandBack(text)) return 'Message from agent'
   const command = between(text, '<command-name>', '</command-name>')
   if (command && !command.includes('<')) {
     const args = between(text, '<command-args>', '</command-args>') ?? ''

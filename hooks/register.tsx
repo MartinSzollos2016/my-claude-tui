@@ -34,6 +34,7 @@ import {
   takeTurnIndex,
   toggleId,
   turnIndexAtStart,
+  turnScrollKey,
   turnOfStat,
   turnStatFrom,
   type Memo,
@@ -56,7 +57,7 @@ import { engineDuration } from './model/format'
 import { gitDirFrom, parseGitHead } from './model/git'
 import { groupRuns } from './model/groups'
 import { turnListText, turnText } from './model/reports'
-import { sanitizeText, statPrompt } from './model/sanitize'
+import { isHandBack, sanitizeText, statPrompt } from './model/sanitize'
 import { engineScroll, scrollToRow, stepCursor, type EngineScroll, type ScrollFrame } from './model/scroll'
 import { searchTurns, type TurnMatch } from './model/search'
 import { taskBoard, teamMembers, type TaskEntry } from './model/team'
@@ -449,7 +450,7 @@ async function noteTurnStart($: EngineInterface, turnId: string, text: string): 
     const queue = discardStale(pendingTurns, lastDoneIndex)
     // An agent's hand-back never shows in the rows, so its turn is always the
     // next one, even after another hand-back with the same prompt.
-    const at = text.includes('<agent-message') ? turns.length : turnIndexAtStart(turns, prompt)
+    const at = isHandBack(text) ? turns.length : turnIndexAtStart(turns, prompt)
     const taken = takeTurnIndex(queue, at)
     pendingTurns = taken.queue
     remember(turnIndexes, turnId, { index: taken.index, prompt }, MAX_OPEN_TURNS)
@@ -1058,7 +1059,7 @@ export const register: Register = on => {
     const turn = turns[selected]
     const open = new Set(openIds)
     const agents = new Map(agentList.map(a => [a.id, a.status] as const))
-    const turnKey = turn === undefined ? '' : `${turn.index}\u0000${turn.prompt}`
+    const turnKey = turnScrollKey(turn)
     // The turn list's cursor is read only where it is drawn: a read
     // subscribes the drawing, and the detail view need not follow it.
     const [traces, detailTop, thinkingByTurn, turnCursorAt] = await Promise.all([
