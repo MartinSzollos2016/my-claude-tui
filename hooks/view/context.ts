@@ -194,6 +194,8 @@ export type PaneActions = {
   // Told where the window stands at each drawing: the engine's wheel and
   // scroll keys move the content from there.
   measure: (at: ScrollFrame) => void
+  // The desktop app's frame as drawn: what its arrows move the cursor over.
+  measureFlow?: (at: ScrollFrame) => void
   // Expands or collapses the row under the cursor.
   cursorOpen: () => void
   // Copies the whole text of the row under the cursor.

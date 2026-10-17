@@ -206,7 +206,13 @@ export function stepCursor(
 
 // A move the engine asks of the pane's window: `by` rows, out of a body of
 // `bodyRows` over a tree of `contentRows`.
-export type EngineScroll = { by: number; bodyRows: number; contentRows: number; origin?: { kind: string } }
+export type EngineScroll = {
+  by: number
+  bodyRows: number
+  contentRows: number
+  origin?: { kind: string }
+  pointer?: unknown
+}
 
 // Where the engine's move takes the own scroll: a page key arrives as the
 // whole body (header and footer included), so it moves one page of the own

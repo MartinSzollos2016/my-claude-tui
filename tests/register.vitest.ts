@@ -1786,14 +1786,46 @@ describe('own scroll', () => {
     })
     ;(byKey(tree, 'nav-down')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
     await settle()
-    // The app's native focus ring stays put: the row's highlight marks the cursor.
-    expect(world.focused).toEqual([])
+    // The ring follows the cursor's row, so Enter presses it.
+    expect(world.focused.length).toBeGreaterThan(0)
     const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
     const marked = nodes(drawn).find(
       n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor,
     )
     return String(marked?.props['key'])
   }
+
+  test('on the desktop an arrow moves the cursor, the wheel scrolls the app', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    const nexts: unknown[] = []
+    const scroll = (move: Record<string, unknown>) =>
+      run(
+        'ui.scroll',
+        $,
+        {
+          component: 'Pane',
+          requestId: 'tail',
+          offset: 0,
+          by: 1,
+          bodyRows: 10,
+          contentRows: 300,
+          origin: { kind: 'person' },
+          ...move,
+        },
+        async e => (nexts.push(e), {}),
+      )
+    await scroll({})
+    await settle()
+    expect(nexts).toEqual([])
+    const first = world.focused.at(-1)
+    expect(first).toBeDefined()
+    await scroll({})
+    await settle()
+    expect(world.focused.at(-1)).not.toBe(first)
+    await scroll({ pointer: { column: 3, row: 4 } })
+    expect(nexts).toHaveLength(1)
+  })
 
   test('the cursor on the desktop steps on from where it stands, wherever the app has scrolled', async () => {
     const top = fakeEngine({ messages: long })
@@ -1810,6 +1842,18 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(-8)
     await desktopDown($, world, 12)
     expect(await topOf($)).toBe(-8)
+  })
+
+  test('a view change on the desktop gives the pane the keys again, as a click there takes them away', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    await pressSmall($, 'nav-turns')
+    const terminalOpens = world.openArgs.length
+    await pressSmall($, 'nav-detail')
+    expect(world.openArgs).toHaveLength(terminalOpens)
+    const tree = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    ;(byKey(tree, 'nav-turns')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
+    await settle()
+    expect(world.openArgs.at(-1)).toMatchObject({ focus: true })
   })
 
   test('a press on the desktop never waits on the app to scroll: views, turns and the cursor stay live', async () => {

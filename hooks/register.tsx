@@ -599,6 +599,12 @@ async function ringTo($: EngineInterface, key: string | null): Promise<void> {
   await $.ui.focus({ requestId: PANE, key }).catch(ignore)
 }
 
+// Whether the pane was last drawn for the desktop app, the frames it drew
+// there by view, and the cursor step its arrows take (scrollPane).
+let isFlowShown = false
+const flowFrames: Partial<Record<'detail' | 'turns' | 'team', ScrollFrame>> = {}
+let flowStep: ((delta: number) => void) | undefined
+
 // The desktop app's window is the person's alone: the plugin never asks it to
 // scroll ($.ui.scroll). A press awaiting the app's scroll while the app
 // awaits the press froze the pane (no hook budget runs during a $ call).
@@ -613,11 +619,11 @@ async function moveRowCursor(
   at: ScrollFrame,
 ): Promise<void> {
   const landed = await update($, cursor, cur => stepCursor(ids, cur, delta, at))
-  // On the desktop app the app's window follows the ring (ringTo), not ours.
+  // On the desktop app the app's window follows the ring (ringTo), not ours,
+  // and the ring is not awaited: a press never waits on the app.
   if (at.isFlow !== true) await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
-  // The desktop app draws its native ring around the focused button, a
-  // second cursor beside the highlighted row: there the ring stays put.
   if (at.isFlow !== true) await ringTo($, landed)
+  else ringTo($, landed).catch(ignore)
 }
 
 // Moves the turn list's cursor one turn along the rows the list draws (newest
@@ -631,7 +637,10 @@ async function moveTurnCursor($: EngineInterface, delta: number, at: ScrollFrame
   })
   if (at.isFlow !== true)
     await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
-  if (at.isFlow !== true) await ringTo($, landed === null ? null : `turn-${landed}`)
+  const key = landed === null ? null : `turn-${landed}`
+  // The ring on the cursor's row: Enter presses it. Not awaited on the desktop app.
+  if (at.isFlow !== true) await ringTo($, key)
+  else ringTo($, key).catch(ignore)
 }
 
 // Where each view's window stood at its last drawing; a reload starts over
@@ -649,6 +658,18 @@ async function scrollPane(
   move: EngineScroll,
   next: () => Promise<UiScrollResult>,
 ): Promise<UiScrollResult> {
+  // In the desktop app an arrow (a person's one-row move, no pointer) moves
+  // the cursor, which the app's window follows; the wheel scrolls.
+  if (
+    isFlowShown &&
+    flowStep !== undefined &&
+    move.origin?.kind === 'person' &&
+    move.pointer === undefined &&
+    Math.abs(move.by) === 1
+  ) {
+    flowStep(move.by)
+    return {}
+  }
   // A tree taller than its window is the desktop app's flowing pane: the
   // engine moves its window, as the app asks.
   if (move.contentRows > move.bodyRows) return next()
@@ -693,6 +714,9 @@ async function showView($: EngineInterface, view: 'detail' | 'turns' | 'team'): 
   await seedSearch($)
   await update($, paneView, () => view)
   await scrollToTop($)
+  // A click in the desktop app takes the keys with the button it pressed,
+  // which the new view no longer draws: the pane takes them back, unawaited.
+  if (isFlowShown) openPane($, true).catch(ignore)
 }
 
 // Shows one turn in the detail view; the latest one follows new turns.
@@ -1245,6 +1269,7 @@ export const register: Register = on => {
     // The desktop app (any surface but the terminal) gets the flowing pane;
     // its sizes are its own and never stand in for the terminal's.
     const isFlow = e.surface !== 'terminal'
+    isFlowShown = isFlow
     const terminal =
       isFlow || viewport === undefined
         ? undefined
@@ -1345,6 +1370,13 @@ export const register: Register = on => {
       return trace && 'items' in trace ? trace.items : undefined
     }
     const rowIds = cursorRows(turn?.items ?? [], open, childrenOf)
+    flowStep = isFlow
+      ? delta => {
+          const at = flowFrames[view]
+          if (at !== undefined)
+            (view === 'turns' ? moveTurnCursor($, delta, at) : moveRowCursor($, rowIds, delta, at)).catch(ignore)
+        }
+      : undefined
     if (view === 'detail') drawnRowIds = new Set(rowIds)
     const cursorId = stored !== null && rowIds.includes(stored) ? stored : null
     const cursorText = cursorId === null ? undefined : rowText(turn?.items ?? [], cursorId, childrenOf, icons)
@@ -1431,6 +1463,9 @@ export const register: Register = on => {
         scroll: top => update($, paneScroll, all => ({ ...all, [view]: top })).catch(ignore),
         measure: at => {
           drawnFrames[view] = at
+        },
+        measureFlow: at => {
+          flowFrames[view] = at
         },
         cursorOpen: () =>
           view === 'turns'
