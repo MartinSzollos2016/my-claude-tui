@@ -284,8 +284,8 @@ export function incrementalTurns(): {
   build: (messages: readonly SessionMessage[], idPrefix?: string, starts?: TurnStarts) => Turn[]
   work: { messages: number; tools: number; serialized: number; senders: number }
 } {
-  // One value type per kind prefix of the key ('u' and 'ur' an Opener, 'a' a
-  // string): a kind is read only as the type it was made with.
+  // One value type per kind prefix of the key ('u' and 'ur' an Opener or
+  // undefined, 'a' a string): a kind is read only as the type it was made with.
   type Row = { source: string; value: unknown }
   type Tool = { source: ToolSource; value: ToolPiece; raw: unknown }
   const work = { messages: 0, tools: 0, serialized: 0, senders: 0 }

@@ -66,22 +66,26 @@ export function stripBlocks(text: string, open: string, close: string): string {
 // The agents a hand-back comes from: the `from` of each `<agent-message>`
 // block outside the reminders, once each. Only a block at the top counts:
 // the scan follows the open and end tags, so the blocks a report quotes are
-// inside its own and name no one. It reads tags, not meaning: an unclosed
-// block holds the rest of the text, and a stray end tag closes the block it
-// sits in. A text with many blocks names at most MAX_SENDERS and is read only
-// up to MAX_BLOCKS top blocks.
+// inside its own and name no one. An open tag is a whole tag with quoted
+// attributes, so quoted code ('<agent-message'), a longer tag name or an end
+// tag inside a quoted value opens or closes nothing. It reads tags, not
+// meaning: an unclosed block holds the rest of the text, and a stray end tag
+// closes the block it sits in. A text with many blocks names at most
+// MAX_SENDERS and is read only up to MAX_BLOCKS top blocks.
 const HAND_BACK = '<agent-message'
+const HAND_BACK_TAGS = /<agent-message((?:\s+[\w-]+="[^"]{0,200}"){0,8})\s*>|<\/agent-message>/g
 const MAX_SENDERS = 8
 const MAX_BLOCKS = 64
 
 export function handBackSenders(text: string): string[] {
   const own = stripBlocks(text, '<system-reminder>', '</system-reminder>')
   const senders = new Set<string>()
-  const tags = /<agent-message|<\/agent-message>/g
+  const tags = new RegExp(HAND_BACK_TAGS)
   let depth = 0
   let blocks = 0
   for (let tag = tags.exec(own); tag !== null; tag = tags.exec(own)) {
-    if (tag[0] !== HAND_BACK) {
+    const attributes = tag[1]
+    if (attributes === undefined) {
       depth = Math.max(0, depth - 1)
       continue
     }
@@ -89,7 +93,7 @@ export function handBackSenders(text: string): string[] {
     if (depth > 1) continue
     if (senders.size >= MAX_SENDERS || blocks >= MAX_BLOCKS) break
     blocks += 1
-    const from = /^<agent-message\s+from="([^"]{0,200})"/.exec(own.slice(tag.index, tag.index + 240))?.[1] ?? ''
+    const from = /(?:^|\s)from="([^"]*)"/.exec(attributes)?.[1] ?? ''
     const clean = sanitizeText(from).trim()
     if (clean !== '') senders.add(clean)
   }
