@@ -91,11 +91,12 @@ Claude Code paints the pane's frame grey and a plugin cannot change it.
   from the prompt hook. It keeps its own UI state (expanded rows, timings) in the session. In
   Claude Code's plugin store, a JSON file under your Claude Code configuration directory, it keeps
   six preferences (pane width, compact transcript, icon set, status line, notifications, stats).
-  While `/tail-stats` is on, which is the default, the store also holds each finished turn's time,
-  tokens and model, so the turn list shows them when you come back to a session. They are keyed by
-  the session id (the transcript file's name) and a short non-cryptographic hash of the turn's
-  prompt; the prompt itself is never stored. It keeps up to 200 turns per session, 20 sessions and
-  30 days.
+  While `/tail-stats` is on, which is the default, the store also holds each finished turn's
+  duration, end time, position in the session, tokens and model, so the turn list shows them when
+  you come back to a session. They are keyed by the session id (the transcript file's name) and a
+  short non-cryptographic hash of the turn's prompt, from which a very short prompt such as "yes"
+  could be guessed; the prompt itself is never stored. It keeps up to 200 turns per session, 20
+  sessions and 30 days.
 - It runs no programs. The branch in the info bar comes from the repository's `.git/HEAD` (through
   a worktree's `.git` file when there is one).
 - Nothing leaves the machine: the plugin makes no network requests and has no telemetry.
