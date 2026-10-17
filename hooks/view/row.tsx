@@ -287,7 +287,7 @@ export function renderLine(
 // trace's rows are cards inside their agent's card. No previews.
 function renderFlowLine(el: El, line: Line, data: Ctx, below?: (shown: string) => RenderChildren) {
   const { Box, Button, Text } = el
-  const { id, canOpen, mark, duration, model } = line
+  const { id, canOpen, isOpen, mark, duration, model } = line
   const title = line.label(Math.max(20, data.columns))
   const under = below?.(title)
   const isRunning = mark?.color === C.ongoing && mark.glyph !== data.icons.done
@@ -304,7 +304,15 @@ function renderFlowLine(el: El, line: Line, data: Ctx, below?: (shown: string) =
   const failed = line.badge === undefined ? '' : line.badge.replace(data.icons.error, '')
   const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
   return (
-    <Box key={`item-${id}`} {...CARD_FRAME} borderStyle={data.icons.border} flexDirection="column">
+    <Box
+      key={`item-${id}`}
+      flexDirection="column"
+      // As the app's background tasks: a plain row, lit on hover; an open one
+      // is a framed group holding what it shows and its steps.
+      {...(isOpen
+        ? { ...CARD_FRAME, borderStyle: data.icons.border }
+        : { paddingX: 1, hover: { backgroundColor: C.rowHover } })}
+    >
       <Box flexDirection="row" columnGap={1}>
         <Box flexGrow={1} flexShrink={1} overflow="hidden">
           {canOpen ? (
@@ -316,7 +324,7 @@ function renderFlowLine(el: El, line: Line, data: Ctx, below?: (shown: string) =
           )}
         </Box>
         <Text key={`status-${id}`} color={state.color}>
-          {[state.text, canOpen ? line.chevron : ''].filter(part => part !== '').join(' ')}
+          {[state.text, canOpen ? (isOpen ? '⌄' : '›') : ''].filter(part => part !== '').join(' ')}
         </Text>
       </Box>
       {(model !== undefined || failed !== '') && (

@@ -526,8 +526,16 @@ describe('detail pane', () => {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
       if (surface === 'desktop') expectFlowShape(await ui.drawn())
       await ui.press({ key: 'nav-expand' })
-      // The innermost frame with the text: the desktop app's cards frame it too.
-      const frames = framesOf(await ui.drawn()).reverse()
+      if (surface === 'desktop') {
+        // As the app's background tasks: the open rows are framed groups, the
+        // command and its output code blocks with no frame of their own.
+        const groups = framesOf(await ui.drawn())
+        expect(groups.find(f => f.text.includes('go test ./...'))?.text).toContain('PASS')
+        expect(groups.some(f => f.color === 'permission' || f.color === 'success')).toBe(false)
+        await ui.unmount()
+        continue
+      }
+      const frames = framesOf(await ui.drawn())
       const command = frames.find(f => f.text.includes('go test ./...'))
       const output = frames.find(f => f.text.includes('PASS'))
       const error = frames.find(f => f.text.includes('exit status 1'))

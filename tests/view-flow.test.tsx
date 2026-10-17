@@ -194,7 +194,7 @@ describe('the desktop flow pane', () => {
     expect(text(card)).toMatch(/opus.*1\.5k tokens.*62% context/)
   })
 
-  test('the rows are cards under Running and Finished, a trace keeps its rows inside its card', () => {
+  test('the rows sit under Running and Finished, an open row is a group holding its steps', () => {
     const tree = flow({
       isWorking: true,
       isLatest: true,
@@ -219,11 +219,12 @@ describe('the desktop flow pane', () => {
     })
     expect(text(byKey(tree, 'flow-section-running'))).toBe('Running 2')
     expect(text(byKey(tree, 'flow-section-finished'))).toBe('Finished 3')
-    for (const id of ['b1', 'e1', 'a1', 'p1'])
-      expect(typeof byKey(tree, `item-${id}`)?.props['borderStyle'], id).toBe('string')
-    // A trace's rows are cards inside their agent's card, as a task's steps are.
+    // As the app's background tasks: a collapsed row is a plain row, an open
+    // one is a framed group holding its steps as plain rows.
+    for (const id of ['b1', 'e1', 'p1']) expect(byKey(tree, `item-${id}`)?.props['borderStyle'], id).toBeUndefined()
+    expect(typeof byKey(tree, 'item-a1')?.props['borderStyle']).toBe('string')
     const inner = byKey(tree, 'item-ag/g')
-    expect(typeof inner?.props['borderStyle']).toBe('string')
+    expect(inner?.props['borderStyle']).toBeUndefined()
     expect(nodes(byKey(tree, 'item-a1'))).toContain(inner)
     expect(nodes(tree).some(n => /^flow-bar/.test(String(n.props['key'])))).toBe(false)
   })
@@ -243,6 +244,17 @@ describe('the desktop flow pane', () => {
         const hidden = nodes(byKey(tree, 'footer-hidden')).map(n => n.props['key'])
         for (const key of ['nav-down', 'nav-up', 'nav-keys']) expect(hidden, key).toContain(key)
       }
+  })
+
+  test("an open row's command and output are code blocks, as the app shows a task's command", () => {
+    const tree = flow({ expanded: new Set(['b1']) })
+    const frames = nodes(byKey(tree, 'item-b1')).filter(n => /^frame-/.test(String(n.props['key'])))
+    expect(frames.length).toBeGreaterThan(0)
+    for (const frame of frames) expect(frame.props['borderStyle']).toBeUndefined()
+    const code = nodes(byKey(tree, 'item-b1'))
+      .filter(n => n.type === 'Code')
+      .map(n => String(n.props['source']))
+    expect(code.some(c => c.includes('go test ./...'))).toBe(true)
   })
 
   test('a very long turn stays under the text budget and says what it left out', () => {

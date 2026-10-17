@@ -122,6 +122,30 @@ export function renderFrame(
     ...(body.format === undefined ? {} : { format: body.format }),
     ...(isUnicodeCut(data.icons) || metaText === '' ? {} : { headRows: metaRows(title, metaText, inner) }),
   })
+  const copy = (
+    <Button
+      key={`copy:${blockId}`}
+      plain
+      dimColor
+      hover={buttonHoverOf(data, scopeOf('btn:copy:', blockId))}
+      label="copy"
+      onPress={press => act.copy(copyText, press.surface)}
+    />
+  )
+  // In the desktop app, as a background task shows its command: a muted
+  // title over a code block, no frame.
+  if (data.isFlow === true)
+    return (
+      <Box key={`frame-${blockId}`} flexDirection="column" marginTop={1}>
+        <Box flexDirection="row" columnGap={1}>
+          <Box flexGrow={1} flexShrink={1} overflow="hidden">
+            <Text color={C.muted} wrap="truncate-end">{`${title}${metaText}`}</Text>
+          </Box>
+          {copy}
+        </Box>
+        {body.node}
+      </Box>
+    )
   return (
     <Box
       key={`frame-${blockId}`}
@@ -251,6 +275,8 @@ export function renderLong(el: El, id: string, raw: string, spec: LongSpec, data
             {...(spec.startLine === undefined ? {} : { startLine: spec.startLine + (starts[i] ?? 0) })}
             source={piece}
           />
+        ) : data.isFlow === true ? (
+          <Code source={piece} />
         ) : (
           <Text color={spec.isError ? C.error : C.muted}>{piece}</Text>
         ),
