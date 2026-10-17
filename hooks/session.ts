@@ -68,11 +68,12 @@ export function toggleId(ids: readonly string[], id: string, max: number): strin
   return ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id].slice(-max)
 }
 
-// Whether `stat` was recorded with `turn`'s prompt key. A stat kept from
-// before hand-backs were matched by their senders (no isKeyed) holds the old
-// fixed prompt, which any hand-back turn takes.
+// The prompt every hand-back had before they were matched by their senders.
 const LEGACY_HAND_BACK = 'Message from agent'
 
+// Whether `stat` was recorded with `turn`'s prompt key. A stat kept from an
+// older version (no isKeyed) holds the old fixed prompt, which any hand-back
+// turn takes.
 const hasPromptOf = (stat: TurnStat, turn: Turn): boolean =>
   stat.prompt === promptKey(turn) ||
   (stat.isKeyed !== true && turn.senders !== undefined && stat.prompt === LEGACY_HAND_BACK)

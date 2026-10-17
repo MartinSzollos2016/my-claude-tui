@@ -527,6 +527,9 @@ describe('hand-back senders', () => {
     // A tab would draw wider than its width is counted.
     expect(labels[3]).not.toContain('\t')
     expect(labels[3]).toMatch(/^Explore · a +b$/)
+    // An input that is not an object (the engine types it as one) still gets a label.
+    const odd = { ...(buildTurns(rows)[0]!.items[0] as ToolItem), input: 'raw' as unknown as Record<string, unknown> }
+    expect(agentLabel(odd)).toBe('Subagent')
   })
 
   const handBackSession = (from: string) => {
@@ -573,19 +576,12 @@ describe('hand-back senders', () => {
     expect(buildTurns(later, '', starts)[1]!.prompt).toBe('Message from Explore · Find callers')
   })
 
-  test('an unchanged rebuild reads no hand-back again', () => {
-    const { rows, starts } = handBackSession('a1')
-    const turns = incrementalTurns()
-    turns.build(rows, '', starts)
-    expect(turns.work.senders).toBe(1)
-    turns.build(rows, '', starts)
-    expect(turns.work.senders).toBe(1)
-  })
-
   test('naming hand-backs adds no work to an unchanged rebuild', () => {
     const { rows, starts } = handBackSession('a1')
     const turns = incrementalTurns()
     const first = turns.build(rows, '', starts)
+    // The hand-back's senders are read once, with its prompt.
+    expect(turns.work.senders).toBe(1)
     const before = { ...turns.work }
     const second = turns.build(rows, '', starts)
     expect(turns.work).toEqual(before)
