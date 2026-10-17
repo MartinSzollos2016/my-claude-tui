@@ -34,8 +34,8 @@ import {
   takeTurnIndex,
   toggleId,
   turnIndexAtStart,
-  turnScrollKey,
   turnOfStat,
+  turnScrollKey,
   turnStatFrom,
   type Memo,
 } from './session'
@@ -450,7 +450,7 @@ async function noteTurnStart($: EngineInterface, turnId: string, text: string): 
     const queue = discardStale(pendingTurns, lastDoneIndex)
     // An agent's hand-back never shows in the rows, so its turn is always the
     // next one, even after another hand-back with the same prompt.
-    const at = isHandBack(text) ? turns.length : turnIndexAtStart(turns, prompt)
+    const at = isHandBack(sanitizeText(text)) ? turns.length : turnIndexAtStart(turns, prompt)
     const taken = takeTurnIndex(queue, at)
     pendingTurns = taken.queue
     remember(turnIndexes, turnId, { index: taken.index, prompt }, MAX_OPEN_TURNS)
@@ -635,8 +635,8 @@ async function scrollPane($: EngineInterface, move: EngineScroll): Promise<UiScr
   return {}
 }
 
-// The turn the detail view's scroll belongs to, by its index and prompt, as
-// last drawn: the scroll starts over when the shown turn changes for any
+// The turn the detail view's scroll belongs to, by its index and prompt key
+// (turnScrollKey), as last drawn: the scroll starts over when the shown turn changes for any
 // reason, a new latest turn no prompt of this session started included.
 let scrolledTurn: string | undefined
 
