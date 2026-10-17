@@ -233,6 +233,16 @@ describe('stepCursor', () => {
     expect(stepCursor(ids, 'a', -1, frame)).toBe('e')
   })
 
+  test("in the desktop app's window the cursor always steps on from where it stands", () => {
+    // The app's window counts the cards above the content and real rows, not
+    // these estimates: a cursor that looks out of view is not, so it moves on.
+    const flow = { ...frame, isFlow: true as const }
+    expect(stepCursor(ids, 'a', 1, flow)).toBe('b')
+    expect(stepCursor(ids, 'f', -1, flow)).toBe('e')
+    expect(stepCursor(ids, 'c', 1, { ...flow, scrollTop: 20 })).toBe('d')
+    expect(stepCursor(ids, null, 1, flow)).toBe('a')
+  })
+
   test('a cursor on the list moves one row as moveCursor does', () => {
     expect(stepCursor(ids, 'd', 1, frame)).toBe('e')
     expect(stepCursor(ids, 'a', -1, { ...frame, scrollTop: 0 })).toBe('a')

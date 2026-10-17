@@ -126,9 +126,6 @@ function rowsSoFar(data: Ctx): number {
   return counted.rows
 }
 
-// The pixels a row's bar takes in the desktop app.
-const FLOW_BAR_PX = 40
-
 // The cells the time of a timed row takes, right-aligned.
 const DURATION_CELLS = 7
 
@@ -322,8 +319,9 @@ export function renderLine(
                 <Box key={`bar-${id}`} width={BAR_CELLS + 1} paddingLeft={1} alignItems="center">
                   {flowBar(
                     el,
+                    id,
                     data.maxMs > 0 ? duration / data.maxMs : 0,
-                    FLOW_BAR_PX,
+                    BAR_CELLS,
                     duration > 0 && duration >= data.maxMs,
                   )}
                 </Box>

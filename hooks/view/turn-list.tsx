@@ -193,9 +193,6 @@ export const searchFieldKey = (gen: number) => (gen === 0 ? 'turn-search' : `tur
 
 const NO_MATCH_HINT = 'Clear the search or try fewer words.'
 
-// The pixels a turn's bar takes in the desktop app's table.
-const FLOW_BAR_PX = 48
-
 type FlowCells = {
   marker: RenderChildren
   number: RenderChildren
@@ -296,7 +293,9 @@ function renderFlowRow(
         tokens: muted(cells?.tokens),
         bar: (() => {
           const ms = data.stats[row.index]?.durationMs
-          return ms === undefined || longest <= 0 ? undefined : flowBar(el, ms / longest, FLOW_BAR_PX, ms >= longest)
+          return ms === undefined || longest <= 0
+            ? undefined
+            : flowBar(el, `turn-${row.index}`, ms / longest, table.columns.bar ?? 8, ms >= longest)
         })(),
       })}
       {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}

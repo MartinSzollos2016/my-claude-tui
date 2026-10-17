@@ -117,9 +117,6 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
   })
 }
 
-// The pixels the context bar takes in the desktop app's header.
-const CONTEXT_BAR_PX = 60
-
 // The fewest content rows an inline pane keeps before it goes compact.
 const MIN_INLINE_WINDOW = 4
 
@@ -318,7 +315,7 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
           data.contextPercent !== undefined &&
           (data.isFlow === true ? (
             <Box flexDirection="row" columnGap={1} alignItems="center">
-              {flowBar(el, data.contextPercent / 100, CONTEXT_BAR_PX)}
+              {flowBar(el, 'context', data.contextPercent / 100, METER_CELLS)}
               <Text color={contextColor(data.contextPercent)}>{`${Math.round(data.contextPercent)}%`}</Text>
             </Box>
           ) : (

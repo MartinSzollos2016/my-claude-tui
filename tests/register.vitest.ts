@@ -1772,10 +1772,12 @@ describe('own scroll', () => {
     return world.focused.at(-1)
   }
 
-  test("the cursor on the desktop starts in the app's window", async () => {
+  test('the cursor on the desktop steps on from where it stands, wherever the app has scrolled', async () => {
     const top = fakeEngine({ messages: long })
     const middle = fakeEngine({ messages: long })
-    expect(await desktopDown(middle.$, middle.world, 12)).not.toBe(await desktopDown(top.$, top.world, 0))
+    const first = await desktopDown(top.$, top.world, 0)
+    expect(await desktopDown(middle.$, middle.world, 12)).toBe(first)
+    expect(await desktopDown(middle.$, middle.world, 12)).not.toBe(first)
   })
 
   test("the cursor on the desktop leaves the terminal's own scroll alone", async () => {

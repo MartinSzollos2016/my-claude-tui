@@ -184,6 +184,10 @@ export function stepCursor(
   delta: number,
   frame: ScrollFrame,
 ): string | null {
+  // The desktop app's window counts its cards and real rows, not these
+  // estimates: the cursor steps on from where it stands, and the app brings
+  // the focused row into view.
+  if (frame.isFlow === true) return moveCursor(ids, current !== null && ids.includes(current) ? current : null, delta)
   const margin = frame.windowRows > SCROLL_SLACK ? 1 : 0
   const first = frame.scrollTop + margin
   const last = frame.scrollTop + frame.windowRows - 1 - margin

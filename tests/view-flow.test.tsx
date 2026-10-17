@@ -51,7 +51,9 @@ describe('the desktop flow pane', () => {
         expect(byKey(tree, key), key).toBeUndefined()
       for (const node of nodes(tree)) {
         expect(Number(node.props['marginTop'] ?? 0)).toBeGreaterThanOrEqual(0)
-        if (node.type === 'Box' && node.props['position'] !== 'absolute') {
+        // A bar is a one-row drawing (flow-bar-*), not a height in cells.
+        const isBar = String(node.props['key'] ?? '').startsWith('flow-bar')
+        if (node.type === 'Box' && node.props['position'] !== 'absolute' && !isBar) {
           expect(node.props['width'] === base.columns, 'a box as wide as the pane').toBe(false)
           expect(typeof node.props['height'], 'a box of fixed height').not.toBe('number')
         }
@@ -171,21 +173,44 @@ describe('the desktop flow pane', () => {
     }
   })
 
-  test('bars are thin drawings that keep to their width, never block glyphs', () => {
+  test('bars are boxes of their own width filled in theme colours, never glyphs or images', () => {
     const stats = [{ key: 'k', turnIndex: 0, durationMs: 4_000, endedAt: 1, inputTokens: 9, outputTokens: 1 }]
     const turns = flow({ view: 'turns', stats, columns: 100 })
     const detail = flow({ contextPercent: 62, isLatest: true, columns: 100 })
     for (const tree of [turns, detail]) {
-      const svgs = nodes(tree).filter(n => n.type === 'Svg')
-      expect(svgs.length).toBeGreaterThan(0)
-      for (const svg of svgs) {
-        expect(typeof svg.props['width']).toBe('number')
-        expect(String(svg.props['source'])).toMatch(/^<svg /)
-        expect(typeof svg.props['alt']).toBe('string')
+      expect(nodes(tree).filter(n => n.type === 'Svg')).toEqual([])
+      const bars = nodes(tree).filter(n => /^flow-bar-(?!fill-)/.test(String(n.props['key'] ?? '')))
+      expect(bars.length).toBeGreaterThan(0)
+      for (const bar of bars) {
+        expect(typeof bar.props['width']).toBe('number')
+        expect(bar.props['overflow']).toBe('hidden')
+        const fill = nodes(bar).find(n => n !== bar && n.type === 'Box')
+        expect(typeof fill?.props['backgroundColor']).toBe('string')
+        expect(Number(fill?.props['width'])).toBeLessThanOrEqual(Number(bar.props['width']))
       }
-      const bar = new RegExp(`[${ICON_SETS.unicode.bar.join('')}▰▱]`)
-      for (const s of strings(tree)) expect(bar.test(s), s).toBe(false)
+      const glyphs = new RegExp(`[${ICON_SETS.unicode.bar.join('')}▰▱]`)
+      for (const s of strings(tree)) expect(glyphs.test(s), s).toBe(false)
     }
+  })
+
+  test('a detail of many timed rows, each with its bar, stays under the text budget', () => {
+    const rows = 400
+    const turns = buildTurns([
+      { role: 'user', text: 'go', toolUses: [] },
+      {
+        role: 'assistant',
+        text: '',
+        toolUses: Array.from({ length: rows }, (_, i) => ({
+          tool_use_id: `e${i}`,
+          tool: 'Edit',
+          input: { file_path: `/f${i}.ts`, old_string: 'a', new_string: 'b' },
+          text: 'ok',
+        })),
+      },
+    ])
+    const timings = Object.fromEntries(Array.from({ length: rows }, (_, i) => [`e${i}`, { start: 0, end: 1_000 + i }]))
+    const tree = flow({ turns, timings, stats: [undefined], columns: 100 })
+    expect(strings(tree).join('').length).toBeLessThan(PANE_TEXT_BUDGET + 5_000)
   })
 
   test('a very long turn stays under the text budget and says what it left out', () => {
