@@ -26,7 +26,8 @@ import {
 } from './context'
 import { focusChord, footerRowsOf, renderFlowFooter, renderFooter, STATUS_INSET, type FooterMode } from './footer'
 import { nameWidthOf, renderRows } from './items'
-import { cutter, endWrap, HEADER_METER_COLUMNS, METER_CELLS, scopeOf, type El } from './kit'
+import { cutter, endWrap, FLOW_CARD, HEADER_METER_COLUMNS, METER_CELLS, scopeOf, type El } from './kit'
+import { flowBar } from './bars'
 import { renderThinking } from './row'
 import { renderTeam } from './team'
 import { renderTurnList } from './turn-list'
@@ -115,6 +116,9 @@ export function renderPane(el: El, input: PaneData, act: PaneActions) {
     ),
   })
 }
+
+// The pixels the context bar takes in the desktop app's header.
+const CONTEXT_BAR_PX = 60
 
 // The fewest content rows an inline pane keeps before it goes compact.
 const MIN_INLINE_WINDOW = 4
@@ -209,13 +213,17 @@ function flowBody(el: El, data: Ctx, act: PaneActions, parts: PaneParts) {
   }
   return (
     <Box flexDirection="column" backgroundColor={C.paneBackground}>
-      {parts.header.map((part, i) => (
-        <Box key={`pane-header-${i}`} flexDirection="column" flexShrink={0}>
-          {part.node}
+      {parts.header.length > 0 && (
+        <Box key="pane-header" {...FLOW_CARD} borderStyle={data.icons.border} rowGap={1}>
+          {parts.header.map((part, i) => (
+            <Box key={`pane-header-${i}`} flexDirection="column" flexShrink={0}>
+              {part.node}
+            </Box>
+          ))}
         </Box>
-      ))}
+      )}
       {renderFlowFooter(el, data, act, frame)}
-      <Box key="pane-content" flexDirection="column">
+      <Box key="pane-content" {...FLOW_CARD} borderStyle={data.icons.border}>
         {parts.content}
       </Box>
     </Box>
@@ -306,11 +314,18 @@ function renderHeader(el: El, turn: Turn, data: Ctx) {
         {stat?.outputTokens !== undefined && (
           <Text color={C.muted}>{`${icons.token} ${formatTokens((stat.inputTokens ?? 0) + stat.outputTokens)}`}</Text>
         )}
-        {data.isLatest && data.contextPercent !== undefined && (
-          <Text color={contextColor(data.contextPercent)}>
-            {`${data.columns >= HEADER_METER_COLUMNS ? `${contextMeter(data.contextPercent, METER_CELLS, icons)} ` : ''}${Math.round(data.contextPercent)}%`}
-          </Text>
-        )}
+        {data.isLatest &&
+          data.contextPercent !== undefined &&
+          (data.isFlow === true ? (
+            <Box flexDirection="row" columnGap={1} alignItems="center">
+              {flowBar(el, data.contextPercent / 100, CONTEXT_BAR_PX)}
+              <Text color={contextColor(data.contextPercent)}>{`${Math.round(data.contextPercent)}%`}</Text>
+            </Box>
+          ) : (
+            <Text color={contextColor(data.contextPercent)}>
+              {`${data.columns >= HEADER_METER_COLUMNS ? `${contextMeter(data.contextPercent, METER_CELLS, icons)} ` : ''}${Math.round(data.contextPercent)}%`}
+            </Text>
+          ))}
         {stat && <Text color={C.muted}>{`${icons.clock} ${formatDuration(stat.durationMs)}`}</Text>}
         {data.isLatest && data.isWorking && (
           <Text color={C.ongoing}>{icons.spinner[data.frame % icons.spinner.length]}</Text>

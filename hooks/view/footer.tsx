@@ -6,7 +6,7 @@ import { footerLayout, footerPads, type FooterLayout } from '../model/footer'
 import { clampScroll, pageScroll, type ScrollFrame } from '../model/scroll'
 import { displayWidth } from '../model/width'
 import type { Ctx, PaneActions } from './context'
-import { buttonHoverOf, cutter, type El } from './kit'
+import { buttonHoverOf, cutter, FLOW_CARD, type El } from './kit'
 
 // One key of the footer: always a button with its hotkey; `isOn` says whether
 // a press acts. Without labels only the key and glyph remain.
@@ -183,15 +183,7 @@ export function renderFlowFooter(el: El, data: Ctx, act: PaneActions, frame: Scr
   const shown = [...wanted.filter(k => !isPage(k)), help]
   const status = footerStatus(data, Infinity, frame)
   return (
-    <Box
-      key="footer"
-      flexDirection="column"
-      borderStyle={data.icons.border}
-      borderColor={C.muted}
-      borderDimColor
-      paddingX={1}
-      backgroundColor={C.paneBackground}
-    >
+    <Box key="footer" {...FLOW_CARD} borderStyle={data.icons.border} backgroundColor={C.paneBackground}>
       <Box key="footer-keys" flexDirection="row" flexWrap="wrap" columnGap={KEY_GAP}>
         {shown.map(k => renderFooterKey(el, data, k, footerLabel(k, true), 0))}
       </Box>

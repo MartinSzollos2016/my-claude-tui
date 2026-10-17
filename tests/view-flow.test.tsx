@@ -159,6 +159,35 @@ describe('the desktop flow pane', () => {
     expect(text(byKey(tree, 'turn-num-1'))).toBe('#2')
   })
 
+  test('the header, the keys and the content are cards: rounded frames apart from each other', () => {
+    for (const tree of [flow(), flow({ view: 'turns', stats: [undefined, undefined] }), flow(team)]) {
+      const root = tree as Node
+      const cards = ([root.props['children']].flat(Infinity) as Node[]).filter(n => n?.type === 'Box')
+      expect(cards.length).toBeGreaterThanOrEqual(3)
+      for (const card of cards) {
+        expect(card.props['borderStyle']).toBe(ICON_SETS.unicode.border)
+        expect(card.props['marginBottom']).toBe(1)
+      }
+    }
+  })
+
+  test('bars are thin drawings that keep to their width, never block glyphs', () => {
+    const stats = [{ key: 'k', turnIndex: 0, durationMs: 4_000, endedAt: 1, inputTokens: 9, outputTokens: 1 }]
+    const turns = flow({ view: 'turns', stats, columns: 100 })
+    const detail = flow({ contextPercent: 62, isLatest: true, columns: 100 })
+    for (const tree of [turns, detail]) {
+      const svgs = nodes(tree).filter(n => n.type === 'Svg')
+      expect(svgs.length).toBeGreaterThan(0)
+      for (const svg of svgs) {
+        expect(typeof svg.props['width']).toBe('number')
+        expect(String(svg.props['source'])).toMatch(/^<svg /)
+        expect(typeof svg.props['alt']).toBe('string')
+      }
+      const bar = new RegExp(`[${ICON_SETS.unicode.bar.join('')}▰▱]`)
+      for (const s of strings(tree)) expect(bar.test(s), s).toBe(false)
+    }
+  })
+
   test('a very long turn stays under the text budget and says what it left out', () => {
     // Edits do not fold into one row: each is a row of its own.
     const long = buildTurns([

@@ -2,6 +2,7 @@
 // (chevron, status, icon, label, model, duration, bar), with its hover card.
 import type { RenderChildren } from 'claude-code'
 import { hoverCard } from '../model/card'
+import { flowBar } from './bars'
 import { formatDuration, shortModel, treePrefix } from '../model/format'
 import { blockRows } from '../model/scroll'
 import type { Item, Turn } from '../model/types'
@@ -124,6 +125,9 @@ function rowsSoFar(data: Ctx): number {
   for (; counted.blocks < data.layout.length; counted.blocks++) counted.rows += blockRows(data.layout[counted.blocks]!)
   return counted.rows
 }
+
+// The pixels a row's bar takes in the desktop app.
+const FLOW_BAR_PX = 40
 
 // The cells the time of a timed row takes, right-aligned.
 const DURATION_CELLS = 7
@@ -315,14 +319,13 @@ export function renderLine(
             {hasBar &&
               duration !== undefined &&
               (isFlow ? (
-                <Box width={BAR_CELLS + 1} paddingLeft={1}>
-                  <Text
-                    key={`bar-${id}`}
-                    color={duration > 0 && duration >= data.maxMs ? C.accent : C.muted}
-                    hover={hover}
-                  >
-                    {durationBar(duration, data.maxMs, BAR_CELLS, icons)}
-                  </Text>
+                <Box key={`bar-${id}`} width={BAR_CELLS + 1} paddingLeft={1} alignItems="center">
+                  {flowBar(
+                    el,
+                    data.maxMs > 0 ? duration / data.maxMs : 0,
+                    FLOW_BAR_PX,
+                    duration > 0 && duration >= data.maxMs,
+                  )}
                 </Box>
               ) : (
                 <Text

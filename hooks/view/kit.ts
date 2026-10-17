@@ -2,7 +2,7 @@
 // styles, cutting by icon set, meter sizes, and the glyph of a call's state.
 import { ICON_SETS, type Icons } from '../icons'
 import { C, type ThemeKey } from '../theme'
-import type { BoxProps, ElementConstructor, Elements, TextProps } from 'claude-code'
+import type { BoxProps, ElementConstructor, Elements, SvgProps, TextProps } from 'claude-code'
 import { toolCategory } from '../model/summaries'
 import { isSubagent, type ItemStatus } from '../model/turns'
 import type { Item } from '../model/types'
@@ -22,6 +22,8 @@ export type El = Pick<Elements['terminal'], 'Button' | 'Code'> & {
   Text: ElementConstructor<ThemedTextProps>
   // Optional: the mobile surface draws no field.
   Input?: Elements['terminal']['Input']
+  // Only the remote surfaces (the desktop app) draw images.
+  Svg?: ElementConstructor<SvgProps>
 }
 
 // A hovered button reads at full contrast: its idle label is the theme grey.
@@ -65,6 +67,16 @@ export const BAR_METER_COLUMNS = 100
 export const BAR_CELLS = 8
 
 export const BAR_MIN_COLUMNS = 70
+
+// A card of the desktop app's pane, as the app's own panels draw theirs: a
+// dim frame (the icon set's border), a cell of padding, a row of room under it.
+export const FLOW_CARD = {
+  flexDirection: 'column',
+  borderColor: C.muted,
+  borderDimColor: true,
+  paddingX: 1,
+  marginBottom: 1,
+} as const
 
 export const HEADER_METER_COLUMNS = 80
 

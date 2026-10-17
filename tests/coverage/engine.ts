@@ -27,6 +27,7 @@ const el = {
   Markdown: make('Markdown'),
   Code: make('Code'),
   Input: make('Input'),
+  Svg: make('Svg'),
 }
 
 export const PANE_EVENT = {

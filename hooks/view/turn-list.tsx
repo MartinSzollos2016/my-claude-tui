@@ -17,6 +17,7 @@ import {
   type PaneActions,
   type PaneParts,
 } from './context'
+import { flowBar } from './bars'
 import { buttonHoverOf, cutter, endWrap, hoverText, isUnicodeCut, type El } from './kit'
 
 // Every turn of the session, newest first: one button per turn that opens
@@ -33,6 +34,8 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
   const isFiltered = query.trim() !== ''
   const snippets = new Map((data.matches ?? []).map(match => [match.index, match.snippet] as const))
   const table = turnTable(data.turns, data.stats, data.columns, data.icons)
+  // The longest turn: what the desktop app's bars are relative to.
+  const longest = data.isFlow === true ? Math.max(0, ...data.stats.map(stat => stat?.durationMs ?? 0)) : 0
   const rows = table.rows
     .filter(row => !isFiltered || snippets.has(row.index))
     .map(row => ({
@@ -144,7 +147,7 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
           </Box>
         )}
         {data.isFlow === true
-          ? shown.map(row => renderFlowRow(el, row, table, data, act, query))
+          ? shown.map(row => renderFlowRow(el, row, table, data, act, query, longest))
           : shown.map(row => {
               // The cursor takes the row's first cell, in the accent.
               const isCursor = row.index === data.turnCursor
@@ -189,6 +192,9 @@ export const turnRowId = (index: number) => `turn:${index}`
 export const searchFieldKey = (gen: number) => (gen === 0 ? 'turn-search' : `turn-search-${gen}`)
 
 const NO_MATCH_HINT = 'Clear the search or try fewer words.'
+
+// The pixels a turn's bar takes in the desktop app's table.
+const FLOW_BAR_PX = 48
 
 type FlowCells = {
   marker: RenderChildren
@@ -248,6 +254,7 @@ function renderFlowRow(
   data: Ctx,
   act: PaneActions,
   query: string,
+  longest: number,
 ) {
   const { Box, Button, Text } = el
   const { cells } = row
@@ -287,7 +294,10 @@ function renderFlowRow(
         tools: muted(cells?.tools),
         time: muted(cells?.time),
         tokens: muted(cells?.tokens),
-        bar: muted(cells?.bar),
+        bar: (() => {
+          const ms = data.stats[row.index]?.durationMs
+          return ms === undefined || longest <= 0 ? undefined : flowBar(el, ms / longest, FLOW_BAR_PX, ms >= longest)
+        })(),
       })}
       {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
     </Box>

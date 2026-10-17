@@ -526,7 +526,8 @@ describe('detail pane', () => {
       const ui = await $.ui.mount({ plugin: 'tail-view', surface, ...PANE })
       if (surface === 'desktop') expectFlowShape(await ui.drawn())
       await ui.press({ key: 'nav-expand' })
-      const frames = framesOf(await ui.drawn())
+      // The innermost frame with the text: the desktop app's cards frame it too.
+      const frames = framesOf(await ui.drawn()).reverse()
       const command = frames.find(f => f.text.includes('go test ./...'))
       const output = frames.find(f => f.text.includes('PASS'))
       const error = frames.find(f => f.text.includes('exit status 1'))
