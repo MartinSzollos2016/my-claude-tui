@@ -2739,4 +2739,67 @@ describe('turn stats kept between sessions', () => {
     await settle()
     expect(storedStats(world, 's1')).toEqual([promptDigest('old'), promptDigest('new')])
   })
+
+  test('a draw after /clear, before the engine reports the new id, files nothing under the old one', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'go', 3_000)
+    await run('session.end', $, { reason: 'clear', sessionId: 's1', resume: { id: 's1' } }, async () => ({}))
+    await draw($)
+    await settle()
+    world.sessionId = 's2'
+    world.messages = []
+    world.api = []
+    await turn($, world, 'next', 2_000)
+    expect(storedStats(world, 's1')).toEqual([promptDigest('go')])
+    expect(storedStats(world, 's2')).toEqual([promptDigest('next')])
+  })
+
+  test('a session that ends before its id is known keeps what it had stored', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'go', 3_000)
+    // An in-process resume of s3: no session.start, no draw, no turn.
+    await run('session.end', $, { reason: 'resume', sessionId: 's1', resume: { id: 's3' } }, async () => ({}))
+    world.sessionId = 's3'
+    world.store.set(STORED('s3'), { v: 1, stats: [{ key: 'k', turnIndex: 0, durationMs: 1, endedAt: 1 }] })
+    await run('session.end', $, { reason: 'prompt_input_exit', sessionId: 's3' }, async () => ({}))
+    await settle()
+    expect(storedStats(world, 's3')).toEqual(['k'])
+  })
+
+  test('a turn of the ended session that completes after /clear is stored there, not in the next one', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'go', 3_000)
+    await run('prompt.submit', $, { text: 'late' }, async e => e)
+    await run('turn.start', $, { text: 'late', turnId: 'late' }, async e => e)
+    await settle()
+    await run('session.end', $, { reason: 'clear', sessionId: 's1', resume: { id: 's1' } }, async () => ({}))
+    world.sessionId = 's2'
+    world.messages = []
+    world.api = []
+    world.now += 1_000
+    await run('turn.complete', $, { ...done, turnId: 'late', durationMs: 1_000 }, async () => ({ text: '' }))
+    await settle()
+    await turn($, world, 'next', 2_000)
+    expect(storedStats(world, 's1')).toEqual([promptDigest('go'), promptDigest('late')])
+    expect(storedStats(world, 's2')).toEqual([promptDigest('next')])
+  })
+
+  test('session.end on exit stores the stats and keeps them in memory', async () => {
+    const { $, world } = fakeEngine()
+    await run('session.start', $, { cwd: '/r' }, async e => e)
+    await settle()
+    await turn($, world, 'go', 3_000)
+    world.store.delete(STORED('s1'))
+    await run('session.end', $, { reason: 'prompt_input_exit', sessionId: 's1' }, async () => ({}))
+    await settle()
+    expect(storedStats(world, 's1')).toEqual([promptDigest('go')])
+    await press($, 'nav-turns')
+    expect(text(byKey(await draw($), 'turn-0'))).toContain('3.0s')
+  })
 })
