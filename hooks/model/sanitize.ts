@@ -77,6 +77,15 @@ const HAND_BACK_TAGS = /<agent-message((?:\s+[\w-]+="[^"]{0,200}"){0,8})\s*>|<\/
 const MAX_SENDERS = 8
 const MAX_BLOCKS = 64
 
+// The value of the first attribute named `name` in an open tag's attribute
+// list (` a="1" b="2"`), read attribute by attribute so another attribute's
+// value never stands in for it; '' when it has none.
+function attributeOf(attributes: string, name: string): string {
+  for (const attribute of attributes.matchAll(/\s+([\w-]+)="([^"]*)"/g))
+    if (attribute[1] === name) return attribute[2] ?? ''
+  return ''
+}
+
 export function handBackSenders(text: string): string[] {
   const own = stripBlocks(text, '<system-reminder>', '</system-reminder>')
   const senders = new Set<string>()
@@ -93,7 +102,7 @@ export function handBackSenders(text: string): string[] {
     if (depth > 1) continue
     if (senders.size >= MAX_SENDERS || blocks >= MAX_BLOCKS) break
     blocks += 1
-    const from = /(?:^|\s)from="([^"]*)"/.exec(attributes)?.[1] ?? ''
+    const from = attributeOf(attributes, 'from')
     const clean = sanitizeText(from).trim()
     if (clean !== '') senders.add(clean)
   }

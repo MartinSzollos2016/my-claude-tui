@@ -106,6 +106,20 @@ describe('handBackSenders', () => {
     ).toEqual(['A'])
   })
 
+  test('from is the open tag own attribute named from, nothing else', () => {
+    expect(handBackSenders('<agent-message to=" from=" from="b">x</agent-message>')).toEqual(['b'])
+    expect(handBackSenders('<agent-message data-from="q" from="a1">x</agent-message>')).toEqual(['a1'])
+    expect(handBackSenders('<agent-message>the body says from="X"</agent-message>')).toEqual([])
+  })
+
+  test('an open tag takes attributes around from, new lines and a space before >, up to the limits', () => {
+    expect(handBackSenders('<agent-message to="me"\n  from="a1" ts="2026" >\nx</agent-message>')).toEqual(['a1'])
+    const nine = Array.from({ length: 8 }, (_, i) => ` a${i}="v"`).join('')
+    expect(handBackSenders(`<agent-message from="a1"${nine}>x</agent-message>`)).toEqual([])
+    expect(handBackSenders(`<agent-message from="${'x'.repeat(201)}">x</agent-message>`)).toEqual([])
+    expect(handBackSenders(`<agent-message from="${'x'.repeat(200)}">x</agent-message>`)).toEqual(['x'.repeat(200)])
+  })
+
   test('a block inside a reminder is not a sender', () => {
     expect(handBackSenders(`<system-reminder>${block('r1')}</system-reminder>\n${block('a1')}`)).toEqual(['a1'])
   })
