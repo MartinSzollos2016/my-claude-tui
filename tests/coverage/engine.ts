@@ -112,6 +112,10 @@ type World = {
   // What $.ui.panes reports for the pane.
   isPaneFocused: boolean
   isPanePlaced: boolean
+  // The session id $.session.id() reports.
+  sessionId: string
+  // While true, $.store.set rejects as a full store does.
+  storeFull: boolean
   // What the plugin did, for the tests to read.
   store: Map<string, unknown>
   opened: (number | undefined)[]
@@ -152,6 +156,8 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     copyResult: { isCopied: true },
     isPaneFocused: true,
     isPanePlaced: true,
+    sessionId: 's1',
+    storeFull: false,
     store: new Map(),
     opened: [],
     openArgs: [],
@@ -198,6 +204,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       }),
       repo: async () => (world.hasRepo ? { root: '/r', remote: null, internal: false, name: null } : null),
       root: async () => '/r/project',
+      id: async () => world.sessionId,
       surfaces: async () => world.surfaces,
     },
     agent: {
@@ -245,8 +252,13 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     store: {
       get: async (key: string) => world.store.get(key),
       set: async (key: string, value: unknown) => {
-        world.store.set(key, value)
+        if (world.storeFull) throw new Error('store over 4 MiB')
+        world.store.set(key, JSON.parse(JSON.stringify(value)))
       },
+      delete: async (key: string) => {
+        world.store.delete(key)
+      },
+      keys: async () => [...world.store.keys()],
     },
     config: { list: async () => world.config },
     command: {

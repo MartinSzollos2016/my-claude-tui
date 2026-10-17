@@ -141,6 +141,25 @@ export function mergeStats(a: readonly TurnStat[], b: readonly TurnStat[]): Turn
   return [...byEnd.values()].sort((x, y) => x.endedAt - y.endedAt).slice(-MAX_STATS)
 }
 
+// The stored sessions to delete: those whose newest stat ended more than
+// MAX_STATS_DAYS ago and those beyond the MAX_SESSIONS newest; `keep` (the
+// current session) never.
+const MAX_SESSIONS = 20
+const MAX_STATS_DAYS = 30
+const DAY_MS = 86_400_000
+
+export function pruneSessions(
+  entries: readonly { key: string; newest: number }[],
+  now: number,
+  keep: string,
+): string[] {
+  const byNewest = [...entries].sort((a, b) => b.newest - a.newest)
+  return byNewest
+    .filter((entry, rank) => rank >= MAX_SESSIONS || entry.newest < now - MAX_STATS_DAYS * DAY_MS)
+    .map(entry => entry.key)
+    .filter(key => key !== keep)
+}
+
 // The index buildTurns gives the turn starting with `prompt`: the last turn
 // when the transcript already holds the prompt (or the turn has none, a
 // continuation), else the one about to open after it.
