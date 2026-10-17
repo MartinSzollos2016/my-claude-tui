@@ -1799,7 +1799,7 @@ describe('own scroll', () => {
   }
 
   test('on the desktop an arrow moves the cursor, the wheel scrolls the app', async () => {
-    const { $ } = fakeEngine({ messages: long })
+    const { $, world } = fakeEngine({ messages: long })
     await run('ui.render', $, { ...SMALL, surface: 'desktop' })
     const nexts: unknown[] = []
     const scroll = (move: Record<string, unknown>) =>
@@ -1828,11 +1828,80 @@ describe('own scroll', () => {
     expect(nexts).toEqual([])
     const first = await cursorAt()
     expect(first).toBeDefined()
+    world.now += 1_000
     await scroll({})
     await settle()
     expect(await cursorAt()).not.toBe(first)
     await scroll({ pointer: { column: 3, row: 4 } })
     expect(nexts).toHaveLength(1)
+  })
+
+  test('on the desktop the arrows scroll the team view, a fitting tree and a move right after a ring', async () => {
+    const { $, world } = fakeEngine({
+      messages: long,
+      agents: [{ id: 'tm1', teammateId: 'alice@crew', description: 'help', type: 'teammate', status: 'running' }],
+    })
+    const nexts: unknown[] = []
+    const arrow = (move: Record<string, unknown> = {}) =>
+      run(
+        'ui.scroll',
+        $,
+        {
+          component: 'Pane',
+          requestId: 'tail',
+          offset: 0,
+          by: 1,
+          bodyRows: 10,
+          contentRows: 300,
+          origin: { kind: 'person' },
+          ...move,
+        },
+        async e => (nexts.push(e), {}),
+      )
+    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    // A tree that fits has nothing to scroll: no arrow of the app's moves the cursor.
+    await arrow({ contentRows: 10 })
+    await settle()
+    expect(world.focused).toEqual([])
+    // The first arrow moves the cursor and rings its row; a one-row move
+    // within the ring's settling time is the app scrolling to it.
+    await arrow()
+    await settle()
+    expect(nexts).toHaveLength(0)
+    expect(world.focused).toHaveLength(1)
+    await arrow()
+    expect(nexts).toHaveLength(1)
+    world.now += 1_000
+    await arrow()
+    expect(nexts).toHaveLength(1)
+    // The team view has no cursor: its arrows scroll.
+    const team = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    ;(byKey(team, 'nav-team')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
+    await settle()
+    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    world.now += 1_000
+    await arrow()
+    expect(nexts).toHaveLength(2)
+  })
+
+  test("a ring the plugin moved never moves the cursor: only the person's ring does", async () => {
+    const { $ } = fakeEngine({ messages: long })
+    await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    const focus = (element: string, kind: string) =>
+      run(
+        'ui.focus',
+        $,
+        { component: 'Pane', requestId: 'tail', plugin: 'tail-view', element, origin: { kind } },
+        async () => ({}),
+      )
+    await focus('t0:o0', 'plugin')
+    const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    expect(
+      nodes(drawn).some(n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor),
+    ).toBe(false)
+    await focus('t0:o0', 'person')
+    const after = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    expect(nodes(after).some(n => n.props['key'] === 'cursor-t0:o0' && text(n) === ICON_SETS.unicode.cursor)).toBe(true)
   })
 
   test('the cursor on the desktop steps on from where it stands, wherever the app has scrolled', async () => {
@@ -1852,8 +1921,19 @@ describe('own scroll', () => {
     expect(await topOf($)).toBe(-8)
   })
 
+  test('a session the terminal draws too never reopens the pane from a desktop view change', async () => {
+    const { $, world } = fakeEngine({ messages: long })
+    world.surfaces = ['terminal', 'desktop']
+    const tree = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+    const opens = world.openArgs.length
+    ;(byKey(tree, 'nav-turns')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
+    await settle()
+    expect(world.openArgs).toHaveLength(opens)
+  })
+
   test('a view change on the desktop gives the pane the keys again, as a click there takes them away', async () => {
     const { $, world } = fakeEngine({ messages: long })
+    world.surfaces = ['desktop']
     await pressSmall($, 'nav-turns')
     const terminalOpens = world.openArgs.length
     await pressSmall($, 'nav-detail')
@@ -1867,6 +1947,7 @@ describe('own scroll', () => {
   test('a press on the desktop never waits on the app to scroll: views, turns and the cursor stay live', async () => {
     const { $, world } = fakeEngine({ messages: long })
     world.isScrollStuck = true
+    world.isUiStuck = true
     const DESKTOP = { ...SMALL, surface: 'desktop' }
     const pressDesktop = async (key: string) => {
       const button = byKey(await run('ui.render', $, DESKTOP), key)
@@ -1891,6 +1972,7 @@ describe('own scroll', () => {
       'nav-down',
       'nav-detail',
       'nav-down',
+      'nav-search',
       'nav-team',
       'nav-detail',
     ])

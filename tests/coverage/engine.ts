@@ -101,6 +101,8 @@ type World = {
   scrolls: unknown[]
   // A $.ui.scroll that never answers, as the desktop app's may not while a press is in flight.
   isScrollStuck: boolean
+  // A $.ui.focus or $.ui.open that never answers.
+  isUiStuck: boolean
   agents: AgentInfo[]
   surfaces: RenderSurface[]
   config: ConfigRow[]
@@ -158,6 +160,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
     focusDenied: [],
     scrolls: [],
     isScrollStuck: false,
+    isUiStuck: false,
     hasRepo: true,
     now: 1_700_000_000_000,
     copyResult: { isCopied: true },
@@ -256,6 +259,7 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
         return {}
       },
       focus: async (args: { key: string }) => {
+        if (world.isUiStuck) await new Promise(() => {})
         if (world.focusDenied.includes(args.key)) return { deny: 'not drawn' }
         world.focused.push(args.key)
         return {}
