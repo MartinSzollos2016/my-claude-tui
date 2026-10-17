@@ -27,6 +27,14 @@ describe('stats store', () => {
     expect(world.store.get(statsKeyOf('s1'))).toEqual({ v: 1, stats })
   })
 
+  test('save merges with what is stored, so it never shrinks a session', async () => {
+    const { $ } = fakeEngine()
+    await saveSessionStats($, 's1', [stat('a', 1), stat('b', 2)])
+    await saveSessionStats($, 's1', [stat('a', 1)])
+    await saveSessionStats($, 's1', [])
+    expect(await loadSessionStats($, 's1')).toEqual([stat('a', 1), stat('b', 2)])
+  })
+
   test('save writes nothing while the switch is off', async () => {
     const { $, world } = fakeEngine()
     world.store.set('tail-view.stats', false)

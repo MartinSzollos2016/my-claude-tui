@@ -5,7 +5,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { TurnStat } from '../types'
-import { MAX_STATS, pruneSessions } from './session'
+import { mergeStats, pruneSessions } from './session'
 
 // The switch: on unless false, read at every write.
 export const STATS_KEY = 'tail-view.stats'
@@ -53,7 +53,10 @@ export async function saveSessionStats(
 ): Promise<void> {
   try {
     if (!(await isStatsOn($))) return
-    await $.store.set(statsKeyOf(sessionId), { v: 1, stats: stats.slice(-MAX_STATS) })
+    // Merged with what is stored, so a save never shrinks a session: not one
+    // from a process that has not loaded it yet, nor another on the same id.
+    const stored = await loadSessionStats($, sessionId)
+    await $.store.set(statsKeyOf(sessionId), { v: 1, stats: mergeStats(stored, stats) })
   } catch {
     // A full or failing store leaves the stats in memory only.
   }

@@ -15,7 +15,7 @@ import type {
   UiScrollResult,
 } from 'claude-code'
 
-import type { AgentStat, IconSetName } from '../types'
+import type { AgentStat, IconSetName, TurnStat } from '../types'
 import { COMMANDS, helpText, parseCommand, unknownText } from './commands'
 import {
   deleteAllStats,
@@ -293,9 +293,10 @@ let lastPrompt = ''
 // Indexes (in buildTurns) of prompts submitted idle and not yet started; the
 // next main-loop turn.start takes the oldest.
 let pendingTurns: number[] = []
-// turnId -> the index and prompt its turn got, from turn.start to its
-// turn.complete; bounded in case a turn never completes.
-const turnIndexes = new Map<string, { index: number; prompt: string }>()
+// turnId -> the index and prompt its turn got, and the stats generation it
+// started in, from turn.start to its turn.complete; bounded in case a turn
+// never completes.
+const turnIndexes = new Map<string, { index: number; prompt: string; gen: number }>()
 const MAX_OPEN_TURNS = 50
 
 // Agents a running Workflow started, as far as the hooks see them.
@@ -452,7 +453,7 @@ async function notePrompt($: EngineInterface): Promise<number | undefined> {
 // The index notes of the turns that started, until their turn.complete.
 const startNotes = new Map<string, Promise<void>>()
 
-async function noteTurnStart($: EngineInterface, turnId: string, text: string): Promise<void> {
+async function noteTurnStart($: EngineInterface, turnId: string, text: string, gen: number): Promise<void> {
   try {
     const turns = (await currentTurns($)).value
     // A hand-back's stat is matched by its senders (promptKey).
@@ -463,7 +464,7 @@ async function noteTurnStart($: EngineInterface, turnId: string, text: string): 
     const at = isHandBack(sanitizeText(text)) ? turns.length : turnIndexAtStart(turns, prompt)
     const taken = takeTurnIndex(queue, at)
     pendingTurns = taken.queue
-    remember(turnIndexes, turnId, { index: taken.index, prompt }, MAX_OPEN_TURNS)
+    remember(turnIndexes, turnId, { index: taken.index, prompt, gen }, MAX_OPEN_TURNS)
   } catch {
     // No index: the stat matches by prompt.
   }
@@ -889,36 +890,81 @@ let statsSession: { id: string | undefined; isInteractive: boolean; isKnown: boo
   isInteractive: true,
   isKnown: false,
 }
-// The load of the current session's stored stats; a save waits for it, so it
-// never writes the session's stats without the stored ones.
-let statsLoad: Promise<void> = Promise.resolve()
+// Bumped when /clear or an in-process resume ends a session: an ask, a load
+// or a save begun before it belongs to the ended session, never the next one.
+let statsGen = 0
+// The session that ended last: its generation and its id, if it was known
+// (a late turn of it is stored there). `staleId` is the id the engine still
+// reports until it switches to the next session; it is never taken for it.
+let endedSession: { gen: number; id: string | undefined } = { gen: -1, id: undefined }
+let staleId: string | undefined
+// The ask for the id in flight, so concurrent first asks share it.
+let asking: Promise<string | undefined> | undefined
+// The saves, one after another, so an older one never lands last.
+let saving: Promise<void> = Promise.resolve()
 
 // The current session's id for its stats, asked once per session; the first
-// ask starts loading its stored stats, merged into memory in the background.
-async function statsSessionId($: EngineInterface): Promise<string | undefined> {
-  if (statsSession.isKnown) return statsSession.id
+// answer starts loading its stored stats, merged into memory in the background.
+function statsSessionId($: EngineInterface): Promise<string | undefined> {
+  if (statsSession.isKnown) return Promise.resolve(statsSession.id)
+  if (asking === undefined) {
+    const ask = askSessionId($)
+    asking = ask
+    ask
+      .finally(() => {
+        if (asking === ask) asking = undefined
+      })
+      .catch(ignore)
+  }
+  return asking
+}
+
+async function askSessionId($: EngineInterface): Promise<string | undefined> {
+  const gen = statsGen
   const id = await $.session.id().catch(() => undefined)
+  // Asked again next time: no answer, another session meanwhile, or the
+  // ended session's id while the engine has not switched yet.
+  if (id === undefined || id === staleId || gen !== statsGen) return undefined
   statsSession = { ...statsSession, id, isKnown: true }
-  if (id !== undefined && statsSession.isInteractive)
-    statsLoad = (async () => {
+  if (statsSession.isInteractive)
+    (async () => {
       if (!(await isStatsOn($))) return
       const loaded = await loadSessionStats($, id)
-      if (loaded.length > 0) await update($, turnStats, all => mergeStats(all, loaded))
+      if (loaded.length > 0 && gen === statsGen) await update($, turnStats, all => mergeStats(all, loaded))
     })().catch(ignore)
   return id
 }
 
-// Stores the session's stats once its stored ones are in; never awaited by a turn.
-async function persistStats($: EngineInterface, id: string | undefined): Promise<void> {
-  if (id === undefined || !statsSession.isInteractive) return
-  await statsLoad
-  await saveSessionStats($, id, await read($, turnStats))
+// Queues a save of `id`'s stats, read when its turn comes (undefined: none).
+function queueSave(
+  $: EngineInterface,
+  id: string,
+  statsNow: () => Promise<readonly TurnStat[] | undefined>,
+): Promise<void> {
+  const save = saving
+    .then(async () => {
+      const stats = await statsNow()
+      if (stats !== undefined) await saveSessionStats($, id, stats)
+    })
+    .catch(ignore)
+  saving = save
+  return save
+}
+
+// Stores the session's stats, merged with its stored ones; never awaited by a
+// turn. Nothing once the session it was asked for has ended.
+function persistStats($: EngineInterface, id: string | undefined, gen: number): Promise<void> {
+  if (id === undefined || !statsSession.isInteractive) return Promise.resolve()
+  return queueSave($, id, async () =>
+    gen === statsGen && statsSession.id === id ? await read($, turnStats) : undefined,
+  )
 }
 
 // Set up at session start: the session, its stored stats, and the pruning
 // of the others; with storing off, any stats left behind are deleted.
 async function startStats($: EngineInterface, isInteractive: boolean): Promise<void> {
   statsSession = { id: undefined, isInteractive, isKnown: false }
+  asking = undefined
   const id = await statsSessionId($)
   if (!isInteractive || id === undefined) return
   if (await isStatsOn($)) await pruneStats($, id)
@@ -936,7 +982,8 @@ async function setStats($: EngineInterface, rawArg: string): Promise<string> {
   }
   if (arg === 'on') {
     await $.store.set(STATS_KEY, true)
-    await persistStats($, await statsSessionId($))
+    const gen = statsGen
+    await persistStats($, await statsSessionId($), gen)
   } else if (arg !== '') return 'Unknown value. Use /tail-stats on|off.'
   if (!(await isStatsOn($)))
     return 'Turn stats: off. Turn times show only for turns finished since Claude Code started. /tail-stats on keeps them.'
@@ -974,13 +1021,24 @@ export const register: Register = on => {
 
   // The ending session's stats are stored; after /clear or an in-process
   // resume the process goes on under another session, which starts empty.
+  // The switch comes first, so a store that stalls past the hook's bound
+  // costs only the save.
   on('session.end', async ($, e, next) => {
-    if (statsSession.isInteractive) await persistStats($, e.sessionId).catch(ignore)
-    if (e.reason === 'clear' || e.reason === 'resume') {
-      await update($, turnStats, () => [])
+    const ending = statsSession
+    const isSwitch = e.reason === 'clear' || e.reason === 'resume'
+    if (isSwitch) {
+      endedSession = { gen: statsGen, id: ending.isKnown ? ending.id : undefined }
+      statsGen += 1
+      staleId = e.sessionId
       statsSession = { ...statsSession, id: undefined, isKnown: false }
-      statsLoad = Promise.resolve()
+      asking = undefined
     }
+    const stats = await read($, turnStats)
+    // Only the ended session's stats go: the next one's first may be in already.
+    if (isSwitch) await update($, turnStats, all => all.filter(stat => !stats.includes(stat)))
+    // Unknown, it saves nothing: what it would write is not that session's.
+    if (ending.isInteractive && ending.isKnown && ending.id === e.sessionId)
+      await queueSave($, e.sessionId, async () => stats)
     return next(e)
   })
 
@@ -1027,7 +1085,7 @@ export const register: Register = on => {
   // The turn's index is noted in the background: reading the transcript (and
   // its API form) must not hold the turn up; turn.complete waits for it.
   on('turn.start', async ($, e, next) => {
-    remember(startNotes, e.turnId, noteTurnStart($, e.turnId, e.text), MAX_OPEN_TURNS)
+    remember(startNotes, e.turnId, noteTurnStart($, e.turnId, e.text, statsGen), MAX_OPEN_TURNS)
     return next(e)
   })
 
@@ -1058,6 +1116,7 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    const hookGen = statsGen
     const endedAt = await $.clock.now()
 
     if (e.agentId !== undefined) {
@@ -1074,10 +1133,15 @@ export const register: Register = on => {
       // The prompt its turn.start carried; a continuation's is empty.
       const prompt = opened?.prompt || lastPrompt
       const stat = turnStatFrom(e, prompt, endedAt, opened?.index)
-      // The session first: a turn after /clear lands in the new one.
-      const statsId = await statsSessionId($)
-      await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
-      persistStats($, statsId).catch(ignore)
+      // The session first: a turn after /clear lands in the new one, one
+      // that started before it in the ended one, never in the new memory.
+      const gen = opened?.gen ?? hookGen
+      const statsId = gen === statsGen ? await statsSessionId($) : undefined
+      if (gen === statsGen) {
+        await update($, turnStats, all => [...all, stat].slice(-MAX_STATS))
+        persistStats($, statsId, gen).catch(ignore)
+      } else if (gen === endedSession.gen && endedSession.id !== undefined && statsSession.isInteractive)
+        queueSave($, endedSession.id, async () => [stat]).catch(ignore)
       await update($, isWorking, () => false)
       runningTools = []
       await clearStatus($)

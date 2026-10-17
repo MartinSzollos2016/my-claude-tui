@@ -87,6 +87,11 @@ function turnDigest(turn: Turn): string {
 // Whether `stat` was recorded for a turn with `turn`'s prompt key.
 const hasPromptOf = (stat: TurnStat, turn: Turn): boolean => stat.key === turnDigest(turn)
 
+// A turn with no prompt of its own that keeps the stat at its index. One at
+// index 0 is not: it is the window's cut start (a session opens with a
+// prompt), whose index says nothing after old rows left the window.
+const isContinuation = (turn: Turn): boolean => turn.prompt === '' && turn.index > 0
+
 // The stat recorded for this turn. An index match counts only while the
 // turn at that index still has the stat's prompt: $.session.messages() holds
 // the newest rows only, so indexes shift as old rows leave the window. Else
@@ -99,7 +104,7 @@ export function statFor(
 ): TurnStat | undefined {
   if (!turn) return undefined
   const isOwn = (stat: TurnStat, at: Turn | undefined) =>
-    at !== undefined && (hasPromptOf(stat, at) || at.prompt === '')
+    at !== undefined && (hasPromptOf(stat, at) || isContinuation(at))
   for (let i = stats.length - 1; i >= 0; i--) {
     const stat = stats[i]!
     if (stat.turnIndex === turn.index && isOwn(stat, turn)) return stat
@@ -127,7 +132,7 @@ export function statOfDuration(stats: readonly TurnStat[], durationMs: number): 
 // its prompt (see statFor); undefined once the rows moved on.
 export function turnOfStat(stat: TurnStat, turns: readonly Turn[]): Turn | undefined {
   const turn = turns.find(t => t.index === stat.turnIndex)
-  return turn !== undefined && (hasPromptOf(stat, turn) || turn.prompt === '') ? turn : undefined
+  return turn !== undefined && (hasPromptOf(stat, turn) || isContinuation(turn)) ? turn : undefined
 }
 
 // The stats of one session, from memory and from the store: the union by

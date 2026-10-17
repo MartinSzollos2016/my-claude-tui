@@ -121,6 +121,17 @@ describe('statOfDuration and turnOfStat', () => {
     expect(turnOfStat({ ...stats[0]!, turnIndex: 2 }, turns)?.index).toBe(2)
     expect(turnOfStat({ ...stats[0]!, turnIndex: 9 }, turns)).toBeUndefined()
   })
+
+  test("a window's cut first turn (no prompt, index 0) claims no stat by index", () => {
+    const cut = buildTurns([prompt('other'), prompt('fix')]).map(t => ({ ...t, index: t.index + 1 }))
+    const shifted = [{ ...cut[0]!, index: 0, prompt: '' }, ...cut]
+    const fix = { key: promptDigest('fix'), turnIndex: 0, durationMs: 2_000, endedAt: 1 }
+    expect(turnOfStat(fix, shifted)).toBeUndefined()
+    expect(statFor([fix], shifted[0], shifted)).toBeUndefined()
+    expect(statFor([fix], shifted[2], shifted)).toBe(fix)
+    // The continuation at index 2 above still claims its stat.
+    expect(statFor([{ ...stats[0]!, turnIndex: 2 }], turns[2], turns)?.endedAt).toBe(1)
+  })
 })
 
 describe('statFor', () => {
