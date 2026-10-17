@@ -599,10 +599,6 @@ async function ringTo($: EngineInterface, key: string | null): Promise<void> {
   await $.ui.focus({ requestId: PANE, key }).catch(ignore)
 }
 
-// Whether the pane was last drawn for the desktop app (any surface but the
-// terminal): there the focus ring stays off the keys and rows (ui.focus).
-let isFlowShown = false
-
 // The desktop app's window is the person's alone: the plugin never asks it to
 // scroll ($.ui.scroll). A press awaiting the app's scroll while the app
 // awaits the press froze the pane (no hook budget runs during a $ call).
@@ -1249,7 +1245,6 @@ export const register: Register = on => {
     // The desktop app (any surface but the terminal) gets the flowing pane;
     // its sizes are its own and never stand in for the terminal's.
     const isFlow = e.surface !== 'terminal'
-    isFlowShown = isFlow
     const terminal =
       isFlow || viewport === undefined
         ? undefined
@@ -1452,9 +1447,8 @@ export const register: Register = on => {
   })
 
   // The ring moved by a Tab or a click onto a row takes the row cursor along.
-  // In the desktop app the ring is the app's blue outline around one button,
-  // a second cursor beside the highlighted row: it stays off the keys and
-  // rows there, and only the search field, which needs it to type, takes it.
+  // It always moves, in the desktop app too: kept off a button that a view
+  // change took away, it would leave the pane without the keys.
   on('ui.focus', { requestId: PANE }, async ($, e, next) => {
     const element = e.element
     isRingOnSearch = element !== undefined && element.startsWith('turn-search')
@@ -1462,7 +1456,6 @@ export const register: Register = on => {
       await update($, cursor, cur => (cur === element ? cur : element)).catch(ignore)
     else if (element !== undefined && /^turn-\d+$/.test(element))
       await update($, turnCursor, () => Number(element.slice('turn-'.length))).catch(ignore)
-    if (isFlowShown && element !== undefined && !isRingOnSearch) return {}
     return next(e)
   })
 

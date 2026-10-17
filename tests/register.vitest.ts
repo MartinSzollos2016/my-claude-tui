@@ -1500,7 +1500,7 @@ describe('keyboard cursor', () => {
     expect(world.focusRequests).toBe(before + 1)
   })
 
-  test('in the desktop app the ring stays off the keys and rows, the search field still takes it', async () => {
+  test('in the desktop app the ring follows every move, so a view change keeps the keys in the pane', async () => {
     const { $ } = fakeEngine({ messages: main })
     const focus = async (element: string) => {
       const nexts: unknown[] = []
@@ -1512,12 +1512,9 @@ describe('keyboard cursor', () => {
       )
       return nexts.length
     }
-    await draw($)
-    expect(await focus('nav-help')).toBe(1)
     await run('ui.render', $, { ...PANE_EVENT, surface: 'desktop' })
-    expect(await focus('nav-help')).toBe(0)
-    expect(await focus('turn-0')).toBe(0)
-    expect(await focus('turn-search')).toBe(1)
+    for (const element of ['nav-help', 'turn-0', 'nav-detail', 'turn-search'])
+      expect(await focus(element), element).toBe(1)
   })
 
   test("a desktop drawing neither takes the keys back nor hides the terminal's Esc", async () => {
