@@ -1786,8 +1786,9 @@ describe('own scroll', () => {
     })
     ;(byKey(tree, 'nav-down')?.props['onPress'] as (e: unknown) => void)({ surface: 'desktop' })
     await settle()
-    // The ring follows the cursor's row, so Enter presses it.
-    expect(world.focused.length).toBeGreaterThan(0)
+    // The ring rests on the open key, so Enter opens the cursor's row and
+    // the cursor moves no focus.
+    expect(new Set(world.focused)).toEqual(new Set(['nav-open']))
     const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
     const marked = nodes(drawn).find(
       n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor,
@@ -1796,7 +1797,7 @@ describe('own scroll', () => {
   }
 
   test('on the desktop an arrow moves the cursor, the wheel scrolls the app', async () => {
-    const { $, world } = fakeEngine({ messages: long })
+    const { $ } = fakeEngine({ messages: long })
     await run('ui.render', $, { ...SMALL, surface: 'desktop' })
     const nexts: unknown[] = []
     const scroll = (move: Record<string, unknown>) =>
@@ -1815,14 +1816,19 @@ describe('own scroll', () => {
         },
         async e => (nexts.push(e), {}),
       )
+    const cursorAt = async () => {
+      const drawn = await run('ui.render', $, { ...SMALL, surface: 'desktop' })
+      return nodes(drawn).find(n => /^cursor-/.test(String(n.props['key'])) && text(n) === ICON_SETS.unicode.cursor)
+        ?.props['key']
+    }
     await scroll({})
     await settle()
     expect(nexts).toEqual([])
-    const first = world.focused.at(-1)
+    const first = await cursorAt()
     expect(first).toBeDefined()
     await scroll({})
     await settle()
-    expect(world.focused.at(-1)).not.toBe(first)
+    expect(await cursorAt()).not.toBe(first)
     await scroll({ pointer: { column: 3, row: 4 } })
     expect(nexts).toHaveLength(1)
   })

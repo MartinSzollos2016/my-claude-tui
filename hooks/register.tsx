@@ -599,6 +599,13 @@ async function ringTo($: EngineInterface, key: string | null): Promise<void> {
   await $.ui.focus({ requestId: PANE, key }).catch(ignore)
 }
 
+// In the desktop app the ring rests on the open key while the cursor moves:
+// Enter presses it and opens the cursor's row, and no button blurs and
+// focuses on every step (the app redraws the hovered row then). Not awaited.
+function restRingOnOpen($: EngineInterface): void {
+  ringTo($, 'nav-open').catch(ignore)
+}
+
 // Whether the pane was last drawn for the desktop app, the frames it drew
 // there by view, and the cursor step its arrows take (scrollPane).
 let isFlowShown = false
@@ -623,7 +630,7 @@ async function moveRowCursor(
   // and the ring is not awaited: a press never waits on the app.
   if (at.isFlow !== true) await update($, paneScroll, all => ({ ...all, detail: scrollToRow(at, landed) }))
   if (at.isFlow !== true) await ringTo($, landed)
-  else ringTo($, landed).catch(ignore)
+  else restRingOnOpen($)
 }
 
 // Moves the turn list's cursor one turn along the rows the list draws (newest
@@ -638,9 +645,8 @@ async function moveTurnCursor($: EngineInterface, delta: number, at: ScrollFrame
   if (at.isFlow !== true)
     await update($, paneScroll, all => ({ ...all, turns: scrollToRow(at, landed === null ? null : turnRowId(landed)) }))
   const key = landed === null ? null : `turn-${landed}`
-  // The ring on the cursor's row: Enter presses it. Not awaited on the desktop app.
   if (at.isFlow !== true) await ringTo($, key)
-  else ringTo($, key).catch(ignore)
+  else restRingOnOpen($)
 }
 
 // Where each view's window stood at its last drawing; a reload starts over
