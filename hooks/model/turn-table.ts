@@ -7,7 +7,11 @@ import { displayWidth, durationBar, padEndDisplay, truncateDisplay } from './wid
 
 type TurnCells = { number: string; prompt: string; tools: string; time: string; tokens: string; bar: string }
 type TurnTableRow = { index: number; cells: TurnCells; label: string }
-export type TurnTable = { header: string; rows: TurnTableRow[] }
+// The cells each column takes, as the text table pads them; a column the
+// pane is too narrow for is left out. The desktop app's table sizes its
+// boxes by them.
+type TurnColumns = { number: number; tools?: number; time: number; tokens?: number; bar?: number }
+export type TurnTable = { header: string; rows: TurnTableRow[]; columns: TurnColumns }
 
 const TABLE_BAR_CELLS = 8
 const TABLE_GAP = 2
@@ -81,7 +85,13 @@ function buildTable(
     return { index: turn.index, cells, label: fit(line(cells, padStartDisplay)) }
   })
   const head = { number: '#', prompt: 'prompt', tools: 'tools', time: 'time', tokens: 'tokens', bar: '' }
-  return { header: fit(line(head, padStartDisplay)).trimEnd(), rows }
+  const columns: TurnColumns = {
+    number: numberWidth,
+    ...(hasTools ? { tools: 5 } : {}),
+    time: 7,
+    ...(hasWide ? { tokens: 7, bar: TABLE_BAR_CELLS } : {}),
+  }
+  return { header: fit(line(head, padStartDisplay)).trimEnd(), rows, columns }
 }
 
 export const EMPTY_TURN_TEXT = 'No tool calls or output in this turn.'

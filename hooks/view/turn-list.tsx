@@ -1,10 +1,12 @@
 // The turn list: a table of the session's turns with search, its snippets, and
 // the row ids its cursor walks.
+import type { RenderChildren } from 'claude-code'
+
 import { C } from '../theme'
 import { sanitizeText } from '../model/sanitize'
 import type { RowBlock } from '../model/scroll'
 import { splitMatch } from '../model/search'
-import { turnTable } from '../model/turn-table'
+import { turnTable, type TurnTable } from '../model/turn-table'
 import {
   INPUT_ROWS,
   LINE,
@@ -15,7 +17,7 @@ import {
   type PaneActions,
   type PaneParts,
 } from './context'
-import { buttonHover, cutter, endWrap, HOVER_TEXT, isUnicodeCut, type El } from './kit'
+import { buttonHoverOf, cutter, endWrap, hoverText, isUnicodeCut, type El } from './kit'
 
 // Every turn of the session, newest first: one button per turn that opens
 // it in the detail view. A search narrows the list to the matching turns
@@ -98,7 +100,7 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
               key="search-clear"
               plain
               dimColor
-              hover={buttonHover('btn:search-clear')}
+              hover={buttonHoverOf(data, 'btn:search-clear')}
               label="clear"
               onPress={() => act.clearSearch()}
             />
@@ -109,11 +111,22 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
   const content = (
     <Box flexDirection="column">
       <Box flexDirection="column" marginTop={1}>
-        {rows.length > 0 && (
-          <Text key="turn-header" color={C.muted}>
-            {`  ${table.header}`}
-          </Text>
-        )}
+        {rows.length > 0 &&
+          (data.isFlow === true ? (
+            flowCells(el, 'turn-header', table.columns, {
+              marker: '',
+              number: <Text color={C.muted}>#</Text>,
+              prompt: <Text color={C.muted}>prompt</Text>,
+              tools: <Text color={C.muted}>tools</Text>,
+              time: <Text color={C.muted}>time</Text>,
+              tokens: <Text color={C.muted}>tokens</Text>,
+              bar: '',
+            })
+          ) : (
+            <Text key="turn-header" color={C.muted}>
+              {`  ${table.header}`}
+            </Text>
+          ))}
         {isNoMatch && (
           <Box flexDirection="column">
             <Text color={C.muted}>{noMatch}</Text>
@@ -122,33 +135,35 @@ export function renderTurnList(el: El, data: Ctx, act: PaneActions): PaneParts {
             </Text>
           </Box>
         )}
-        {shown.map(row => {
-          // The cursor takes the row's first cell, in the accent.
-          const isCursor = row.index === data.turnCursor
-          const label = isCursor ? row.label.slice(1) : row.label
-          return (
-            <Box key={`turn-row-${row.index}`} flexDirection="column">
-              <Box flexDirection="row">
-                {isCursor && (
-                  <Text key={`turn-cursor-${row.index}`} color={C.accent}>
-                    {data.icons.cursor}
-                  </Text>
-                )}
-                {/* Every turn is a button, the selected one too: the focus
+        {data.isFlow === true
+          ? shown.map(row => renderFlowRow(el, row, table, data, act, query))
+          : shown.map(row => {
+              // The cursor takes the row's first cell, in the accent.
+              const isCursor = row.index === data.turnCursor
+              const label = isCursor ? row.label.slice(1) : row.label
+              return (
+                <Box key={`turn-row-${row.index}`} flexDirection="column">
+                  <Box flexDirection="row">
+                    {isCursor && (
+                      <Text key={`turn-cursor-${row.index}`} color={C.accent}>
+                        {data.icons.cursor}
+                      </Text>
+                    )}
+                    {/* Every turn is a button, the selected one too: the focus
                     ring follows the cursor onto it, and Enter opens it. */}
-                <Button
-                  key={`turn-${row.index}`}
-                  plain
-                  dimColor={row.index !== data.selected}
-                  label={label}
-                  hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...HOVER_TEXT }}
-                  onPress={() => act.pickTurn(row.index)}
-                />
-              </Box>
-              {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
-            </Box>
-          )
-        })}
+                    <Button
+                      key={`turn-${row.index}`}
+                      plain
+                      dimColor={row.index !== data.selected}
+                      label={label}
+                      hover={{ scope: `turn:${row.index}`, backgroundColor: C.rowHover, ...hoverText(data) }}
+                      onPress={() => act.pickTurn(row.index)}
+                    />
+                  </Box>
+                  {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
+                </Box>
+              )
+            })}
         {hidden > 0 && <Text color={C.muted}>{hiddenNote}</Text>}
       </Box>
     </Box>
@@ -166,6 +181,101 @@ export const turnRowId = (index: number) => `turn:${index}`
 export const searchFieldKey = (gen: number) => (gen === 0 ? 'turn-search' : `turn-search-${gen}`)
 
 const NO_MATCH_HINT = 'Clear the search or try fewer words.'
+
+type FlowCells = {
+  marker: RenderChildren
+  number: RenderChildren
+  prompt: RenderChildren
+  tools: RenderChildren
+  time: RenderChildren
+  tokens: RenderChildren
+  bar: RenderChildren
+}
+
+// A row of the desktop app's table: a box per column at the text table's
+// widths, the prompt taking what is left, so the header and every row line
+// up in the app's proportional font.
+function flowCells(el: El, key: string, columns: TurnTable['columns'], cells: FlowCells) {
+  const { Box } = el
+  const right = (width: number, child: RenderChildren) => (
+    <Box width={width} flexShrink={0} justifyContent="flex-end">
+      {child}
+    </Box>
+  )
+  return (
+    <Box key={key} flexDirection="row" columnGap={1}>
+      <Box width={1} flexShrink={0}>
+        {cells.marker}
+      </Box>
+      <Box width={columns.number} flexShrink={0}>
+        {cells.number}
+      </Box>
+      <Box flexGrow={1} flexShrink={1} overflow="hidden">
+        {cells.prompt}
+      </Box>
+      {columns.tools !== undefined && right(columns.tools, cells.tools)}
+      {right(columns.time, cells.time)}
+      {columns.tokens !== undefined && right(columns.tokens, cells.tokens)}
+      {columns.bar !== undefined && (
+        <Box width={columns.bar} flexShrink={0}>
+          {cells.bar}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+// A turn of the desktop app's table: the number and the prompt are buttons
+// that open it (a button holds one label, not a row); the prompt is the
+// whole one, cut to the pane, and the box clips what the app's font spills.
+function renderFlowRow(
+  el: El,
+  row: { index: number; snippet: string },
+  table: TurnTable,
+  data: Ctx,
+  act: PaneActions,
+  query: string,
+) {
+  const { Box, Button, Text } = el
+  const cells = table.rows.find(r => r.index === row.index)?.cells
+  const prompt = data.turns.find(turn => turn.index === row.index)?.prompt || '(no prompt)'
+  const isSelected = row.index === data.selected
+  const isCursor = row.index === data.turnCursor
+  const hover = { scope: `turn:${row.index}`, backgroundColor: C.rowHover }
+  const button = (key: string, label: string) => (
+    <Button
+      key={key}
+      plain
+      dimColor={!isSelected}
+      label={label}
+      hover={{ ...hover, ...hoverText(data) }}
+      onPress={() => act.pickTurn(row.index)}
+    />
+  )
+  const muted = (text: string | undefined) => (
+    <Text color={C.muted} hover={hover}>
+      {text ?? ''}
+    </Text>
+  )
+  return (
+    <Box key={`turn-row-${row.index}`} flexDirection="column">
+      {flowCells(el, `turn-cells-${row.index}`, table.columns, {
+        marker: (
+          <Text key={`turn-cursor-${row.index}`} color={isCursor ? C.accent : C.text}>
+            {isCursor ? data.icons.cursor : isSelected ? data.icons.marker : ' '}
+          </Text>
+        ),
+        number: button(`turn-num-${row.index}`, cells?.number ?? `#${row.index + 1}`),
+        prompt: button(`turn-${row.index}`, cutter(data.icons)(prompt, data.columns)),
+        tools: muted(cells?.tools),
+        time: muted(cells?.time),
+        tokens: muted(cells?.tokens),
+        bar: muted(cells?.bar),
+      })}
+      {row.snippet !== '' && renderSnippet(el, row.snippet, query, data)}
+    </Box>
+  )
+}
 
 // The line a search hit gets under its turn: the matched part underlined and
 // bold in the accent, the surrounding text muted.

@@ -19,7 +19,7 @@ import {
   type Ctx,
   type PaneActions,
 } from './context'
-import { buttonHover, cutter, endWrap, isUnicodeCut, middleWrap, scopeOf, type El } from './kit'
+import { buttonHoverOf, cutter, endWrap, isUnicodeCut, middleWrap, scopeOf, type El } from './kit'
 
 // What went in and what came out, each in a frame colored by its kind.
 // `inset`: the cells left of the sections' box (a trace's indent).
@@ -148,7 +148,7 @@ export function renderFrame(
           key={`copy:${blockId}`}
           plain
           dimColor
-          hover={buttonHover(scopeOf('btn:copy:', blockId))}
+          hover={buttonHoverOf(data, scopeOf('btn:copy:', blockId))}
           label="copy"
           onPress={press => act.copy(copyText, press.surface)}
         />
@@ -261,7 +261,7 @@ export function renderLong(el: El, id: string, raw: string, spec: LongSpec, data
           key={`full:${id}`}
           plain
           dimColor
-          hover={buttonHover(scopeOf('btn:full:', id))}
+          hover={buttonHoverOf(data, scopeOf('btn:full:', id))}
           label={fullLabel}
           onPress={() => act.toggleFull(id)}
         />
@@ -271,7 +271,7 @@ export function renderLong(el: El, id: string, raw: string, spec: LongSpec, data
           key={`full:${id}`}
           plain
           dimColor
-          hover={buttonHover(scopeOf('btn:full:', id))}
+          hover={buttonHoverOf(data, scopeOf('btn:full:', id))}
           label="show less"
           onPress={() => act.toggleFull(id)}
         />

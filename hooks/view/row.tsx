@@ -12,10 +12,10 @@ import { renderFrame, renderLong } from './frames'
 import {
   BAR_CELLS,
   BAR_MIN_COLUMNS,
-  buttonHover,
+  buttonHoverOf,
   cutter,
   endWrap,
-  HOVER_TEXT,
+  hoverText,
   scopeOf,
   TRACE_INDENT,
   type El,
@@ -61,7 +61,7 @@ export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions, 
           key={`chevron-${id}`}
           plain
           dimColor
-          hover={buttonHover(scopeOf('chev:', id))}
+          hover={buttonHoverOf(data, scopeOf('chev:', id))}
           label={`${isOpen ? icons.expanded : icons.collapsed} `}
           onPress={() => act.toggle(id)}
         />
@@ -71,7 +71,7 @@ export function renderThinking(el: El, turn: Turn, data: Ctx, act: PaneActions, 
           key={id}
           plain
           dimColor
-          hover={buttonHover(scopeOf('btn:', id))}
+          hover={buttonHoverOf(data, scopeOf('btn:', id))}
           label={label}
           onPress={() => act.toggle(id)}
         />
@@ -212,7 +212,7 @@ export function renderLine(
             plain
             dimColor
             label={`${line.chevron} `}
-            hover={buttonHover(scopeOf('chev:', id))}
+            hover={buttonHoverOf(data, scopeOf('chev:', id))}
             onPress={line.onPress}
           />
         ) : (
@@ -226,7 +226,14 @@ export function renderLine(
         </Text>
         <Box flexGrow={1} flexShrink={1}>
           {canOpen ? (
-            <Button key={id} plain dimColor label={label} hover={{ ...hover, ...HOVER_TEXT }} onPress={line.onPress} />
+            <Button
+              key={id}
+              plain
+              dimColor
+              label={label}
+              hover={{ ...hover, ...hoverText(data) }}
+              onPress={line.onPress}
+            />
           ) : (
             <Text color={C.muted} wrap={endWrap(data.icons)} hover={hover}>
               {label}

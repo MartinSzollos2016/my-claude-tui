@@ -61,7 +61,8 @@ const scenarios: Record<string, Partial<PaneData>> = {
 }
 
 // A tree as plain data: each node's children once (the fixture's elements
-// carry them under props and beside them), functions dropped.
+// carry them under props and beside them), functions and the JSX
+// transform's __source / __self dropped.
 function plain(tree: unknown): unknown {
   if (Array.isArray(tree)) return tree.map(plain)
   if (tree === null || typeof tree !== 'object') return typeof tree === 'function' ? undefined : tree
@@ -69,7 +70,8 @@ function plain(tree: unknown): unknown {
   if (node.type === undefined || node.props === undefined) return tree
   const props: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(node.props))
-    if (key !== 'children' && typeof value !== 'function') props[key] = JSON.parse(JSON.stringify(value) ?? 'null')
+    if (key !== 'children' && !key.startsWith('__') && typeof value !== 'function')
+      props[key] = JSON.parse(JSON.stringify(value) ?? 'null')
   return { type: node.type, props, children: plain(node.props['children']) }
 }
 
@@ -85,6 +87,19 @@ function drawAll(): Record<string, unknown> {
   return out
 }
 
+// Where two trees first differ: the path and both values, or undefined.
+function firstDiff(a: unknown, b: unknown, path = ''): string | undefined {
+  if (a === b) return undefined
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null)
+    return `${path}: ${JSON.stringify(a)} != ${JSON.stringify(b)}`
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])]
+  for (const key of keys) {
+    const found = firstDiff((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], `${path}.${key}`)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
 describe('the terminal grid', () => {
   test('draws every scenario as it did before the desktop layout', () => {
     const drawn = drawAll()
@@ -92,6 +107,6 @@ describe('the terminal grid', () => {
     expect(existsSync(FILE)).toBe(true)
     const golden = JSON.parse(gunzipSync(readFileSync(FILE)).toString('utf8')) as Record<string, unknown>
     expect(Object.keys(drawn)).toEqual(Object.keys(golden))
-    for (const key of Object.keys(golden)) expect(drawn[key], key).toEqual(golden[key])
+    for (const key of Object.keys(golden)) expect(firstDiff(drawn[key], golden[key]), key).toBeUndefined()
   })
 })

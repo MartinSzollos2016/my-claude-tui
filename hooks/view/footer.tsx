@@ -6,7 +6,7 @@ import { footerLayout, footerPads, type FooterLayout } from '../model/footer'
 import { clampScroll, pageScroll, type ScrollFrame } from '../model/scroll'
 import { displayWidth } from '../model/width'
 import type { Ctx, PaneActions } from './context'
-import { buttonHover, cutter, type El } from './kit'
+import { buttonHoverOf, cutter, type El } from './kit'
 
 // One key of the footer: always a button with its hotkey; `isOn` says whether
 // a press acts. Without labels only the key and glyph remain.
@@ -44,7 +44,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
       KEY_GAP,
       width,
     )
-    return group.map((k, i) => renderFooterKey(el, k, footerLabel(k, layout.labels), pads[i] ?? 0))
+    return group.map((k, i) => renderFooterKey(el, data, k, footerLabel(k, layout.labels), pads[i] ?? 0))
   }
   const inner = data.columns - STATUS_INSET
   const pageWidth = displayWidth(page.map(textOf).join('  '))
@@ -101,7 +101,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
           {statusBox(inner - keysWidth)}
         </Box>
         <Box key="footer-hidden" display="none">
-          {bare.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+          {bare.hidden.map(k => renderFooterKey(el, data, k, footerLabel(k, layout.labels), 0))}
         </Box>
       </Box>
     )
@@ -131,7 +131,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
         )}
         {!collapsed.isStatusInRow && statusBox(inner)}
         <Box key="footer-hidden" display="none">
-          {collapsed.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+          {collapsed.hidden.map(k => renderFooterKey(el, data, k, footerLabel(k, layout.labels), 0))}
         </Box>
       </Box>
     )
@@ -154,7 +154,7 @@ export function renderFooter(el: El, data: Ctx, act: PaneActions, layout: Footer
       )}
       {plan.hidden.length > 0 && (
         <Box key="footer-hidden" display="none">
-          {plan.hidden.map(k => renderFooterKey(el, k, footerLabel(k, layout.labels), 0))}
+          {plan.hidden.map(k => renderFooterKey(el, data, k, footerLabel(k, layout.labels), 0))}
         </Box>
       )}
     </Box>
@@ -410,14 +410,14 @@ const KEY_GAP = 2
 // from the pane. Out of reach, the press is swallowed and changes nothing.
 const swallow = (): undefined => undefined
 
-function renderFooterKey(el: El, k: FooterKey, label: string, pad: number) {
+function renderFooterKey(el: El, data: Ctx, k: FooterKey, label: string, pad: number) {
   const { Button } = el
   return (
     <Button
       key={k.key}
       plain
       dimColor
-      hover={buttonHover(`btn:${k.key}`)}
+      hover={buttonHoverOf(data, `btn:${k.key}`)}
       hotkey={k.hotkey}
       label={`${label}${' '.repeat(pad)}`}
       onPress={k.isOn ? k.onPress : swallow}

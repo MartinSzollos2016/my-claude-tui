@@ -109,3 +109,65 @@ describe('turn list cursor', () => {
     expect(byKey(renderPane(el, { ...base, view: 'turns' }, act), 'turn-cursor-0')).toBeUndefined()
   })
 })
+
+describe('the desktop flow', () => {
+  const turns = buildTurns([
+    { role: 'user', text: 'Fix the bug', toolUses: [{ tool_use_id: 'a', tool: 'Bash', input: {}, text: 'x' }] },
+    { role: 'assistant', text: 'ok', toolUses: [] },
+    { role: 'user', text: 'a long question '.repeat(20), toolUses: [] },
+    { role: 'assistant', text: 'ok', toolUses: [] },
+  ])
+  const stats = [
+    { key: promptDigest('Fix the bug'), durationMs: 65_000, endedAt: 0, inputTokens: 1000, outputTokens: 500 },
+    { key: 'k', durationMs: 4_000, endedAt: 1, inputTokens: 10, outputTokens: 5 },
+  ]
+  const flow = (extra: Record<string, unknown> = {}) =>
+    renderPane(el, { ...base, turns, stats, view: 'turns', columns: 100, isFlow: true, ...extra }, act)
+  const widths = (row: unknown) =>
+    ((row as { props: { children: unknown[] } }).props.children ?? [])
+      .flat()
+      .filter((n): n is { type: string; props: Record<string, unknown> } => (n as { type?: string })?.type === 'Box')
+      .map(n => (n.props['flexGrow'] === 1 ? 'grow' : n.props['width']))
+
+  test('hover never changes a glyph width on the desktop', () => {
+    const trees = [
+      flow(),
+      renderPane(el, { ...base, isFlow: true, expanded: new Set(['b1', 'e1']) }, act),
+      renderPane(el, { ...base, isFlow: true, isFooterOpen: true }, act),
+    ]
+    for (const tree of trees)
+      for (const node of nodes(tree)) {
+        const hover = node.props['hover'] as Record<string, unknown> | undefined
+        expect([hover?.['bold'], hover?.['italic'], hover?.['inverse']]).toEqual([undefined, undefined, undefined])
+      }
+  })
+
+  test('the turn table lines up by boxes: the header and every row share the cells', () => {
+    const tree = flow()
+    const header = byKey(tree, 'turn-header')
+    expect(header?.type).toBe('Box')
+    expect(widths(header)).toContain('grow')
+    for (const index of [0, 1]) expect(widths(byKey(tree, `turn-cells-${index}`))).toEqual(widths(header))
+  })
+
+  test('the number and the prompt are buttons that pick the turn; the prompt is cut, not wrapped', () => {
+    const tree = flow({ icons: ICON_SETS.ascii })
+    const prompt = byKey(tree, 'turn-1')
+    const number = byKey(tree, 'turn-num-1')
+    expect([prompt?.type, number?.type]).toEqual(['Button', 'Button'])
+    expect(String(prompt?.props['label']).length).toBeLessThanOrEqual(100)
+    expect(String(prompt?.props['label'])).toContain('a long question')
+    const cell = nodes(tree).find(n => n.type === 'Box' && nodes(n).includes(prompt!) && n.props['flexGrow'] === 1)
+    expect([cell?.props['flexShrink'], cell?.props['overflow']]).toEqual([1, 'hidden'])
+    for (const button of [prompt, number]) {
+      const calls = [] as string[]
+      const pick = { ...act, pickTurn: (i: number) => calls.push(`pick:${i}`) }
+      const fresh = byKey(
+        renderPane(el, { ...base, turns, stats, view: 'turns', isFlow: true }, pick),
+        String(button?.props['key']),
+      )
+      ;(fresh?.props['onPress'] as () => void)()
+      expect(calls).toEqual(['pick:1'])
+    }
+  })
+})
