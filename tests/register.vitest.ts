@@ -1500,6 +1500,26 @@ describe('keyboard cursor', () => {
     expect(world.focusRequests).toBe(before + 1)
   })
 
+  test('in the desktop app the ring stays off the keys and rows, the search field still takes it', async () => {
+    const { $ } = fakeEngine({ messages: main })
+    const focus = async (element: string) => {
+      const nexts: unknown[] = []
+      await run(
+        'ui.focus',
+        $,
+        { component: 'Pane', requestId: 'tail', plugin: 'tail-view', element, origin: { kind: 'person' } },
+        async e => (nexts.push(e), {}),
+      )
+      return nexts.length
+    }
+    await draw($)
+    expect(await focus('nav-help')).toBe(1)
+    await run('ui.render', $, { ...PANE_EVENT, surface: 'desktop' })
+    expect(await focus('nav-help')).toBe(0)
+    expect(await focus('turn-0')).toBe(0)
+    expect(await focus('turn-search')).toBe(1)
+  })
+
   test("a desktop drawing neither takes the keys back nor hides the terminal's Esc", async () => {
     const { $, world } = fakeEngine({ messages: main })
     const focused = (isFocused: boolean, surface = 'terminal') => ({

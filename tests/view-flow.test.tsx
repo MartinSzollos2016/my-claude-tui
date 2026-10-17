@@ -225,6 +225,15 @@ describe('the desktop flow pane', () => {
     expect(byKey(turns, 'turn-cells-0')?.props['backgroundColor']).toBeUndefined()
   })
 
+  test('one row of the turn list is bright: the cursor, else the open turn', () => {
+    const stats = [undefined, undefined]
+    const dim = (tree: unknown, i: number) => byKey(tree, `turn-${i}`)?.props['dimColor']
+    const withCursor = flow({ view: 'turns', stats, selected: 0, turnCursor: 1 })
+    expect([dim(withCursor, 0), dim(withCursor, 1)]).toEqual([true, false])
+    const without = flow({ view: 'turns', stats, selected: 0 })
+    expect([dim(without, 0), dim(without, 1)]).toEqual([false, true])
+  })
+
   test('a very long turn stays under the text budget and says what it left out', () => {
     // Edits do not fold into one row: each is a row of its own.
     const long = buildTurns([

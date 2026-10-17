@@ -257,12 +257,16 @@ function renderFlowRow(
   const { cells } = row
   const isSelected = row.index === data.selected
   const isCursor = row.index === data.turnCursor
+  // One row is bright: the cursor's, else (no cursor yet) the open turn's,
+  // which otherwise keeps only its marker.
+  const hasCursor = data.turnCursor !== undefined && data.turnCursor !== null
+  const isBright = hasCursor ? isCursor : isSelected
   const hover = { scope: `turn:${row.index}`, backgroundColor: C.rowHover }
   const button = (key: string, label: string) => (
     <Button
       key={key}
       plain
-      dimColor={!isSelected}
+      dimColor={!isBright}
       label={label}
       hover={{ ...hover, ...hoverText(data) }}
       onPress={() => act.pickTurn(row.index)}
@@ -287,7 +291,7 @@ function renderFlowRow(
           ),
           // Text: a native button's own padding does not fit the number's box.
           number: (
-            <Text key={`turn-num-${row.index}`} color={isSelected ? C.text : C.muted} hover={hover}>
+            <Text key={`turn-num-${row.index}`} color={isBright ? C.text : C.muted} hover={hover}>
               {cells?.number ?? `#${row.index + 1}`}
             </Text>
           ),
