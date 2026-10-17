@@ -2,6 +2,7 @@ import type { CommandRunInput, RenderSurface, SessionMessage } from 'claude-code
 import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { ICON_SETS } from '../hooks/icons'
+import { promptDigest } from '../hooks/model/sanitize'
 import { THEME_KEYS } from '../hooks/theme'
 
 const themeKeys = new Set<string>(THEME_KEYS)
@@ -147,6 +148,22 @@ describe('detail pane', () => {
 
     await ui.input({ key: 'turn-search', text: 'fix' })
     expect(await ui.find({ text: /1\/3/ })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('the turn list shows a stored time in a new process', async ($, on) => {
+    const stored = { key: promptDigest('Fix the bug'), turnIndex: 0, durationMs: 4_000, endedAt: 1 }
+    mock.store(on, { 'tail-view.stats.s1': { v: 1, stats: [stored] } })
+    mock.clock(on, { now: 1_700_000_000_000 })
+    on('session.id', () => ({ value: 's1' }))
+    on('session.messages', (_$, e) => ({ value: e.agentId ? child : main }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('agent.list', () => ({ value: [] }))
+    on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+
+    const ui = await $.ui.mount({ plugin: 'tail-view', surface: 'terminal', ...PANE })
+    await ui.press({ key: 'nav-turns' })
+    expect(await ui.find({ text: /4\.0s/ })).toBeDefined()
     await ui.unmount()
   })
 
@@ -774,6 +791,7 @@ describe('commands', () => {
       'tail-help',
       'tail-icons',
       'tail-notify',
+      'tail-stats',
       'tail-status',
       'tail-turns',
       'tail-width',

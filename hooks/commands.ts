@@ -3,7 +3,7 @@
 
 import { ICON_SETS, type Icons } from './icons'
 
-type Subcommand = 'turns' | 'bar' | 'compact' | 'icons' | 'width' | 'status' | 'notify' | 'help'
+type Subcommand = 'turns' | 'bar' | 'compact' | 'icons' | 'width' | 'status' | 'notify' | 'stats' | 'help'
 
 type CommandSpec = {
   name: string
@@ -16,7 +16,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   {
     name: 'tail',
     description: 'Open the tail-view detail pane (tool calls, subagents)',
-    argumentHint: '[turns|bar|compact|icons|width N|status|notify|help]',
+    argumentHint: '[turns|bar|compact|icons|width N|status|notify|stats|help]',
   },
   { name: 'tail-turns', description: 'List the turns of this session and switch the detail pane to one', sub: 'turns' },
   {
@@ -45,6 +45,12 @@ export const COMMANDS: readonly CommandSpec[] = [
     description: 'Toast when a subagent or a workflow finishes',
     argumentHint: '[on|off]',
     sub: 'notify',
+  },
+  {
+    name: 'tail-stats',
+    description: 'Keep turn times and tokens between sessions (on by default); off deletes them',
+    argumentHint: '[on|off]',
+    sub: 'stats',
   },
   { name: 'tail-help', description: 'List the tail-view commands and pane keys', sub: 'help' },
 ]

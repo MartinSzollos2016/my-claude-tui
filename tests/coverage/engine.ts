@@ -116,6 +116,8 @@ type World = {
   sessionId: string
   // While true, $.store.set rejects as a full store does.
   storeFull: boolean
+  // While set, $.store.get answers only once this settles: a slow store.
+  storeHold?: Promise<void>
   // What the plugin did, for the tests to read.
   store: Map<string, unknown>
   opened: (number | undefined)[]
@@ -250,7 +252,10 @@ export function fakeEngine(given: Partial<World> = {}): { $: EngineInterface; wo
       },
     },
     store: {
-      get: async (key: string) => world.store.get(key),
+      get: async (key: string) => {
+        if (world.storeHold !== undefined) await world.storeHold
+        return world.store.get(key)
+      },
       set: async (key: string, value: unknown) => {
         if (world.storeFull) throw new Error('store over 4 MiB')
         world.store.set(key, JSON.parse(JSON.stringify(value)))
