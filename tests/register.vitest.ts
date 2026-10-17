@@ -460,8 +460,11 @@ describe('live data', () => {
   })
 
   // One hand-back of agent a1, launched by the first turn's Agent call; `start`
-  // is the text turn.start carries.
-  const handBackRun = async (start: (handBack: string) => string) => {
+  // is the text its hook carries, `via` the hook that reports it.
+  const handBackRun = async (
+    start: (handBack: string) => string,
+    via: 'turn.start' | 'prompt.submit' = 'turn.start',
+  ) => {
     const handBack = 'Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>'
     const spawn = {
       tool_use_id: 'u1',
@@ -485,7 +488,8 @@ describe('live data', () => {
     await run('turn.start', $, { text: 'go', turnId: 'g' }, async e => e)
     await settle()
     await finish('g', 2_000, $)
-    await run('turn.start', $, { text: start(handBack), turnId: 'h' }, async e => e)
+    if (via === 'turn.start') await run('turn.start', $, { text: start(handBack), turnId: 'h' }, async e => e)
+    else await run('prompt.submit', $, { text: start(handBack) }, async e => e)
     await settle()
     world.messages = [...world.messages, { role: 'assistant', text: 'Result', toolUses: [] }]
     world.api = [
@@ -517,36 +521,8 @@ describe('live data', () => {
   })
 
   test('a hand-back that only prompt.submit reported keeps its time', async () => {
-    const handBack = 'Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>'
-    const spawn = {
-      tool_use_id: 'u1',
-      tool: 'Agent',
-      input: { subagent_type: 'Explore', description: 'Scan' },
-      agentId: 'a1',
-      text: 'launched',
-    }
-    const { $, world } = fakeEngine()
-    await run('prompt.submit', $, { text: 'go' }, async e => e)
-    world.messages = [
-      { role: 'user', text: 'go', toolUses: [] },
-      { role: 'assistant', text: 'spawned', toolUses: [spawn] },
-    ]
-    world.api = [
-      { role: 'user', content: [{ type: 'text', text: 'go' }] },
-      { role: 'assistant', content: [{ type: 'text', text: 'spawned' }] },
-    ]
-    await run('turn.start', $, { text: 'go', turnId: 'g' }, async e => e)
-    await settle()
-    await finish('g', 2_000, $)
     // No turn.start for the hand-back: its stat takes the prompt prompt.submit saw.
-    await run('prompt.submit', $, { text: handBack }, async e => e)
-    world.messages = [...world.messages, { role: 'assistant', text: 'Result', toolUses: [] }]
-    world.api = [
-      ...world.api,
-      { role: 'user', content: [{ type: 'text', text: handBack }] },
-      { role: 'assistant', content: [{ type: 'text', text: 'Result' }] },
-    ]
-    await finish('h', 3_000, $)
+    const { $ } = await handBackRun(text => text, 'prompt.submit')
     await press($, 'nav-turns')
     const row = text(byKey(await draw($), 'turn-1'))
     expect(row).toContain('Message from Explore · Scan')

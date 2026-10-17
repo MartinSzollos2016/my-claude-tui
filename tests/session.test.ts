@@ -61,6 +61,7 @@ describe('turnStatFrom', () => {
     }
     expect(turnStatFrom({ durationMs: 65_000, usage }, 'Fix the bug', 42)).toEqual({
       prompt: 'Fix the bug',
+      isKeyed: true,
       durationMs: 65_000,
       endedAt: 42,
       model: 'claude-opus-5-5',
@@ -137,6 +138,14 @@ describe('statFor', () => {
     expect(statFor([{ ...old, turnIndex: undefined }], all[1], all)?.durationMs).toBe(7)
     expect(turnOfStat(old, all)).toBe(all[1])
     expect(statFor([old], all[0], all)).toBe(undefined)
+    // A new stat whose prompt was typed as the old text is not taken for one.
+    const typed = { ...old, isKeyed: true }
+    expect(statFor([typed], all[1], all)).toBe(undefined)
+    expect(turnOfStat(typed, all)).toBe(undefined)
+  })
+
+  test('a stat recorded now says it was matched by prompt key', () => {
+    expect(turnStatFrom({ durationMs: 5 }, 'go', 0, 1).isKeyed).toBe(true)
   })
 
   test('picks the latest stat for the turn prompt', () => {
