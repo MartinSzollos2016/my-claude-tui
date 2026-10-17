@@ -37,6 +37,8 @@ const views = () => [
 const strings = (tree: unknown): string[] =>
   nodes(tree).flatMap(n => [
     ...(typeof n.props['label'] === 'string' ? [n.props['label']] : []),
+    // A code block's source counts toward the engine's budget too.
+    ...(typeof n.props['source'] === 'string' ? [n.props['source']] : []),
     ...[n.props['children']].flat(Infinity).filter((c): c is string => typeof c === 'string'),
   ])
 const isInside = (outer: Node | undefined, inner: Node | undefined) =>
@@ -117,6 +119,14 @@ describe('the desktop flow pane', () => {
     for (const id of ['b1', 'e1']) {
       const item = byKey(tree, `item-${id}`)
       for (const key of [`chevron-${id}`, `icon-${id}`]) expect(byKey(item, key), key).toBeUndefined()
+    }
+  })
+
+  test("a row's chevron is the icon set's, the ASCII set's too", () => {
+    for (const icons of [ICON_SETS.ascii, ICON_SETS.unicode]) {
+      const tree = flow({ icons, expanded: new Set(['b1']) })
+      expect(text(byKey(tree, 'status-b1')).endsWith(` ${icons.expanded}`), icons.expanded).toBe(true)
+      expect(text(byKey(tree, 'status-e1')).endsWith(` ${icons.collapsed}`), icons.collapsed).toBe(true)
     }
   })
 

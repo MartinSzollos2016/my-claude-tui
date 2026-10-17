@@ -324,7 +324,9 @@ function renderFlowLine(el: El, line: Line, data: Ctx, below?: (shown: string) =
           )}
         </Box>
         <Text key={`status-${id}`} color={state.color}>
-          {[state.text, canOpen ? (isOpen ? '⌄' : '›') : ''].filter(part => part !== '').join(' ')}
+          {[state.text, canOpen ? (isOpen ? data.icons.expanded : data.icons.collapsed) : '']
+            .filter(part => part !== '')
+            .join(' ')}
         </Text>
       </Box>
       {(model !== undefined || failed !== '') && (
