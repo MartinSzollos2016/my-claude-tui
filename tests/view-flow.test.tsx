@@ -2,6 +2,7 @@
 // framed on top, rows sized by boxes, cards on their rows, no cell sizes.
 import { describe, expect, test } from 'claude-code/testing'
 import { ICON_SETS } from '../hooks/icons'
+import { C } from '../hooks/theme'
 import { buildTurns } from '../hooks/model/turns'
 import { PANE_TEXT_BUDGET } from '../hooks/view/context'
 import { renderPane } from '../hooks/view/pane'
@@ -102,35 +103,21 @@ describe('the desktop flow pane', () => {
     expect(String(label?.props['label'])).not.toMatch(/ {2}$/)
   })
 
-  test("a row's leading cells sit in boxes of their own width, never padded with spaces", () => {
-    const tree = flow({ cursor: 'b1' })
-    for (const id of ['b1', 'p1', 't0:o0']) {
-      const item = byKey(tree, `item-${id}`)
-      for (const key of [`status-${id}`, `icon-${id}`]) {
-        const cell = byKey(item, key)
-        const box = nodes(item).find(
-          n => n.type === 'Box' && (n.props['children'] === cell || [n.props['children']].flat().includes(cell)),
-        )
-        expect(typeof box?.props['width'], `${key} box`).toBe('number')
-        for (const s of strings(cell)) expect(s.endsWith(' '), `${key}: ${JSON.stringify(s)}`).toBe(false)
-      }
-    }
+  test('the desktop app shows no hover previews', () => {
+    for (const tree of views()) expect(nodes(tree).filter(n => /^card-/.test(String(n.props['key'])))).toEqual([])
   })
 
-  test("a row's card sits above its row, revealed by the row's hover", () => {
-    const tree = flow()
-    const card = byKey(tree, 'card-p1')
-    expect(card).toBeDefined()
-    expect(isInside(byKey(tree, 'item-p1'), card)).toBe(true)
-    // Above its row, as the terminal places it where it fits: a pointer moving
-    // down the rows never lands on the card the row above revealed.
-    expect([card?.props['position'], card?.props['bottom'], card?.props['top'], card?.props['display']]).toEqual([
-      'absolute',
-      1,
-      undefined,
-      'none',
-    ])
-    expect((card?.props['hover'] as Record<string, unknown>)['scope']).toBe('row:p1')
+  test('a row reads as a background task: its title, its state on the right, its model and failures under it', () => {
+    const tree = flow({ isWorking: true, isLatest: true })
+    expect(text(byKey(tree, 'status-e1'))).toContain('Failed')
+    expect(byKey(tree, 'status-e1')?.props['color']).toBe(C.error)
+    expect(text(byKey(tree, 'status-b1'))).toContain('2.5s')
+    expect(text(byKey(tree, 'status-p1'))).toContain('running')
+    expect(text(byKey(tree, 'meta-a1'))).toContain('haiku')
+    for (const id of ['b1', 'e1']) {
+      const item = byKey(tree, `item-${id}`)
+      for (const key of [`chevron-${id}`, `icon-${id}`]) expect(byKey(item, key), key).toBeUndefined()
+    }
   })
 
   test('no text is padded with spaces to a cell width', () => {
@@ -234,7 +221,10 @@ describe('the desktop flow pane', () => {
     expect(text(byKey(tree, 'flow-section-finished'))).toBe('Finished 3')
     for (const id of ['b1', 'e1', 'a1', 'p1'])
       expect(typeof byKey(tree, `item-${id}`)?.props['borderStyle'], id).toBe('string')
-    expect(byKey(tree, 'item-ag/g')?.props['borderStyle']).toBeUndefined()
+    // A trace's rows are cards inside their agent's card, as a task's steps are.
+    const inner = byKey(tree, 'item-ag/g')
+    expect(typeof inner?.props['borderStyle']).toBe('string')
+    expect(nodes(byKey(tree, 'item-a1'))).toContain(inner)
     expect(nodes(tree).some(n => /^flow-bar/.test(String(n.props['key'])))).toBe(false)
   })
 

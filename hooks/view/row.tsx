@@ -143,9 +143,8 @@ export function renderLine(
 ) {
   // The row's hover card goes to the pane's layer over the window, which
   // places it above the row or below it, where it fits.
-  // On the desktop app the card sits on its own row instead (flowCard).
-  const isFlow = data.isFlow === true
-  if (line.card !== undefined && data.cards !== undefined && !isFlow) {
+  // The desktop app shows no previews.
+  if (line.card !== undefined && data.cards !== undefined && data.isFlow !== true) {
     const row = rowsSoFar(data)
     const top = data.scrollTop ?? 0
     const lines = row >= top && row < top + data.rows ? line.card() : undefined
@@ -159,6 +158,8 @@ export function renderLine(
     })
   }
   data.layout.push({ kind: 'line', id: line.id })
+  // The desktop app draws the row as a background task's card.
+  if (data.isFlow === true) return renderFlowLine(el, line, data, below)
   const { icons } = data
   const { Box, Button, Text } = el
   const { id, isOpen, canOpen, icon, mark, duration, model } = line
@@ -179,8 +180,7 @@ export function renderLine(
   const hasBar = hasDuration && data.columns >= BAR_MIN_COLUMNS
   const timeRoom = hasDuration ? 1 + DURATION_CELLS + (hasBar ? 1 + BAR_CELLS : 0) : 0
   // Once a cursor exists every row keeps one cell for its marker.
-  // The desktop app has no cursor, so no column for its mark either.
-  const hasCursorColumn = !isFlow && data.cursor !== undefined && data.cursor !== null
+  const hasCursorColumn = data.cursor !== undefined && data.cursor !== null
   // The mark, with a space before it and one before a model after it.
   const badgeText = line.badge === undefined ? '' : ` ${line.badge}${modelText !== '' ? ' ' : ''}`
   // The fixed columns as drawn: chevron, status and icon, each with its
@@ -198,59 +198,25 @@ export function renderLine(
     (hasCursorColumn ? 1 : 0)
   // A row that opens takes a click anywhere from the chevron to the model
   // column: the chevron is a button too, and the label fills its room.
-  // On the desktop app the label's box grows and clips it, so it is not padded.
-  const label = canOpen && !isFlow ? padEndDisplay(line.label(room), room) : line.label(room)
+  const label = canOpen ? padEndDisplay(line.label(room), room) : line.label(room)
   // What the row reads, so the content below it need not repeat it.
   const under = below?.(label)
   const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
 
   return (
-    <Box
-      key={`item-${id}`}
-      flexDirection="column"
-      marginLeft={indent}
-      // In the desktop app a row of the turn is a card, as a background task
-      // is in the app; a trace's rows stay inside their agent's card.
-      {...(isFlow && place === undefined ? { ...CARD_FRAME, borderStyle: data.icons.border } : {})}
-    >
-      <Box flexDirection="row" width={isFlow ? undefined : width}>
-        {hasCursorColumn &&
-          (isFlow ? (
-            <Box width={2} flexShrink={0}>
-              <Text key={`cursor-${id}`} color={data.cursor === id ? C.accent : C.muted}>
-                {data.cursor === id ? icons.cursor : ''}
-              </Text>
-            </Box>
-          ) : (
-            <Text key={`cursor-${id}`} color={data.cursor === id ? C.accent : C.muted}>
-              {data.cursor === id ? icons.cursor : ' '}
-            </Text>
-          ))}
+    <Box key={`item-${id}`} flexDirection="column" marginLeft={indent}>
+      <Box flexDirection="row" width={width}>
+        {hasCursorColumn && (
+          <Text key={`cursor-${id}`} color={data.cursor === id ? C.accent : C.muted}>
+            {data.cursor === id ? icons.cursor : ' '}
+          </Text>
+        )}
         {guide !== '' && (
           <Text key={`guide-${id}`} color={C.muted}>
             {guide}
           </Text>
         )}
-        {/* On the desktop app every leading cell is a box of its own width:
-            spaces do not line up in its proportional font. */}
-        {isFlow ? (
-          <Box width={2} flexShrink={0}>
-            {canOpen ? (
-              <Button
-                key={`chevron-${id}`}
-                plain
-                dimColor
-                label={line.chevron}
-                hover={buttonHoverOf(data, scopeOf('chev:', id))}
-                onPress={line.onPress}
-              />
-            ) : (
-              <Text color={isOpen ? C.text : C.muted} hover={hover}>
-                {line.chevron}
-              </Text>
-            )}
-          </Box>
-        ) : canOpen ? (
+        {canOpen ? (
           <Button
             key={`chevron-${id}`}
             plain
@@ -262,29 +228,13 @@ export function renderLine(
         ) : (
           <Text color={isOpen ? C.text : C.muted} hover={hover}>{`${line.chevron} `}</Text>
         )}
-        {isFlow ? (
-          <Box width={2} flexShrink={0}>
-            <Text key={`status-${id}`} color={mark?.color ?? C.muted} hover={hover}>
-              {mark?.glyph ?? ''}
-            </Text>
-          </Box>
-        ) : (
-          <Text key={`status-${id}`} color={mark?.color ?? C.muted} hover={hover}>
-            {mark === undefined ? '  ' : `${mark.glyph} `}
-          </Text>
-        )}
-        {isFlow ? (
-          <Box width={2} flexShrink={0}>
-            <Text key={`icon-${id}`} color={icon.color ?? C.muted} hover={hover}>
-              {icon.glyph}
-            </Text>
-          </Box>
-        ) : (
-          <Text color={icon.color ?? C.muted} hover={hover}>
-            {`${icon.glyph} `}
-          </Text>
-        )}
-        <Box flexGrow={1} flexShrink={1} {...(isFlow ? { overflow: 'hidden' as const } : {})}>
+        <Text key={`status-${id}`} color={mark?.color ?? C.muted} hover={hover}>
+          {mark === undefined ? '  ' : `${mark.glyph} `}
+        </Text>
+        <Text color={icon.color ?? C.muted} hover={hover}>
+          {`${icon.glyph} `}
+        </Text>
+        <Box flexGrow={1} flexShrink={1}>
           {canOpen ? (
             <Button
               key={id}
@@ -295,7 +245,7 @@ export function renderLine(
               onPress={line.onPress}
             />
           ) : (
-            <Text color={C.muted} wrap={isFlow ? 'truncate-end' : endWrap(data.icons)} hover={hover}>
+            <Text color={C.muted} wrap={endWrap(data.icons)} hover={hover}>
               {label}
             </Text>
           )}
@@ -312,60 +262,70 @@ export function renderLine(
                 {modelText}
               </Text>
             )}
-            {hasDuration &&
-              (isFlow ? (
-                <Box width={DURATION_CELLS + 1} justifyContent="flex-end">
-                  <Text color={C.muted} hover={hover}>
-                    {durationText}
-                  </Text>
-                </Box>
-              ) : (
-                <Text color={C.muted} hover={hover}>
-                  {` ${' '.repeat(Math.max(0, DURATION_CELLS - displayWidth(durationText)))}${durationText}${hasBar ? ' ' : ''}`}
-                </Text>
-              ))}
-            {hasBar &&
-              duration !== undefined &&
-              (isFlow ? undefined : (
-                <Text
-                  key={`bar-${id}`}
-                  color={duration > 0 && duration >= data.maxMs ? C.accent : C.muted}
-                  hover={hover}
-                >
-                  {padEndDisplay(durationBar(duration, data.maxMs, BAR_CELLS, icons), BAR_CELLS)}
-                </Text>
-              ))}
+            {hasDuration && (
+              <Text color={C.muted} hover={hover}>
+                {` ${' '.repeat(Math.max(0, DURATION_CELLS - displayWidth(durationText)))}${durationText}${hasBar ? ' ' : ''}`}
+              </Text>
+            )}
+            {hasBar && duration !== undefined && (
+              <Text key={`bar-${id}`} color={duration > 0 && duration >= data.maxMs ? C.accent : C.muted} hover={hover}>
+                {padEndDisplay(durationBar(duration, data.maxMs, BAR_CELLS, icons), BAR_CELLS)}
+              </Text>
+            )}
           </Box>
         )}
       </Box>
-      {isFlow ? [line.card === undefined ? undefined : flowCard(el, line, data, place), under] : under}
+      {under}
     </Box>
   )
 }
 
-// A row's hover card on the desktop app: on the row itself, above it, shown
-// while the row is hovered; absolute, so showing it moves nothing.
-function flowCard(el: El, line: Line, data: Ctx, place: TreePlace | undefined) {
-  const { Box, Text } = el
-  const lines = line.card?.()
-  if (lines === undefined) return undefined
+// A row in the desktop app, as the app draws a background task: a card with
+// its title (the row's own button, which opens it), its state on the right
+// (Failed, Interrupted, running, or its time, and the chevron of a row that
+// opens), and under it the model and the failures of the calls below it. A
+// trace's rows are cards inside their agent's card. No previews.
+function renderFlowLine(el: El, line: Line, data: Ctx, below?: (shown: string) => RenderChildren) {
+  const { Box, Button, Text } = el
+  const { id, canOpen, mark, duration, model } = line
+  const title = line.label(Math.max(20, data.columns))
+  const under = below?.(title)
+  const isRunning = mark?.color === C.ongoing && mark.glyph !== data.icons.done
+  const durationText =
+    duration === undefined ? '' : duration >= 1000 ? formatDuration(duration) : duration > 0 ? '<1s' : ''
+  const state =
+    mark?.color === C.error
+      ? { text: 'Failed', color: C.error }
+      : mark?.color === C.interrupted
+        ? { text: 'Interrupted', color: C.interrupted }
+        : isRunning
+          ? { text: 'running', color: C.brand }
+          : { text: durationText, color: C.muted }
+  const failed = line.badge === undefined ? '' : line.badge.replace(data.icons.error, '')
+  const hover = { scope: scopeOf('row:', id), backgroundColor: C.rowHover }
   return (
-    <Box
-      key={`card-${line.id}`}
-      position="absolute"
-      display="none"
-      bottom={1}
-      left={CARD_INDENT + (place === undefined ? 0 : TRACE_INDENT)}
-      backgroundColor={C.paneBackground}
-      flexDirection="column"
-      borderStyle={data.icons.border}
-      borderColor={C.muted}
-      paddingX={1}
-      hover={{ scope: scopeOf('row:', line.id), display: 'flex' }}
-    >
-      {lines.map(text => (
-        <Text color={C.muted}>{text}</Text>
-      ))}
+    <Box key={`item-${id}`} {...CARD_FRAME} borderStyle={data.icons.border} flexDirection="column">
+      <Box flexDirection="row" columnGap={1}>
+        <Box flexGrow={1} flexShrink={1} overflow="hidden">
+          {canOpen ? (
+            <Button key={id} plain label={title} hover={{ ...hover, ...hoverText(data) }} onPress={line.onPress} />
+          ) : (
+            <Text color={C.text} wrap="truncate-end" hover={hover}>
+              {title}
+            </Text>
+          )}
+        </Box>
+        <Text key={`status-${id}`} color={state.color}>
+          {[state.text, canOpen ? line.chevron : ''].filter(part => part !== '').join(' ')}
+        </Text>
+      </Box>
+      {(model !== undefined || failed !== '') && (
+        <Box key={`meta-${id}`} flexDirection="row" columnGap={1}>
+          {model !== undefined && <Text color={C.muted}>{shortModel(model)}</Text>}
+          {failed !== '' && <Text color={C.error}>{`${failed} failed`}</Text>}
+        </Box>
+      )}
+      {under}
     </Box>
   )
 }
