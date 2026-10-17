@@ -4,13 +4,10 @@ export type ToolTiming = { start: number; end?: number }
 
 // One finished main-loop turn. turnIndex is the turn's index in buildTurns,
 // noted when the turn was submitted or started; a stat recorded before it
-// existed matches by prompt. `prompt` is a match key, never shown: the
-// sanitized prompt, or for an agent's hand-back its sender ids (promptKey).
-// isKeyed marks a stat recorded that way; one kept from an older version
-// holds "Message from agent" for every hand-back.
+// existed matches by `key`: a digest of the turn's prompt key (promptDigest
+// of promptKey), never the prompt, so a stored stat holds no prompt text.
 export type TurnStat = {
-  prompt: string
-  isKeyed?: boolean
+  key: string
   turnIndex?: number
   durationMs: number
   endedAt: number
@@ -56,7 +53,9 @@ declare module 'claude-code' {
       // query alone, so a late drawing never overwrites what is typed.
       searchField: { gen: number; seed: string }
       timings: Record<string, ToolTiming>
-      turnStats: TurnStat[]
+      // Shaped: stats kept by an older version (prompt text instead of a
+      // digest) read as absent after the update.
+      turnStats: Shaped<TurnStat[]>
       agentStats: Record<string, AgentStat>
       git: GitInfo | null
       mode: string | null

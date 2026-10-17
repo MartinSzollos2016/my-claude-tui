@@ -4,7 +4,7 @@
 import type { RenderSurface, TurnUsage } from 'claude-code'
 
 import type { ToolTiming, TurnStat } from '../types'
-import { promptKey } from './model/sanitize'
+import { promptDigest, promptKey } from './model/sanitize'
 import type { Turn } from './model/types'
 
 export const MAX_TIMINGS = 500
@@ -34,16 +34,16 @@ export function recordToolEnd(
   return { ...timings, [id]: { start: timings[id]?.start ?? start, end: now } }
 }
 
+// `key` is the digest of the turn's prompt key (statPrompt), never the prompt.
 export function turnStatFrom(
   input: { durationMs: number; usage?: TurnUsage },
-  prompt: string,
+  key: string,
   now: number,
   index?: number,
 ): TurnStat {
   const usage = input.usage
   return {
-    prompt,
-    isKeyed: true,
+    key,
     ...(index === undefined ? {} : { turnIndex: index }),
     durationMs: input.durationMs,
     endedAt: now,
@@ -73,15 +73,19 @@ export function toggleId(ids: readonly string[], id: string, max: number): strin
 export const turnScrollKey = (turn: Turn | undefined): string =>
   turn === undefined ? '' : `${turn.index}\u0000${promptKey(turn)}`
 
-// The prompt every hand-back had before they were matched by their senders.
-const LEGACY_HAND_BACK = 'Message from agent'
+// A turn's digest, once per Turn object: statFor compares it with every stat.
+const digests = new WeakMap<Turn, string>()
+function turnDigest(turn: Turn): string {
+  let digest = digests.get(turn)
+  if (digest === undefined) {
+    digest = promptDigest(promptKey(turn))
+    digests.set(turn, digest)
+  }
+  return digest
+}
 
-// Whether `stat` was recorded with `turn`'s prompt key. A stat kept from an
-// older version (no isKeyed) holds the old fixed prompt, which any hand-back
-// turn takes.
-const hasPromptOf = (stat: TurnStat, turn: Turn): boolean =>
-  stat.prompt === promptKey(turn) ||
-  (stat.isKeyed !== true && turn.senders !== undefined && stat.prompt === LEGACY_HAND_BACK)
+// Whether `stat` was recorded for a turn with `turn`'s prompt key.
+const hasPromptOf = (stat: TurnStat, turn: Turn): boolean => stat.key === turnDigest(turn)
 
 // The stat recorded for this turn. An index match counts only while the
 // turn at that index still has the stat's prompt: $.session.messages() holds
@@ -126,13 +130,24 @@ export function turnOfStat(stat: TurnStat, turns: readonly Turn[]): Turn | undef
   return turn !== undefined && (hasPromptOf(stat, turn) || turn.prompt === '') ? turn : undefined
 }
 
+// The stats of one session, from memory and from the store: the union by
+// endedAt (one turn.complete per millisecond at most), oldest first, the
+// newest MAX_STATS kept.
+export const MAX_STATS = 200
+
+export function mergeStats(a: readonly TurnStat[], b: readonly TurnStat[]): TurnStat[] {
+  const byEnd = new Map<number, TurnStat>()
+  for (const stat of [...a, ...b]) if (!byEnd.has(stat.endedAt)) byEnd.set(stat.endedAt, stat)
+  return [...byEnd.values()].sort((x, y) => x.endedAt - y.endedAt).slice(-MAX_STATS)
+}
+
 // The index buildTurns gives the turn starting with `prompt`: the last turn
 // when the transcript already holds the prompt (or the turn has none, a
 // continuation), else the one about to open after it.
 export function turnIndexAtStart(turns: readonly Turn[], prompt: string): number {
   const last = turns.at(-1)
   if (!last) return 0
-  return prompt === '' || promptKey(last) === prompt ? last.index : turns.length
+  return prompt === '' || turnDigest(last) === prompt ? last.index : turns.length
 }
 
 const MAX_PENDING_TURNS = 50

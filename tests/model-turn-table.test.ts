@@ -3,6 +3,7 @@ import { ICON_SETS } from '../hooks/icons'
 import { turnTable } from '../hooks/model/turn-table'
 import { buildTurns } from '../hooks/model/turns'
 import { displayWidth } from '../hooks/model/width'
+import { promptDigest } from '../hooks/model/sanitize'
 
 describe('turnTable', () => {
   const turns = buildTurns([
@@ -21,8 +22,8 @@ describe('turnTable', () => {
     { role: 'assistant', text: 'ok', toolUses: [] },
   ])
   const stats = [
-    { prompt: 'Fix the bug', durationMs: 65_000, endedAt: 0, inputTokens: 1000, outputTokens: 500 },
-    { prompt: '', durationMs: 32_500, endedAt: 0, inputTokens: 40, outputTokens: 2 },
+    { key: promptDigest('Fix the bug'), durationMs: 65_000, endedAt: 0, inputTokens: 1000, outputTokens: 500 },
+    { key: promptDigest(''), durationMs: 32_500, endedAt: 0, inputTokens: 40, outputTokens: 2 },
     undefined,
   ]
   const table = (width: number, icons = ICON_SETS.nerd) => turnTable(turns, stats, width, icons)
@@ -106,7 +107,7 @@ describe('turn table memo', () => {
       100,
       ICON_SETS.nerd,
     )
-    const stat = { prompt: 'first', durationMs: 4_000, endedAt: 0 }
+    const stat = { key: promptDigest('first'), durationMs: 4_000, endedAt: 0 }
     const after = turnTable(turns, [stat, undefined], 100, ICON_SETS.nerd)
     expect(after).not.toBe(before)
     expect(after.rows[0]!.label).toContain('4.0s')

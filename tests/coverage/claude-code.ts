@@ -14,7 +14,7 @@ function stateOf($: object): Map<string, unknown> {
   return state
 }
 
-export const atom = (ref: unknown, initial: unknown) => ({ ref, initial })
+export const atom = (ref: unknown, initial: unknown, _options?: unknown) => ({ ref, initial })
 
 // A fake engine (tests/coverage/engine.ts) counts each state round trip, as
 // the engine's $.state.get and $.state.set would be.

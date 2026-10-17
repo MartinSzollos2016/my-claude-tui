@@ -20,6 +20,7 @@ import {
   text,
   type Node,
 } from './fixtures/view'
+import { promptDigest } from '../hooks/model/sanitize'
 
 describe('renderPane', () => {
   test('Workflow row says running, done or no result', () => {
@@ -396,13 +397,17 @@ describe('renderPane', () => {
         {
           ...folded,
           view: 'turns',
-          stats: [{ ...foldedStats[0]!, prompt: 'fold' }],
+          stats: [{ ...foldedStats[0]!, key: promptDigest('fold') }],
           query: 'fold',
           matches: [{ index: 0, snippet: 'a fold' }],
         },
         act,
       ),
-      renderPane(el, { ...folded, view: 'turns', stats: [{ ...foldedStats[0]!, prompt: 'fold' }], columns: 54 }, act),
+      renderPane(
+        el,
+        { ...folded, view: 'turns', stats: [{ ...foldedStats[0]!, key: promptDigest('fold') }], columns: 54 },
+        act,
+      ),
       renderPane(el, { ...folded, expanded: foldedOpen, cursor: 'fe' }, act),
       renderPane(el, { ...ascii, cursor: 'b1', expanded: open }, act),
     )
@@ -1390,7 +1395,9 @@ describe('pane budget with everything on', () => {
   })
 })
 
-const foldedStats = [{ prompt: '日本語 fold', durationMs: 9_000, endedAt: 0, inputTokens: 3, outputTokens: 4 }]
+const foldedStats = [
+  { key: promptDigest('日本語 fold'), durationMs: 9_000, endedAt: 0, inputTokens: 3, outputTokens: 4 },
+]
 
 describe('footer modes by room', () => {
   const footerOf = (extra: Record<string, unknown>) =>

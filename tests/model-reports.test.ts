@@ -3,10 +3,17 @@ import { turnListText, turnText } from '../hooks/model/reports'
 import { EMPTY_TURN_TEXT } from '../hooks/model/turn-table'
 import { buildTurns } from '../hooks/model/turns'
 import { main, prompt } from './fixtures/model'
+import { promptDigest } from '../hooks/model/sanitize'
 
 describe('turnText', () => {
   const turn = buildTurns(main)[0]!
-  const stat = { prompt: 'Fix the bug', turnIndex: 0, durationMs: 65_000, endedAt: 0, model: 'claude-opus-5-5' }
+  const stat = {
+    key: promptDigest('Fix the bug'),
+    turnIndex: 0,
+    durationMs: 65_000,
+    endedAt: 0,
+    model: 'claude-opus-5-5',
+  }
 
   test('the header, the prompt and one line per row', () => {
     const lines = turnText(turn, stat).split('\n')
@@ -48,7 +55,7 @@ describe('turnText', () => {
 describe('turnListText', () => {
   test('one line per turn with its counts and time', () => {
     const turns = buildTurns([...main, prompt('Thanks'), { role: 'assistant', text: 'Welcome.', toolUses: [] }])
-    const stats = [{ prompt: 'Fix the bug', durationMs: 2_000, endedAt: 0 }, undefined]
+    const stats = [{ key: promptDigest('Fix the bug'), durationMs: 2_000, endedAt: 0 }, undefined]
     expect(turnListText(turns, stats)).toBe(
       'Turns (2), newest last:\n#1   Fix the bug  3 tools · 1 agent · 2.0s\n#2   Thanks  reply',
     )

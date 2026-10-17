@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   handBackSenders,
   isHandBack,
+  promptDigest,
   promptKey,
   sanitizePrompt,
   sanitizeText,
@@ -150,8 +151,19 @@ describe('isHandBack', () => {
     expect(isHandBack('Another Claude session sent a message:\n<agent-message from="a1">x</agent-message>')).toBe(true)
     expect(isHandBack('plain prompt')).toBe(false)
     expect(statPrompt('<agent-message from="a1">x</agent-message>')).toBe(
-      promptKey({ prompt: 'shown name', senders: ['a1'] }),
+      promptDigest(promptKey({ prompt: 'shown name', senders: ['a1'] })),
     )
-    expect(statPrompt('plain prompt')).toBe('plain prompt')
+    expect(statPrompt('plain prompt')).toBe(promptDigest('plain prompt'))
+  })
+})
+
+describe('promptDigest', () => {
+  test('promptDigest is stable, short and holds no prompt text', () => {
+    expect(promptDigest('Fix the login bug')).toBe(promptDigest('Fix the login bug'))
+    expect(promptDigest('Fix the login bug')).toMatch(/^[0-9a-z]{1,11}$/)
+    expect(promptDigest('Fix the login bug')).not.toContain('login')
+    expect(promptDigest('a')).not.toBe(promptDigest('b'))
+    expect(promptDigest('')).toBe('')
+    expect(statPrompt('Fix it')).toBe(promptDigest('Fix it'))
   })
 })

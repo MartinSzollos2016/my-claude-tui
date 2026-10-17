@@ -14,7 +14,7 @@ import {
   traceItems,
   turnsKey,
 } from '../hooks/model/turns'
-import { promptKey, statPrompt } from '../hooks/model/sanitize'
+import { promptDigest, promptKey, statPrompt } from '../hooks/model/sanitize'
 import type { ToolItem } from '../hooks/model/types'
 import { displayWidth } from '../hooks/model/width'
 import { main, prompt, read, transcript } from './fixtures/model'
@@ -574,7 +574,7 @@ describe('hand-back senders', () => {
     ]
     const turn = buildTurns(rows, '', apiTurnStarts(api)).at(-1)!
     expect(turn.prompt).toBe('Message from Explore · Find callers')
-    expect(statPrompt(hostile)).toBe(promptKey(turn))
+    expect(statPrompt(hostile)).toBe(promptDigest(promptKey(turn)))
   })
 
   test('a hand-back keeps the name of the call before it when a later call reuses the id', () => {

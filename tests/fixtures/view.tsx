@@ -1,6 +1,7 @@
 import type { SessionMessage } from 'claude-code'
 import { buildTurns } from '../../hooks/model/turns'
 import type { El } from '../../hooks/view/kit'
+import { promptDigest } from '../../hooks/model/sanitize'
 const make =
   (type: string) =>
   (props: Record<string, unknown>): Node => ({ type, props, children: props['children'] })
@@ -94,7 +95,7 @@ export const base = {
   expanded: new Set<string>(),
   timings: { b1: { start: 1_000, end: 3_500 }, p1: { start: 9_000 } },
   turnStat: {
-    prompt: 'Fix the bug',
+    key: promptDigest('Fix the bug'),
     durationMs: 65_000,
     endedAt: 0,
     model: 'claude-opus-5-5',
