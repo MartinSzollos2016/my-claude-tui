@@ -88,6 +88,24 @@ describe('handBackSenders', () => {
     ).toEqual(['a1', 'zz'])
   })
 
+  test('only a whole open tag opens a block: quoted code and longer tag names do not', () => {
+    const report = `<agent-message from="a1">const HAND_BACK = '<agent-message'; /<agent-message/; <agent-messages from="q"> <agent-message-x></agent-message>`
+    expect(handBackSenders(`${report}\n${block('b2')}`)).toEqual(['a1', 'b2'])
+  })
+
+  test('an end tag inside the quotes of from ends nothing', () => {
+    const odd = `<agent-message from="a1</agent-message>">quotes ${block('zz')} end</agent-message>`
+    expect(handBackSenders(odd)).toEqual(['a1</agent-message>'])
+  })
+
+  test('a stray end tag before the first block does not lift the blocks it holds', () => {
+    expect(
+      handBackSenders(
+        `</agent-message><agent-message from="A">x <agent-message from="B">y</agent-message></agent-message>`,
+      ),
+    ).toEqual(['A'])
+  })
+
   test('a block inside a reminder is not a sender', () => {
     expect(handBackSenders(`<system-reminder>${block('r1')}</system-reminder>\n${block('a1')}`)).toEqual(['a1'])
   })
