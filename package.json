@@ -18,12 +18,12 @@
     "coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "@vitest/coverage-istanbul": "5.0.3",
+    "@vitest/coverage-istanbul": "5.0.5",
     "husky": "9.1.7",
-    "knip": "6.41.0",
+    "knip": "6.43.0",
     "prettier": "3.9.10",
     "typescript": "7.0.2",
-    "vitest": "5.0.3"
+    "vitest": "5.0.5"
   },
   "engines": {
     "node": ">=22"
